@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Restyle your rooms with AI — upload a photo, pick any object and recolor it." />
+    <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1a18" media="(prefers-color-scheme: dark)" />
+    <title>DesignApp</title>
+    <script>
+      // Apply the stored theme before first paint so there is no light/dark flash.
+      ;(function () {
+        var theme = 'system'
+        try {
+          theme = localStorage.getItem('designapp-theme') || 'system'
+        } catch (e) {}
+        var dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
