@@ -1,22 +1,33 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Link, useParams } from "@tanstack/react-router"
-import { ArrowLeftIcon, CheckIcon, ImageOffIcon, LoaderCircleIcon, SaveIcon, TriangleAlertIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  ColumnsIcon,
+  ImageOffIcon,
+  LoaderCircleIcon,
+  Redo2Icon,
+  SaveIcon,
+  TriangleAlertIcon,
+  Undo2Icon,
+} from "lucide-react"
 import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Slider } from "@/components/ui/slider"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { ColorPanel } from "@/features/editor/color-panel"
+import { useEditorStore } from "@/features/editor/editor-store"
+import { RoomCanvas } from "@/features/editor/room-canvas"
+import { useEditorShortcuts } from "@/features/editor/use-editor-shortcuts"
 import { AnalysisPanel } from "@/features/rooms/analysis-panel"
 import { useRoom } from "@/features/rooms/api"
 import { useLiveRoom } from "@/features/rooms/live"
 import { isAnalysisFinished, type Room, type RoomStatus } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
-
-/** Preset colors offered in the Color panel. */
-const swatches = ["#e8dcc8", "#c9a27e", "#b5543c", "#7d8b6a", "#4a6274", "#2f2c2a", "#f4f1ea", "#d8c3a5"]
 
 /** Badge text for each analysis status. */
 const statusLabels: Record<RoomStatus, string> = {
@@ -61,13 +72,16 @@ export function EditorPage() {
 
 /**
  * The editor: the photo on the left, the objects and color tools on the right. While the AI
- * analyzes the photo, progress arrives live. The color tools stay disabled until the editor
- * (milestone 4) can apply them.
+ * analyzes the photo, progress arrives live; once it's ready the photo becomes the interactive
+ * canvas and the tools come alive.
  * @param props.room - The room to edit.
  */
 function Editor({ room }: { room: Room }) {
   const finished = isAnalysisFinished(room.status)
+  const editable = room.status === "Ready" && room.labelMapUrl !== null
   useLiveRoom(room.id, finished)
+  const open = useEditorStore((state) => state.open)
+  useEffect(() => open(room.id), [open, room.id])
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
@@ -89,10 +103,20 @@ function Editor({ room }: { room: Room }) {
             {!finished && <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />}
             {statusLabels[room.status]}
           </Badge>
+          {editable && <EditorToolbar />}
         </div>
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft">
-          <RoomPhoto room={room} />
-        </div>
+        {editable ? (
+          <div
+            className="relative w-full overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft"
+            style={{ aspectRatio: `${room.width} / ${room.height}`, maxHeight: "min(72dvh, 52rem)", minHeight: "18rem" }}
+          >
+            <RoomCanvas room={room} />
+          </div>
+        ) : (
+          <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft">
+            <RoomPhoto room={room} />
+          </div>
+        )}
       </section>
 
       <aside
@@ -103,33 +127,26 @@ function Editor({ room }: { room: Room }) {
 
         <Separator />
 
-        <div aria-disabled="true" className="space-y-4 opacity-60">
-          <h2 className="font-medium">Color</h2>
-          <div className="grid grid-cols-8 gap-2">
-            {swatches.map((color) => (
-              <button
-                key={color}
-                type="button"
-                disabled
-                aria-label={`Color ${color}`}
-                className="aspect-square rounded-lg border shadow-soft"
-                style={{ backgroundColor: color }}
-              />
-            ))}
+        {editable ? (
+          <ColorPanel room={room} />
+        ) : (
+          <div aria-disabled="true" className="space-y-2 opacity-60">
+            <h2 className="font-medium">Color</h2>
+            <p className="text-sm text-muted-foreground">Available once the AI has mapped your room.</p>
           </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Strength</span>
-              <span className="text-muted-foreground">80%</span>
-            </div>
-            <Slider defaultValue={[80]} max={100} step={1} disabled aria-label="Recolor strength" />
-          </div>
-        </div>
+        )}
 
-        <Button size="lg" className="mt-auto w-full" disabled>
-          <SaveIcon data-icon="inline-start" />
-          Save design
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="mt-auto" tabIndex={0}>
+              <Button size="lg" className="w-full" disabled>
+                <SaveIcon data-icon="inline-start" />
+                Save design
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Saving designs arrives with accounts.</TooltipContent>
+        </Tooltip>
       </aside>
     </div>
   )
@@ -171,6 +188,41 @@ function RoomPhoto({ room }: { room: Room }) {
         onTransitionEnd={() => setShown(true)}
         className={cn(imageClass, "transition-opacity duration-300", loaded ? "opacity-100" : "opacity-0")}
       />
+    </div>
+  )
+}
+
+/** Undo, redo, before/after and reset-all, above the canvas. Also turns on the keyboard shortcuts. */
+function EditorToolbar() {
+  const { history, position, comparing, edits, undo, redo, toggleCompare, resetAll } = useEditorStore()
+  useEditorShortcuts()
+  const edited = Object.keys(edits).length > 0
+
+  return (
+    <div className="flex items-center gap-1">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label="Undo" disabled={position === 0} onClick={undo}>
+            <Undo2Icon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label="Redo" disabled={position >= history.length - 1} onClick={redo}>
+            <Redo2Icon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Redo (Ctrl+Shift+Z)</TooltipContent>
+      </Tooltip>
+      <Button variant={comparing ? "secondary" : "ghost"} size="sm" aria-pressed={comparing} disabled={!edited} onClick={toggleCompare}>
+        <ColumnsIcon data-icon="inline-start" />
+        Compare
+      </Button>
+      <Button variant="ghost" size="sm" disabled={!edited} onClick={resetAll} className="hidden sm:inline-flex">
+        Reset all
+      </Button>
     </div>
   )
 }

@@ -1,9 +1,11 @@
+import { useEffect, useRef } from "react"
 import { Link } from "@tanstack/react-router"
 import { CheckIcon, CircleIcon, LoaderCircleIcon, TriangleAlertIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useEditorStore } from "@/features/editor/editor-store"
 import type { ObjectCategory, Room, RoomStatus } from "./types"
 
 /** The visible analysis steps and the statuses during which each one is running. */
@@ -65,13 +67,21 @@ function AnalysisProgress({ status }: { status: RoomStatus }) {
 }
 
 /**
- * The detected objects, surfaces first, each with its color. Selecting one arrives with the editor (milestone 4).
+ * The detected objects, surfaces first, each with its current color. Choosing one selects it in
+ * the editor; pointing at one highlights it in the photo.
  * @param props.room - The analyzed room.
  */
 function ObjectList({ room }: { room: Room }) {
+  const { selected, edits, select, hover } = useEditorStore()
+  const listRef = useRef<HTMLUListElement>(null)
   const objects = [...room.objects].sort(
     (a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category) || a.index - b.index
   )
+
+  // An object selected in the photo scrolls into view here.
+  useEffect(() => {
+    listRef.current?.querySelector(`[data-index="${selected}"]`)?.scrollIntoView({ block: "nearest" })
+  }, [selected])
 
   return (
     <div className="flex min-h-0 flex-col">
@@ -79,16 +89,29 @@ function ObjectList({ room }: { room: Room }) {
       <p className="mt-1 text-sm text-muted-foreground">
         {objects.length === 1 ? "1 object" : `${objects.length} objects`} found in your photo.
       </p>
-      <ul className="-mx-2 mt-3 max-h-72 space-y-0.5 overflow-y-auto lg:max-h-[min(28rem,45dvh)]">
+      <ul ref={listRef} className="-mx-2 mt-3 max-h-72 space-y-0.5 overflow-y-auto lg:max-h-[min(24rem,38dvh)]" onMouseLeave={() => hover(0)}>
         {objects.map((object) => (
-          <li key={object.index} className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <span
-              className="size-5 shrink-0 rounded-md border shadow-soft"
-              style={{ backgroundColor: object.dominantColor }}
-              aria-hidden
-            />
-            <span className="min-w-0 flex-1 truncate text-sm first-letter:uppercase">{object.label}</span>
-            <span className="text-xs text-muted-foreground">{object.category}</span>
+          <li key={object.index}>
+            <button
+              type="button"
+              data-index={object.index}
+              aria-pressed={selected === object.index}
+              onClick={() => select(selected === object.index ? 0 : object.index)}
+              onMouseEnter={() => hover(object.index)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
+                selected === object.index && "bg-accent text-accent-foreground hover:bg-accent"
+              )}
+            >
+              <span
+                className="size-5 shrink-0 rounded-md border shadow-soft"
+                style={{ backgroundColor: edits[object.index]?.color ?? object.dominantColor }}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate text-sm first-letter:uppercase">{object.label}</span>
+              {edits[object.index] && <span className="size-1.5 rounded-full bg-primary" aria-label="recolored" />}
+              <span className="text-xs text-muted-foreground">{object.category}</span>
+            </button>
           </li>
         ))}
       </ul>
