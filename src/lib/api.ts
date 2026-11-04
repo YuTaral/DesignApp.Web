@@ -1,5 +1,8 @@
-/** Base URL of DesignApp.Api. Aspire sets VITE_API_URL; the fallback matches the API's launch settings. */
-const API_URL = (import.meta.env.VITE_API_URL ?? "https://localhost:7088").replace(/\/$/, "")
+/**
+ * Base URL of DesignApp.Api. Empty by default: the dev server forwards /api to the API, so calls
+ * stay on the page's own origin. Set VITE_API_URL only when the API is hosted on another origin.
+ */
+const API_URL = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "")
 
 export function apiUrl(path: string) {
   return `${API_URL}${path}`
