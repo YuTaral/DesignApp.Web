@@ -1,8 +1,13 @@
+import { useRef, useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { MousePointerClickIcon, PaletteIcon, ScanSearchIcon } from "lucide-react"
 import { motion } from "motion/react"
+import { toast } from "sonner"
 
+import { roomKeys, uploadRoom } from "@/features/rooms/api"
 import { PhotoDropzone } from "@/features/upload/photo-dropzone"
+import { errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
 
 const steps = [
@@ -25,7 +30,32 @@ const steps = [
 
 export function HomePage() {
   const navigate = useNavigate()
-  const setFile = useUploadStore((state) => state.setFile)
+  const queryClient = useQueryClient()
+  const { setFile, attachRoom, clear } = useUploadStore()
+  const [progress, setProgress] = useState<number | null>(null)
+  const abort = useRef<AbortController | null>(null)
+
+  const upload = useMutation({
+    mutationFn: (file: File) => {
+      abort.current = new AbortController()
+      return uploadRoom(file, { onProgress: setProgress, signal: abort.current.signal })
+    },
+    onMutate: (file) => {
+      setFile(file)
+      setProgress(0)
+    },
+    onSuccess: (room) => {
+      queryClient.setQueryData(roomKeys.detail(room.id), room)
+      attachRoom(room.id)
+      navigate({ to: "/rooms/$roomId", params: { roomId: room.id } })
+    },
+    onError: (error) => {
+      clear()
+      setProgress(null)
+      if (error instanceof DOMException && error.name === "AbortError") return
+      toast.error(errorMessage(error))
+    },
+  })
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-16">
@@ -51,10 +81,9 @@ export function HomePage() {
         className="mx-auto mt-10 max-w-2xl"
       >
         <PhotoDropzone
-          onSelect={(file) => {
-            setFile(file)
-            navigate({ to: "/editor" })
-          }}
+          onSelect={(file) => upload.mutate(file)}
+          progress={progress}
+          onCancel={() => abort.current?.abort()}
         />
       </motion.div>
 

@@ -9,7 +9,7 @@ const rootRoute = createRootRoute({ component: AppShell })
 
 const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/", component: HomePage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/editor", component: EditorPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/rooms/$roomId", component: EditorPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/designs", component: DesignsPage }),
 ])
 
