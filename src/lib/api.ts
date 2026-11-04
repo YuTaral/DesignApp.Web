@@ -25,6 +25,9 @@ const STATUS_MESSAGES: Record<number, string> = {
   404: "We couldn't find that.",
   413: "That photo is too large. Use one under 15 MB.",
   429: "You've uploaded a lot of photos in a short time. Try again in a little while.",
+  502: NETWORK_MESSAGE,
+  503: NETWORK_MESSAGE,
+  504: NETWORK_MESSAGE,
 }
 
 /** Builds an ApiError from a response status and its RFC 9457 problem details body, if any. */
