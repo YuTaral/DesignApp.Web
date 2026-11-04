@@ -6,28 +6,43 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 
+/** File types the API accepts. */
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"]
+/** Same 15 MB limit as the API, checked here first so big files fail fast. */
 const MAX_BYTES = 15 * 1024 * 1024
 
+/**
+ * Checks a file before uploading.
+ * @param file - The chosen file.
+ * @returns A message for the user, or null when the file is fine.
+ */
 function validate(file: File): string | null {
   if (!ACCEPTED_TYPES.includes(file.type)) return "Use a JPG, PNG or WebP photo."
   if (file.size > MAX_BYTES) return "That photo is over 15 MB. Try a smaller one."
   return null
 }
 
+/** Props of {@link PhotoDropzone}. */
 type PhotoDropzoneProps = {
+  /** Called with a valid photo the user chose, dropped or took. */
   onSelect: (file: File) => void
   /** Upload progress from 0 to 1 while a photo uploads, otherwise null. */
   progress?: number | null
+  /** Called when the user cancels the upload; hides Cancel when missing. */
   onCancel?: () => void
 }
 
+/** Upload area: drag and drop, file picker, or camera on phones. Shows progress while uploading. */
 export function PhotoDropzone({ onSelect, progress = null, onCancel }: PhotoDropzoneProps) {
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const uploading = progress !== null
 
+  /**
+   * Validates the first file and passes it on, or shows an error toast.
+   * @param files - Files from the input or the drop.
+   */
   function handleFiles(files: FileList | null) {
     const file = files?.[0]
     if (!file || uploading) return
@@ -107,6 +122,11 @@ export function PhotoDropzone({ onSelect, progress = null, onCancel }: PhotoDrop
   )
 }
 
+/**
+ * Progress view shown inside the dropzone during an upload.
+ * @param props.progress - Upload progress from 0 to 1.
+ * @param props.onCancel - Cancels the upload.
+ */
 function UploadStatus({ progress, onCancel }: { progress: number; onCancel?: () => void }) {
   // Once every byte is sent, the API still checks and stores the photo.
   const sent = progress >= 1

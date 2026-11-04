@@ -9,8 +9,10 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { router } from "@/router"
 import "./index.css"
 
+/** Caches API data (rooms now, designs later) for the whole app. */
 const queryClient = new QueryClient()
 
+// App entry: theme, data cache, tooltips and toasts wrap the router, which renders the pages.
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>

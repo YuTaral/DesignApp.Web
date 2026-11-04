@@ -1,5 +1,9 @@
 import { cn } from "cn"
 
+/**
+ * The DesignApp mark and name.
+ * @param props.className - Extra classes for the wrapper.
+ */
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2 font-semibold tracking-tight", className)}>

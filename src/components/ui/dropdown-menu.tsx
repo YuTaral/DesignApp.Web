@@ -3,12 +3,14 @@ import { cn } from "cn"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
 
+/** A menu that opens from a trigger (Radix Dropdown Menu). Takes the props of the underlying element. */
 function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
 }
 
+/** Renders the menu at the end of the document. Takes the props of the underlying element. */
 function DropdownMenuPortal({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
@@ -17,6 +19,7 @@ function DropdownMenuPortal({
   )
 }
 
+/** The element that opens the menu. Takes the props of the underlying element. */
 function DropdownMenuTrigger({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
@@ -28,6 +31,7 @@ function DropdownMenuTrigger({
   )
 }
 
+/** The menu's floating panel. Takes the props of the underlying element. */
 function DropdownMenuContent({
   className,
   align = "start",
@@ -47,6 +51,7 @@ function DropdownMenuContent({
   )
 }
 
+/** Groups related items. Takes the props of the underlying element. */
 function DropdownMenuGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
@@ -55,6 +60,7 @@ function DropdownMenuGroup({
   )
 }
 
+/** A menu entry. `variant="destructive"` for dangerous actions; `inset` aligns with icon items. Takes the props of the underlying element. */
 function DropdownMenuItem({
   className,
   inset,
@@ -78,6 +84,7 @@ function DropdownMenuItem({
   )
 }
 
+/** An entry that toggles on and off. Takes the props of the underlying element. */
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -112,6 +119,7 @@ function DropdownMenuCheckboxItem({
   )
 }
 
+/** A set of entries where one is selected. Takes the props of the underlying element. */
 function DropdownMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
@@ -123,6 +131,7 @@ function DropdownMenuRadioGroup({
   )
 }
 
+/** One choice in a radio group. Takes the props of the underlying element. */
 function DropdownMenuRadioItem({
   className,
   children,
@@ -155,6 +164,7 @@ function DropdownMenuRadioItem({
   )
 }
 
+/** A non-interactive heading inside the menu. Takes the props of the underlying element. */
 function DropdownMenuLabel({
   className,
   inset,
@@ -175,6 +185,7 @@ function DropdownMenuLabel({
   )
 }
 
+/** A line between groups of entries. Takes the props of the underlying element. */
 function DropdownMenuSeparator({
   className,
   ...props
@@ -188,6 +199,7 @@ function DropdownMenuSeparator({
   )
 }
 
+/** Keyboard-shortcut hint shown at an entry's right. Takes the props of the underlying element. */
 function DropdownMenuShortcut({
   className,
   ...props
@@ -204,12 +216,14 @@ function DropdownMenuShortcut({
   )
 }
 
+/** A nested submenu. Takes the props of the underlying element. */
 function DropdownMenuSub({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />
 }
 
+/** The entry that opens a submenu. Takes the props of the underlying element. */
 function DropdownMenuSubTrigger({
   className,
   inset,
@@ -234,6 +248,7 @@ function DropdownMenuSubTrigger({
   )
 }
 
+/** The submenu's panel. Takes the props of the underlying element. */
 function DropdownMenuSubContent({
   className,
   ...props

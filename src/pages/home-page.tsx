@@ -10,6 +10,7 @@ import { PhotoDropzone } from "@/features/upload/photo-dropzone"
 import { errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
 
+/** The "How it works" cards. */
 const steps = [
   {
     icon: ScanSearchIcon,
@@ -28,6 +29,7 @@ const steps = [
   },
 ]
 
+/** Landing page: upload a room photo, then open it in the editor. */
 export function HomePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()

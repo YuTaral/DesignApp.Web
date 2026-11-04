@@ -10,12 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+/** The theme menu's entries. */
 const options = [
   { value: "light", label: "Light", icon: SunIcon },
   { value: "dark", label: "Dark", icon: MoonIcon },
   { value: "system", label: "System", icon: MonitorIcon },
 ] as const
 
+/** Header button that opens a Light / Dark / System menu. */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
 

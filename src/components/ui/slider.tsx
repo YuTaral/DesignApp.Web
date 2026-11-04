@@ -2,6 +2,7 @@ import * as React from "react"
 import { cn } from "cn"
 import { Slider as SliderPrimitive } from "radix-ui"
 
+/** A range slider with one or more thumbs (Radix Slider). Takes the props of the underlying element. */
 function Slider({
   className,
   defaultValue,

@@ -2,6 +2,7 @@ import * as React from "react"
 import { cn } from "cn"
 import { Separator as SeparatorPrimitive } from "radix-ui"
 
+/** A thin divider line, horizontal by default. Takes the props of the underlying element. */
 function Separator({
   className,
   orientation = "horizontal",

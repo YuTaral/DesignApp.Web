@@ -6,6 +6,7 @@ import { defineConfig, type ProxyOptions } from 'vite'
 // Aspire passes the API's addresses when it runs the web app: https with the AppHost's "https"
 // launch profile, only http with its "http" profile. A plain `npm run dev` uses the API's own
 // default address.
+/** Where the dev server forwards /api: the API's https address, else its http one, else its default. */
 const apiTarget =
   process.env.services__api__https__0 ??
   process.env.services__api__http__0 ??
@@ -13,6 +14,7 @@ const apiTarget =
 
 // The browser only talks to this dev server, which forwards /api to the API. Same origin means
 // no CORS, and the browser never has to trust the API's HTTPS certificate.
+/** Proxy rule shared by `vite dev` and `vite preview`. On failure it answers 502 problem JSON. */
 const apiProxy: Record<string, ProxyOptions> = {
   '/api': {
     target: apiTarget,

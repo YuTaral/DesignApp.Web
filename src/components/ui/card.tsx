@@ -1,6 +1,7 @@
 import * as React from "react"
 import { cn } from "cn"
 
+/** A bordered panel. `size="sm"` tightens the padding. Takes the props of the underlying element. */
 function Card({
   className,
   size = "default",
@@ -19,6 +20,7 @@ function Card({
   )
 }
 
+/** Top of a card: title, description and an optional action. Takes the props of the underlying element. */
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -32,6 +34,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** The card's heading. Takes the props of the underlying element. */
 function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -45,6 +48,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** Muted text under the title. Takes the props of the underlying element. */
 function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -55,6 +59,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** A control placed at the header's top right. Takes the props of the underlying element. */
 function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -68,6 +73,7 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** The card's main content. Takes the props of the underlying element. */
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -78,6 +84,7 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** Bottom row of a card, for actions. Takes the props of the underlying element. */
 function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div

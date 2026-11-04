@@ -4,6 +4,7 @@ import * as React from "react"
 import { cn } from "cn"
 import { Progress as ProgressPrimitive } from "radix-ui"
 
+/** A horizontal progress bar. `value` is 0 to 100. Takes the props of the underlying element. */
 function Progress({
   className,
   value,

@@ -3,10 +3,16 @@ import { useQuery } from "@tanstack/react-query"
 import { ApiError, apiUrl, getJson, toApiError } from "@/lib/api"
 import type { Room } from "./types"
 
+/** React Query cache keys for rooms. */
 export const roomKeys = {
+  /** Key of one room by id. */
   detail: (id: string) => ["rooms", id] as const,
 }
 
+/**
+ * Loads a room from the API and caches it. A 404 is not retried.
+ * @param id - The room's id.
+ */
 export function useRoom(id: string) {
   return useQuery({
     queryKey: roomKeys.detail(id),
@@ -16,13 +22,22 @@ export function useRoom(id: string) {
   })
 }
 
+/** Options for {@link uploadRoom}. */
 type UploadOptions = {
   /** Called with 0..1 as the photo uploads. */
   onProgress?: (fraction: number) => void
+  /** Aborting it cancels the upload. */
   signal?: AbortSignal
 }
 
-/** Uploads with XMLHttpRequest rather than fetch, because fetch can't report upload progress. */
+/**
+ * Uploads a room photo and creates a room for it.
+ * Uses XMLHttpRequest rather than fetch, because fetch can't report upload progress.
+ * @param file - The photo to upload.
+ * @param options - Progress callback and cancel signal.
+ * @returns The new room.
+ * @throws ApiError when the API refuses the photo or can't be reached; an `AbortError` when cancelled.
+ */
 export function uploadRoom(file: File, { onProgress, signal }: UploadOptions = {}): Promise<Room> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()

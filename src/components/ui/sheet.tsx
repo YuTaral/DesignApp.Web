@@ -5,28 +5,33 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
+/** A panel that slides in from a screen edge (Radix Dialog). Takes the props of the underlying element. */
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
 }
 
+/** The element that opens the sheet. Takes the props of the underlying element. */
 function SheetTrigger({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
   return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />
 }
 
+/** An element that closes the sheet. Takes the props of the underlying element. */
 function SheetClose({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Close>) {
   return <SheetPrimitive.Close data-slot="sheet-close" {...props} />
 }
 
+/** Renders the sheet at the end of the document. Takes the props of the underlying element. */
 function SheetPortal({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Portal>) {
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 }
 
+/** The dimmed backdrop behind the sheet. Takes the props of the underlying element. */
 function SheetOverlay({
   className,
   ...props
@@ -43,6 +48,7 @@ function SheetOverlay({
   )
 }
 
+/** The sliding panel. `side` picks the edge; `showCloseButton` adds an X. Takes the props of the underlying element. */
 function SheetContent({
   className,
   children,
@@ -84,6 +90,7 @@ function SheetContent({
   )
 }
 
+/** Top area for the title and description. Takes the props of the underlying element. */
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -94,6 +101,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** Bottom area for actions. Takes the props of the underlying element. */
 function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -104,6 +112,7 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** The sheet's heading, announced to screen readers. Takes the props of the underlying element. */
 function SheetTitle({
   className,
   ...props
@@ -120,6 +129,7 @@ function SheetTitle({
   )
 }
 
+/** Muted text under the title. Takes the props of the underlying element. */
 function SheetDescription({
   className,
   ...props

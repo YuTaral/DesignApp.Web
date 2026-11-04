@@ -3,6 +3,7 @@ import { LayoutGridIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
+/** The user's saved designs. An empty state for now; the gallery comes with accounts (milestone 5). */
 export function DesignsPage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">

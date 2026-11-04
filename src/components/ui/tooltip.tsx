@@ -4,6 +4,7 @@ import * as React from "react"
 import { cn } from "cn"
 import { Tooltip as TooltipPrimitive } from "radix-ui"
 
+/** Shares tooltip timing across the app; wraps the whole app. Takes the props of the underlying element. */
 function TooltipProvider({
   delayDuration = 0,
   ...props
@@ -17,18 +18,21 @@ function TooltipProvider({
   )
 }
 
+/** A hint shown on hover or focus (Radix Tooltip). Takes the props of the underlying element. */
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
+/** The element the tooltip describes. Takes the props of the underlying element. */
 function TooltipTrigger({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
+/** The tooltip bubble. Takes the props of the underlying element. */
 function TooltipContent({
   className,
   sideOffset = 0,

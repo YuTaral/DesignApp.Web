@@ -4,6 +4,7 @@ import { useTheme } from "@/components/theme-provider"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
+/** Shows toast messages, styled to match the app's current theme. Takes the props of the underlying element. */
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme } = useTheme()
 

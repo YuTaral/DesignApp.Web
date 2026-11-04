@@ -13,8 +13,10 @@ import type { Room, RoomStatus } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
 
+/** Preset colors offered in the Color panel. */
 const swatches = ["#e8dcc8", "#c9a27e", "#b5543c", "#7d8b6a", "#4a6274", "#2f2c2a", "#f4f1ea", "#d8c3a5"]
 
+/** Badge text for each analysis status. */
 const statusLabels: Record<RoomStatus, string> = {
   Uploaded: "Waiting for analysis",
   Analyzing: "Finding objects…",
@@ -23,6 +25,7 @@ const statusLabels: Record<RoomStatus, string> = {
   Failed: "Analysis failed",
 }
 
+/** Route `/rooms/$roomId`: loads the room and shows the editor, a loading state, or an error. */
 export function EditorPage() {
   const { roomId } = useParams({ from: "/rooms/$roomId" })
   const room = useRoom(roomId)
@@ -54,6 +57,11 @@ export function EditorPage() {
   return <Editor room={room.data} />
 }
 
+/**
+ * The editor: the photo on the left, the objects and color tools on the right.
+ * The tools stay disabled until the AI pipeline (milestone 3) provides objects.
+ * @param props.room - The room to edit.
+ */
 function Editor({ room }: { room: Room }) {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
@@ -128,6 +136,7 @@ function Editor({ room }: { room: Room }) {
 /**
  * Shows the stored photo from the API. Right after an upload, the local preview of the same
  * photo sits underneath so there's no blank gap while the stored copy downloads.
+ * @param props.room - The room whose photo to show.
  */
 function RoomPhoto({ room }: { room: Room }) {
   const preview = useUploadStore((state) => (state.roomId === room.id ? state.previewUrl : null))
@@ -163,6 +172,7 @@ function RoomPhoto({ room }: { room: Room }) {
   )
 }
 
+/** Placeholder with the editor's layout while the room loads. */
 function EditorSkeleton() {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
@@ -175,6 +185,13 @@ function EditorSkeleton() {
   )
 }
 
+/**
+ * A centered icon, title, text and button, for not-found and error states.
+ * @param props.icon - The icon to show.
+ * @param props.title - The headline.
+ * @param props.text - The explanation.
+ * @param props.action - The button to offer.
+ */
 function CenteredMessage({
   icon: Icon,
   title,

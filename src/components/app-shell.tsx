@@ -5,9 +5,11 @@ import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 
+/** Style of the header links; the active page's link is highlighted. */
 const navLinkClass =
   "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
 
+/** Layout of every page: sticky header with logo, navigation and theme menu, then the page. */
 export function AppShell() {
   return (
     <div className="flex min-h-dvh flex-col">
