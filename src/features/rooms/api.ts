@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { ApiError, apiUrl, getJson, toApiError } from "@/lib/api"
-import type { Room } from "./types"
+import { isAnalysisFinished, type Room } from "./types"
 
 /** React Query cache keys for rooms. */
 export const roomKeys = {
@@ -10,7 +10,8 @@ export const roomKeys = {
 }
 
 /**
- * Loads a room from the API and caches it. A 404 is not retried.
+ * Loads a room from the API and caches it. A 404 is not retried. While the analysis runs it also
+ * re-checks every few seconds, a fallback for when live updates ({@link useLiveRoom}) can't connect.
  * @param id - The room's id.
  */
 export function useRoom(id: string) {
@@ -19,6 +20,7 @@ export function useRoom(id: string) {
     queryFn: ({ signal }) => getJson<Room>(`/api/rooms/${id}`, signal),
     // A missing room won't appear by asking again.
     retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 2,
+    refetchInterval: (query) => (query.state.data && !isAnalysisFinished(query.state.data.status) ? 5000 : false),
   })
 }
 

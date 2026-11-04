@@ -4,6 +4,14 @@
 /** Where a room is in the AI analysis, from upload to ready. */
 export type RoomStatus = "Uploaded" | "Analyzing" | "Segmenting" | "Ready" | "Failed"
 
+/**
+ * Whether the analysis is over, successfully or not.
+ * @param status - The room's status.
+ */
+export function isAnalysisFinished(status: RoomStatus) {
+  return status === "Ready" || status === "Failed"
+}
+
 /** The kind of a detected object. */
 export type ObjectCategory =
   | "Wall"
@@ -51,4 +59,10 @@ export type Room = {
   failureReason: string | null
   /** The detected objects; empty until the room is ready. */
   objects: DetectedObject[]
+  /**
+   * The label map (relative, like photoUrl): a grayscale PNG whose pixel values are object
+   * indexes, 0 for none. It is the analysis size (at most 2048 px), so scale it to the photo.
+   * Null until the room is ready.
+   */
+  labelMapUrl: string | null
 }

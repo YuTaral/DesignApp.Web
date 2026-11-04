@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { Link, useParams } from "@tanstack/react-router"
-import { ArrowLeftIcon, ImageOffIcon, ScanSearchIcon, SaveIcon, TriangleAlertIcon } from "lucide-react"
+import { ArrowLeftIcon, CheckIcon, ImageOffIcon, LoaderCircleIcon, SaveIcon, TriangleAlertIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Slider } from "@/components/ui/slider"
+import { AnalysisPanel } from "@/features/rooms/analysis-panel"
 import { useRoom } from "@/features/rooms/api"
-import type { Room, RoomStatus } from "@/features/rooms/types"
+import { useLiveRoom } from "@/features/rooms/live"
+import { isAnalysisFinished, type Room, type RoomStatus } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
 
@@ -18,7 +20,7 @@ const swatches = ["#e8dcc8", "#c9a27e", "#b5543c", "#7d8b6a", "#4a6274", "#2f2c2
 
 /** Badge text for each analysis status. */
 const statusLabels: Record<RoomStatus, string> = {
-  Uploaded: "Waiting for analysis",
+  Uploaded: "Starting analysis…",
   Analyzing: "Finding objects…",
   Segmenting: "Outlining objects…",
   Ready: "Ready",
@@ -58,11 +60,15 @@ export function EditorPage() {
 }
 
 /**
- * The editor: the photo on the left, the objects and color tools on the right.
- * The tools stay disabled until the AI pipeline (milestone 3) provides objects.
+ * The editor: the photo on the left, the objects and color tools on the right. While the AI
+ * analyzes the photo, progress arrives live. The color tools stay disabled until the editor
+ * (milestone 4) can apply them.
  * @param props.room - The room to edit.
  */
 function Editor({ room }: { room: Room }) {
+  const finished = isAnalysisFinished(room.status)
+  useLiveRoom(room.id, finished)
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
       <section className="flex min-h-0 flex-1 flex-col gap-3">
@@ -73,8 +79,14 @@ function Editor({ room }: { room: Room }) {
               Back
             </Link>
           </Button>
-          <Badge variant="secondary" className="ml-auto gap-1.5">
-            <ScanSearchIcon className="size-3" />
+          <Badge
+            variant={room.status === "Failed" ? "destructive" : "secondary"}
+            className="ml-auto gap-1.5"
+            aria-live="polite"
+          >
+            {room.status === "Ready" && <CheckIcon className="size-3" aria-hidden />}
+            {room.status === "Failed" && <TriangleAlertIcon className="size-3" aria-hidden />}
+            {!finished && <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />}
             {statusLabels[room.status]}
           </Badge>
         </div>
@@ -87,17 +99,7 @@ function Editor({ room }: { room: Room }) {
         aria-label="Inspector"
         className="flex w-full shrink-0 flex-col gap-5 rounded-2xl border bg-card p-5 shadow-soft lg:w-80"
       >
-        <div>
-          <h2 className="font-medium">Objects</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Objects in your photo will appear here once the AI has analyzed it.
-          </p>
-          <div className="mt-3 space-y-2">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-4/5" />
-            <Skeleton className="h-9 w-3/5" />
-          </div>
-        </div>
+        <AnalysisPanel room={room} />
 
         <Separator />
 
@@ -135,25 +137,25 @@ function Editor({ room }: { room: Room }) {
 
 /**
  * Shows the stored photo from the API. Right after an upload, the local preview of the same
- * photo sits underneath so there's no blank gap while the stored copy downloads.
+ * photo sits underneath (same size, same place) until the stored copy has faded in on top, so
+ * there's never a blank frame.
  * @param props.room - The room whose photo to show.
  */
 function RoomPhoto({ room }: { room: Room }) {
   const preview = useUploadStore((state) => (state.roomId === room.id ? state.previewUrl : null))
   const [loaded, setLoaded] = useState(false)
+  const [shown, setShown] = useState(false)
   const imageClass = "col-start-1 row-start-1 h-auto max-h-[70dvh] w-auto max-w-full rounded-xl object-contain"
 
   return (
     <div className="grid place-items-center">
-      {!loaded &&
-        (preview ? (
-          <img src={preview} alt="" width={room.width} height={room.height} className={imageClass} />
-        ) : (
-          <Skeleton
-            className="col-start-1 row-start-1 max-h-[70dvh] w-[min(100%,56rem)] rounded-xl"
-            style={{ aspectRatio: `${room.width} / ${room.height}` }}
-          />
-        ))}
+      {preview && !shown && <img src={preview} alt="" width={room.width} height={room.height} className={imageClass} />}
+      {!preview && !loaded && (
+        <Skeleton
+          className="col-start-1 row-start-1 max-h-[70dvh] w-[min(100%,56rem)] rounded-xl"
+          style={{ aspectRatio: `${room.width} / ${room.height}` }}
+        />
+      )}
       <img
         // CORS mode from the start (before src), so the WebGL editor can read the same cached photo.
         crossOrigin="anonymous"
@@ -166,6 +168,7 @@ function RoomPhoto({ room }: { room: Room }) {
           if (image?.complete && image.naturalWidth > 0) setLoaded(true)
         }}
         onLoad={() => setLoaded(true)}
+        onTransitionEnd={() => setShown(true)}
         className={cn(imageClass, "transition-opacity duration-300", loaded ? "opacity-100" : "opacity-0")}
       />
     </div>

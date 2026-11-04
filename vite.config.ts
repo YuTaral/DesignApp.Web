@@ -19,6 +19,7 @@ const apiProxy: Record<string, ProxyOptions> = {
   '/api': {
     target: apiTarget,
     changeOrigin: true,
+    ws: true, // live analysis progress (SignalR) under /api/hubs
     secure: false, // Node doesn't read the Windows certificate store, so it can't verify the dev cert
     configure: (proxy) => {
       // Answer with a problem the web app understands instead of an empty error page.
