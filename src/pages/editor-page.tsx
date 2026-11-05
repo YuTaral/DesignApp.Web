@@ -4,10 +4,12 @@ import {
   ArrowLeftIcon,
   CheckIcon,
   ColumnsIcon,
+  FlaskConicalIcon,
   ImageOffIcon,
   LoaderCircleIcon,
   Redo2Icon,
   SaveIcon,
+  SparklesIcon,
   TriangleAlertIcon,
   Undo2Icon,
 } from "lucide-react"
@@ -20,10 +22,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ColorPanel } from "@/features/editor/color-panel"
 import { useEditorStore } from "@/features/editor/editor-store"
+import { OutlinePanel } from "@/features/editor/outline-panel"
+import { useOutlineFixes } from "@/features/editor/use-outline-fixes"
 import { RoomCanvas } from "@/features/editor/room-canvas"
 import { useEditorShortcuts } from "@/features/editor/use-editor-shortcuts"
 import { AnalysisPanel } from "@/features/rooms/analysis-panel"
-import { useRoom } from "@/features/rooms/api"
+import { useAiAvailability, useRoom } from "@/features/rooms/api"
 import { useLiveRoom } from "@/features/rooms/live"
 import { isAnalysisFinished, type Room, type RoomStatus } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
@@ -86,7 +90,7 @@ function Editor({ room }: { room: Room }) {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
       <section className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
             <Link to="/">
               <ArrowLeftIcon data-icon="inline-start" />
@@ -103,6 +107,7 @@ function Editor({ room }: { room: Room }) {
             {!finished && <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />}
             {statusLabels[room.status]}
           </Badge>
+          <AiBadge room={room} />
           {editable && <EditorToolbar />}
         </div>
         {editable ? (
@@ -110,7 +115,7 @@ function Editor({ room }: { room: Room }) {
             className="relative w-full overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft"
             style={{ aspectRatio: `${room.width} / ${room.height}`, maxHeight: "min(72dvh, 52rem)", minHeight: "18rem" }}
           >
-            <RoomCanvas room={room} />
+            <ReadyCanvas room={room} />
           </div>
         ) : (
           <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft">
@@ -128,7 +133,10 @@ function Editor({ room }: { room: Room }) {
         <Separator />
 
         {editable ? (
-          <ColorPanel room={room} />
+          <>
+            <ColorPanel room={room} />
+            <OutlinePanel room={room} />
+          </>
         ) : (
           <div aria-disabled="true" className="space-y-2 opacity-60">
             <h2 className="font-medium">Color</h2>
@@ -190,6 +198,30 @@ function RoomPhoto({ room }: { room: Room }) {
       />
     </div>
   )
+}
+
+/**
+ * Which AI analyzed the room, where uploads can choose (Development), so test runs are easy to tell apart.
+ * @param props.room - The room.
+ */
+function AiBadge({ room }: { room: Room }) {
+  const canChoose = useAiAvailability().data?.canChoose
+  if (!canChoose) return null
+  return (
+    <Badge variant="outline" className="gap-1">
+      {room.aiMode === "Real" ? <SparklesIcon className="size-3" aria-hidden /> : <FlaskConicalIcon className="size-3" aria-hidden />}
+      {room.aiMode === "Real" ? "Real AI" : "Fake AI"}
+    </Badge>
+  )
+}
+
+/**
+ * The interactive canvas of a ready room, with brush strokes saved as outline fixes.
+ * @param props.room - The room (Ready).
+ */
+function ReadyCanvas({ room }: { room: Room }) {
+  const { save, saving } = useOutlineFixes(room)
+  return <RoomCanvas room={room} onStroke={save} saving={saving} />
 }
 
 /** Undo, redo, before/after and reset-all, above the canvas. Also turns on the keyboard shortcuts. */

@@ -41,8 +41,10 @@ void main() {
 }`
 
 // Recolors each pixel in OKLab: the object's color difference (target minus its original main
-// color) is added to the pixel, so its own shading and texture survive. Outlines come from the
-// label map: a pixel is on an object's edge when a neighbor belongs to something else.
+// color) is added to the pixel, so its own shading and texture survive. Edges are soft: a pixel
+// averages the recolors of the objects in its 3x3 label neighborhood, so a recolored object fades
+// in over about 1.5 pixels like real photo edges instead of switching on hard. Outlines come from
+// the label map: a pixel is on an object's edge when a neighbor belongs to something else.
 const fragmentShader = `#version 300 es
 precision highp float;
 precision highp usampler2D;
@@ -85,6 +87,16 @@ vec3 fromOklab(vec3 lab) {
   return toGamma(clamp(rgb, 0.0, 1.0));
 }
 
+// The pixel recolored as if it belonged to object 'label' (unchanged when that object has no edit).
+vec3 recolor(vec3 rgb, vec3 lab, int label) {
+  if (label == 0) return rgb;
+  vec4 target = texelFetch(u_edits, ivec2(label, 0), 0);
+  if (target.w <= 0.0) return rgb;
+  vec3 source = texelFetch(u_edits, ivec2(label, 1), 0).xyz;
+  vec3 recolored = fromOklab(vec3(lab.x + target.x - source.x, lab.yz - source.yz + target.yz));
+  return mix(rgb, recolored, target.w);
+}
+
 int labelAt(vec2 uv) {
   ivec2 p = clamp(ivec2(uv * vec2(u_labelSize)), ivec2(0), u_labelSize - 1);
   return int(texelFetch(u_labels, p, 0).r);
@@ -95,14 +107,14 @@ void main() {
   int label = labelAt(v_uv);
   bool before = u_split >= 0.0 && gl_FragCoord.x < u_split;
 
-  if (!before && label > 0) {
-    vec4 target = texelFetch(u_edits, ivec2(label, 0), 0);
-    if (target.w > 0.0) {
-      vec3 source = texelFetch(u_edits, ivec2(label, 1), 0).xyz;
-      vec3 lab = toOklab(rgb);
-      vec3 recolored = fromOklab(vec3(lab.x + target.x - source.x, lab.yz - source.yz + target.yz));
-      rgb = mix(rgb, recolored, target.w);
-    }
+  if (!before) {
+    vec3 lab = toOklab(rgb);
+    vec2 texel = 0.75 / vec2(u_labelSize);
+    vec3 sum = vec3(0.0);
+    for (int dy = -1; dy <= 1; dy++)
+      for (int dx = -1; dx <= 1; dx++)
+        sum += recolor(rgb, lab, labelAt(v_uv + vec2(float(dx), float(dy)) * texel));
+    rgb = sum / 9.0;
   }
 
   // One label texel per screen pixel step, so outlines stay about 2 px wide at any zoom.
@@ -177,14 +189,22 @@ export class RoomRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     clampToEdge(gl)
 
+    this.setLabels(map)
+    this.setEdits(new Map())
+    this.ready = true
+  }
+
+  /**
+   * Replaces the label map, such as after an outline fix; the photo stays.
+   * @param map - The new label map.
+   */
+  setLabels(map: LabelMap) {
+    const gl = this.gl
     gl.bindTexture(gl.TEXTURE_2D, this.labels)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, map.width, map.height, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, map.labels)
     nearest(gl)
     this.labelSize = [map.width, map.height]
-
-    this.setEdits(new Map())
-    this.ready = true
   }
 
   /**

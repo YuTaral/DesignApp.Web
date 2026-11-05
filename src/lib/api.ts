@@ -84,6 +84,29 @@ export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T>
 }
 
 /**
+ * Sends JSON to the API and reads the JSON answer.
+ * @param method - The HTTP method, such as "POST".
+ * @param path - An API path such as `/api/rooms/123/outline`.
+ * @param body - What to send.
+ * @returns The parsed answer.
+ * @throws ApiError with a user-facing message when the request fails.
+ */
+export async function sendJson<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(apiUrl(path), {
+      method,
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw toApiError(0, undefined)
+  }
+  if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
+  return (await response.json()) as T
+}
+
+/**
  * For toasts: ApiErrors carry a readable message; anything else gets a generic one.
  * @param error - Whatever was thrown.
  */

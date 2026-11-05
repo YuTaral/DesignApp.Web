@@ -5,8 +5,12 @@ import { MousePointerClickIcon, PaletteIcon, ScanSearchIcon } from "lucide-react
 import { motion } from "motion/react"
 import { toast } from "sonner"
 
-import { roomKeys, uploadRoom } from "@/features/rooms/api"
+import { roomKeys, uploadRoom, useAiAvailability } from "@/features/rooms/api"
+import { AiSwitch } from "@/features/upload/ai-switch"
+import { useAiChoice } from "@/features/upload/use-ai-choice"
 import { PhotoDropzone } from "@/features/upload/photo-dropzone"
+import { ScopePicker } from "@/features/upload/scope-picker"
+import { useScopeChoice } from "@/features/upload/use-scope-choice"
 import { errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
 
@@ -35,12 +39,15 @@ export function HomePage() {
   const queryClient = useQueryClient()
   const { setFile, attachRoom, clear } = useUploadStore()
   const [progress, setProgress] = useState<number | null>(null)
+  const [scope, setScope] = useScopeChoice()
+  const availability = useAiAvailability().data
+  const [ai, setAi] = useAiChoice(availability)
   const abort = useRef<AbortController | null>(null)
 
   const upload = useMutation({
     mutationFn: (file: File) => {
       abort.current = new AbortController()
-      return uploadRoom(file, { onProgress: setProgress, signal: abort.current.signal })
+      return uploadRoom(file, { onProgress: setProgress, signal: abort.current.signal, scope, ai })
     },
     onMutate: (file) => {
       setFile(file)
@@ -80,8 +87,12 @@ export function HomePage() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-        className="mx-auto mt-10 max-w-2xl"
+        className="mx-auto mt-10 max-w-2xl space-y-5"
       >
+        <ScopePicker value={scope} onChange={setScope} disabled={progress !== null} />
+        {availability?.canChoose && ai && (
+          <AiSwitch availability={availability} value={ai} onChange={setAi} disabled={progress !== null} />
+        )}
         <PhotoDropzone
           onSelect={(file) => upload.mutate(file)}
           progress={progress}

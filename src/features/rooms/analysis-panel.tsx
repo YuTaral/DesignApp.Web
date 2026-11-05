@@ -6,7 +6,7 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEditorStore } from "@/features/editor/editor-store"
-import type { ObjectCategory, Room, RoomStatus } from "./types"
+import { categoryNames, type ObjectCategory, type Room, type RoomStatus } from "./types"
 
 /** The visible analysis steps and the statuses during which each one is running. */
 const steps: { label: string; runningFor: RoomStatus[] }[] = [
@@ -15,7 +15,7 @@ const steps: { label: string; runningFor: RoomStatus[] }[] = [
 ]
 
 /** Where each category sorts in the object list: surfaces first, then furniture, then the rest. */
-const categoryOrder: ObjectCategory[] = ["Wall", "Floor", "Ceiling", "Furniture", "Textile", "Lighting", "Decor", "Fixture", "Other"]
+const categoryOrder: ObjectCategory[] = ["Wall", "Floor", "Ceiling", "Opening", "Furniture", "Textile", "Lighting", "Decor", "Fixture", "Other"]
 
 /**
  * The inspector's Objects section: analysis progress while the AI works, the detected objects once
@@ -110,7 +110,7 @@ function ObjectList({ room }: { room: Room }) {
               />
               <span className="min-w-0 flex-1 truncate text-sm first-letter:uppercase">{object.label}</span>
               {edits[object.index] && <span className="size-1.5 rounded-full bg-primary" aria-label="recolored" />}
-              <span className="text-xs text-muted-foreground">{object.category}</span>
+              <span className="text-xs text-muted-foreground">{categoryNames[object.category] ?? object.category}</span>
             </button>
           </li>
         ))}
