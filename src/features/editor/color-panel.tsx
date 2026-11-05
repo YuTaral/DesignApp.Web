@@ -48,7 +48,7 @@ export function ColorPanel({ room }: { room: Room }) {
         </Button>
       </div>
 
-      <div role="radiogroup" aria-label={`Color for ${object.label}`} className="grid grid-cols-8 gap-2">
+      <div role="radiogroup" aria-label={`Color for ${object.label}`} className="grid grid-cols-[repeat(8,1.75rem)] justify-between gap-y-2">
         {SWATCHES.map((color) => (
           <button
             key={color}

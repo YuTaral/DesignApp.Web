@@ -89,7 +89,7 @@ function ObjectList({ room }: { room: Room }) {
       <p className="mt-1 text-sm text-muted-foreground">
         {objects.length === 1 ? "1 object" : `${objects.length} objects`} found in your photo.
       </p>
-      <ul ref={listRef} className="-mx-2 mt-3 max-h-72 space-y-0.5 overflow-y-auto lg:max-h-[min(24rem,38dvh)]" onMouseLeave={() => hover(0)}>
+      <ul ref={listRef} className="-mx-2 mt-3 max-h-[9.5rem] space-y-0.5 overflow-y-auto sm:max-h-72 lg:max-h-[min(24rem,38dvh)]" onMouseLeave={() => hover(0)}>
         {objects.map((object) => (
           <li key={object.index}>
             <button

@@ -1,4 +1,4 @@
-import { BrushIcon, EraserIcon } from "lucide-react"
+import { BrushIcon, EraserIcon, MinusIcon, PlusIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
@@ -58,18 +58,36 @@ export function OutlinePanel({ room }: { room: Room }) {
             {brushSize} px
           </span>
         </div>
-        <Slider
-          value={[brushSize]}
-          min={BRUSH_SIZES.min}
-          max={BRUSH_SIZES.max}
-          step={1}
-          aria-label="Brush size"
-          onValueChange={([value]) => setBrushSize(value)}
-        />
-        <p className="text-xs text-muted-foreground">
-          <kbd className="rounded border px-1">[</kbd> and <kbd className="rounded border px-1">]</kbd> change the size. Zoom
-          in for fine edges.
-        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Smaller brush"
+            disabled={brushSize <= BRUSH_SIZES.min}
+            onClick={() => setBrushSize(brushSize - 1)}
+          >
+            <MinusIcon />
+          </Button>
+          <Slider
+            className="flex-1"
+            value={[brushSize]}
+            min={BRUSH_SIZES.min}
+            max={BRUSH_SIZES.max}
+            step={1}
+            aria-label="Brush size"
+            onValueChange={([value]) => setBrushSize(value)}
+          />
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Bigger brush"
+            disabled={brushSize >= BRUSH_SIZES.max}
+            onClick={() => setBrushSize(brushSize + 1)}
+          >
+            <PlusIcon />
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">Zoom in for fine edges.</p>
       </div>
     </div>
   )
