@@ -21,17 +21,21 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAccount } from "@/features/account/api"
 import {
-  MAX_DESIGN_NAME,
+  DESIGN_LIMITS,
   toDesignEdits,
   toEditorEdits,
+  useAddDesignRoom,
   useCreateDesign,
   useDesign,
-  useUpdateDesign,
+  useDesigns,
+  useSaveRoomColors,
+  type Design,
 } from "@/features/designs/api"
 import { ColorPanel } from "@/features/editor/color-panel"
 import { sameEdits, useEditorStore, type Edits } from "@/features/editor/editor-store"
@@ -100,21 +104,28 @@ function Editor({ room }: { room: Room }) {
   useLiveRoom(room.id, finished)
   const open = useEditorStore((state) => state.open)
   useEffect(() => open(room.id), [open, room.id])
-  const designName = useOpenDesign(room)
+  const openDesign = useOpenDesign(room)
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
       <section className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/">
-              <ArrowLeftIcon data-icon="inline-start" />
-              Back
-            </Link>
+            {openDesign ? (
+              <Link to="/designs/$designId" params={{ designId: openDesign.id }}>
+                <ArrowLeftIcon data-icon="inline-start" />
+                Back
+              </Link>
+            ) : (
+              <Link to="/">
+                <ArrowLeftIcon data-icon="inline-start" />
+                Back
+              </Link>
+            )}
           </Button>
-          {designName && (
-            <h1 className="min-w-0 truncate text-sm font-medium" title={designName}>
-              {designName}
+          {openDesign && (
+            <h1 className="min-w-0 truncate text-sm font-medium" title={openDesign.name}>
+              {openDesign.name}
             </h1>
           )}
           <Badge
@@ -164,7 +175,7 @@ function Editor({ room }: { room: Room }) {
           </div>
         )}
 
-        <SaveDesign room={room} editable={editable} />
+        <SaveDesign room={room} editable={editable} design={openDesign} />
       </aside>
     </div>
   )
@@ -270,50 +281,48 @@ function EditorToolbar() {
 }
 
 /**
- * Opens the saved design named by the `?design=` search parameter: once the room is ready, its
- * recolors replace what the editor shows (unless that design is already open). A design that
- * can't be opened, or belongs to another room, is dropped from the address with a message.
+ * Opens the design named by the `?design=` search parameter, when this room is in it: once the
+ * room is ready, the room's saved colors replace what the editor shows (unless that design is
+ * already open here, so unsaved changes stay). A design that can't be opened, or doesn't hold this
+ * room, is dropped from the address with a message.
  * @param room - The room shown.
- * @returns The name of the design being edited, if any.
+ * @returns The design the room is in, or null.
  */
-function useOpenDesign(room: Room) {
+function useOpenDesign(room: Room): Design | null {
   const { design: requested } = useSearch({ from: "/rooms/$roomId" })
   const navigate = useNavigate()
   const loadDesign = useEditorStore((state) => state.loadDesign)
-  const openId = useEditorStore((state) => (state.roomId === room.id ? state.designId : null))
   const design = useDesign(requested)
+  const entry = design.data?.rooms.find((r) => r.roomId === room.id)
   const ready = room.status === "Ready"
 
   useEffect(() => {
-    if (ready && design.data && design.data.roomId === room.id) {
-      loadDesign(room.id, design.data.id, toEditorEdits(design.data.edits))
-    }
-  }, [ready, design.data, room.id, loadDesign])
+    if (ready && design.data && entry) loadDesign(room.id, design.data.id, toEditorEdits(entry.edits))
+  }, [ready, design.data, entry, room.id, loadDesign])
 
-  const failed = requested !== undefined && (design.isError || (design.data !== undefined && design.data.roomId !== room.id))
+  const failed = requested !== undefined && (design.isError || (design.data !== undefined && !entry))
   useEffect(() => {
     if (!failed) return
     toast.error("We couldn't open that design. It may have been deleted.")
     void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: {}, replace: true })
   }, [failed, navigate, room.id])
 
-  // The design being edited: the one just opened, or one saved here.
-  return useDesign(openId ?? undefined).data?.name ?? null
+  return entry && design.data ? design.data : null
 }
 
 /**
- * Saving the recolors. Guests are asked to sign in first (the recolors stay while they do). A new
- * design asks for a name; an open design saves its changes, or can be saved as a new one.
+ * Saving the colors. Guests are asked to sign in first (the colors stay while they do). A room in
+ * a design saves its colors there; any other room is saved into a new design or an existing one.
  * @param props.room - The room shown.
  * @param props.editable - Whether the room is ready to edit.
+ * @param props.design - The design the room is in, if any.
  */
-function SaveDesign({ room, editable }: { room: Room; editable: boolean }) {
+function SaveDesign({ room, editable, design }: { room: Room; editable: boolean; design: Design | null }) {
   const account = useAccount().data
   const here = useRouterState({ select: (state) => state.location.href })
-  const { roomId, edits, designId, savedEdits, markSaved } = useEditorStore()
-  const design = useDesign(roomId === room.id && designId !== null ? designId : undefined).data
-  const update = useUpdateDesign()
-  const [naming, setNaming] = useState(false)
+  const { edits, savedEdits, markSaved } = useEditorStore()
+  const saveColors = useSaveRoomColors()
+  const [choosing, setChoosing] = useState(false)
   const recolored = Object.keys(edits).length > 0
   const dirty = savedEdits ? !sameEdits(edits, savedEdits) : recolored
 
@@ -326,142 +335,199 @@ function SaveDesign({ room, editable }: { room: Room; editable: boolean }) {
             Sign in to save
           </Link>
         </Button>
-        <p className="text-center text-xs text-muted-foreground">Your colors stay here while you sign in.</p>
+        <p className="text-center text-xs text-muted-foreground">
+          Your colors stay here while you sign in. Rooms not saved to a design are deleted after a day.
+        </p>
       </div>
     )
   }
 
-  const saveChanges = () => {
-    if (!design) return
-    const snapshot = edits
-    update.mutate(
-      { id: design.id, name: design.name, edits: toDesignEdits(snapshot) },
-      {
-        onSuccess: (saved) => {
-          markSaved(saved.id, snapshot)
-          toast.success("Changes saved")
+  if (design) {
+    const save = () => {
+      const snapshot = edits
+      saveColors.mutate(
+        { designId: design.id, roomId: room.id, edits: toDesignEdits(snapshot) },
+        {
+          onSuccess: (saved) => {
+            markSaved(saved.id, snapshot)
+            toast.success("Colors saved")
+          },
+          onError: (error) => toast.error(errorMessage(error)),
         },
-        onError: (error) => toast.error(errorMessage(error)),
-      },
+      )
+    }
+    return (
+      <div className="mt-auto space-y-2">
+        <Button size="lg" className="w-full" disabled={!editable || !dirty || saveColors.isPending} onClick={save}>
+          {saveColors.isPending ? (
+            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+          ) : dirty ? (
+            <SaveIcon data-icon="inline-start" />
+          ) : (
+            <CheckIcon data-icon="inline-start" />
+          )}
+          {saveColors.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">Saved in {design.name}.</p>
+      </div>
     )
   }
 
   return (
     <div className="mt-auto space-y-2">
-      {design ? (
-        <>
-          <Button size="lg" className="w-full" disabled={!editable || !dirty || update.isPending} onClick={saveChanges}>
-            {update.isPending ? (
-              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-            ) : dirty ? (
-              <SaveIcon data-icon="inline-start" />
-            ) : (
-              <CheckIcon data-icon="inline-start" />
-            )}
-            {update.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
-          </Button>
-          <Button variant="ghost" size="sm" className="w-full" disabled={!editable} onClick={() => setNaming(true)}>
-            Save as new design
-          </Button>
-        </>
-      ) : (
-        <Button size="lg" className="w-full" disabled={!editable} onClick={() => setNaming(true)}>
-          <SaveIcon data-icon="inline-start" />
-          Save design
-        </Button>
-      )}
-      <NameDesignDialog room={room} edits={edits} open={naming} onOpenChange={setNaming} />
+      <Button size="lg" className="w-full" disabled={!editable} onClick={() => setChoosing(true)}>
+        <SaveIcon data-icon="inline-start" />
+        Save design
+      </Button>
+      <p className="text-center text-xs text-muted-foreground">Rooms not saved to a design are deleted after a day.</p>
+      <Dialog open={choosing} onOpenChange={setChoosing}>
+        <DialogContent>
+          {/* The dialog drops its content once closed, so the form starts fresh on every open. */}
+          <SaveToDesignForm room={room} edits={edits} onDone={() => setChoosing(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
 /**
- * Asks for a name, then saves the recolors as a new design and puts it in the address, so a
- * reload or a bookmark opens it again.
+ * Saves the room with its colors into a new design (a name and an optional description) or into
+ * one of the account's designs, then puts that design in the address so a reload opens it again.
  * @param props.room - The room.
- * @param props.edits - The recolors to save.
- * @param props.open - Whether the dialog is shown.
- * @param props.onOpenChange - Shows or hides it.
- */
-function NameDesignDialog({
-  room,
-  edits,
-  open,
-  onOpenChange,
-}: {
-  room: Room
-  edits: Edits
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        {/* The dialog drops its content once closed, so the name starts empty on every open. */}
-        <NameDesignForm room={room} edits={edits} onDone={() => onOpenChange(false)} />
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/**
- * The name field and buttons of {@link NameDesignDialog}.
- * @param props.room - The room.
- * @param props.edits - The recolors to save.
+ * @param props.edits - Its colors.
  * @param props.onDone - Closes the dialog (after saving, or on Cancel).
  */
-function NameDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; onDone: () => void }) {
+function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; onDone: () => void }) {
+  const designs = useDesigns(true)
   const create = useCreateDesign()
+  const addRoom = useAddDesignRoom()
   const markSaved = useEditorStore((state) => state.markSaved)
   const navigate = useNavigate()
+  const existing = designs.data ?? []
+  const [mode, setMode] = useState<"new" | "existing">("new")
   const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [target, setTarget] = useState<string | null>(null)
   const id = useId()
+  const pending = create.isPending || addRoom.isPending
+  const error = create.error ?? addRoom.error
+  const canSave = mode === "new" ? name.trim().length > 0 : target !== null
+
+  const saved = (design: Design, snapshot: Edits) => {
+    markSaved(design.id, snapshot)
+    onDone()
+    toast.success(mode === "new" ? "Design saved" : `Added to ${design.name}`)
+    void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: { design: design.id }, replace: true })
+  }
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault()
     const snapshot = edits
-    create.mutate(
-      { roomId: room.id, name: name.trim(), edits: toDesignEdits(snapshot) },
-      {
-        onSuccess: (design) => {
-          markSaved(design.id, snapshot)
-          onDone()
-          toast.success("Design saved")
-          void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: { design: design.id }, replace: true })
-        },
-      },
-    )
+    if (mode === "new") {
+      create.mutate(
+        { roomId: room.id, name: name.trim(), description: description.trim(), edits: toDesignEdits(snapshot) },
+        { onSuccess: (design) => saved(design, snapshot) },
+      )
+    } else if (target) {
+      addRoom.mutate(
+        { designId: target, roomId: room.id, edits: toDesignEdits(snapshot) },
+        { onSuccess: (design) => saved(design, snapshot) },
+      )
+    }
   }
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
       <DialogHeader>
         <DialogTitle>Save design</DialogTitle>
-        <DialogDescription>Give it a name so you can find it in My designs.</DialogDescription>
+        <DialogDescription>Start a new design with this room, or add it to one of yours.</DialogDescription>
       </DialogHeader>
-      <div className="space-y-2">
-        <Label htmlFor={`${id}-name`}>Name</Label>
-        <Input
-          id={`${id}-name`}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={MAX_DESIGN_NAME}
-          placeholder="Sage walls, oak floor"
-          autoFocus
-          aria-invalid={create.isError}
-        />
-        {create.isError && (
-          <p role="alert" className="text-sm text-destructive">
-            {errorMessage(create.error)}
-          </p>
-        )}
-      </div>
+
+      {existing.length > 0 && (
+        <div role="radiogroup" aria-label="Where to save" className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1">
+          {(["new", "existing"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={mode === value}
+              onClick={() => setMode(value)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                mode === value ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {value === "new" ? "New design" : "Add to a design"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {mode === "new" ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor={`${id}-name`}>Name</Label>
+            <Input
+              id={`${id}-name`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={DESIGN_LIMITS.name}
+              placeholder="Sage walls, oak floor"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`${id}-description`}>
+              Description <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id={`${id}-description`}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={DESIGN_LIMITS.description}
+              placeholder="Calm greens for the whole flat"
+              rows={2}
+            />
+          </div>
+        </>
+      ) : (
+        <div role="radiogroup" aria-label="Design" className="grid max-h-64 gap-1 overflow-y-auto">
+          {existing.map((design) => {
+            const full = design.rooms.length >= DESIGN_LIMITS.rooms
+            return (
+              <button
+                key={design.id}
+                type="button"
+                role="radio"
+                aria-checked={target === design.id}
+                disabled={full}
+                onClick={() => setTarget(design.id)}
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
+                  target === design.id ? "border-primary bg-accent/50" : "hover:bg-muted/60",
+                )}
+              >
+                <span className="min-w-0 truncate font-medium">{design.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {full ? "Full" : `${design.rooms.length} ${design.rooms.length === 1 ? "room" : "rooms"}`}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(error)}
+        </p>
+      )}
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={name.trim().length === 0 || create.isPending}>
-          {create.isPending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
+        <Button type="submit" disabled={!canSave || pending}>
+          {pending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
           Save
         </Button>
       </DialogFooter>

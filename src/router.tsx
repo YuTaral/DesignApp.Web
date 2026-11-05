@@ -5,7 +5,7 @@ import { SignInPage, SignUpPage } from "@/pages/auth-page"
 import { DesignsPage } from "@/pages/designs-page"
 import { EditorPage } from "@/pages/editor-page"
 import { HomePage } from "@/pages/home-page"
-import { RoomsPage } from "@/pages/rooms-page"
+import { DesignPage } from "@/pages/design-page"
 
 /** The root route: every page renders inside the app shell (header + main). */
 const rootRoute = createRootRoute({ component: AppShell })
@@ -24,12 +24,18 @@ const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-
 const signUpRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-up", validateSearch: authSearch, component: SignUpPage })
 
 /**
- * The pages: `/` home (upload), `/rooms` the user's rooms, `/rooms/$roomId` the editor (with
- * `?design=` to open a saved design), `/designs` saved designs, and sign in / sign up.
+ * The pages: `/` home (upload; `?design=` adds the photo to that design), `/rooms/$roomId` the
+ * editor (`?design=` when the room is in a design), `/designs` the account's designs,
+ * `/designs/$designId` one design, and sign in / sign up.
  */
 const routeTree = rootRoute.addChildren([
-  createRoute({ getParentRoute: () => rootRoute, path: "/", component: HomePage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/rooms", component: RoomsPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/",
+    // ?design= uploads the photo straight into that design ("Add room" on a design's page).
+    validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design) }),
+    component: HomePage,
+  }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/rooms/$roomId",
@@ -37,6 +43,7 @@ const routeTree = rootRoute.addChildren([
     component: EditorPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/designs", component: DesignsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/designs/$designId", component: DesignPage }),
   signInRoute,
   signUpRoute,
 ])

@@ -1,10 +1,13 @@
 import { useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "@tanstack/react-router"
-import { MousePointerClickIcon, PaletteIcon, ScanSearchIcon } from "lucide-react"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
+import { LayoutGridIcon, MousePointerClickIcon, PaletteIcon, ScanSearchIcon } from "lucide-react"
 import { motion } from "motion/react"
 import { toast } from "sonner"
 
+import { Button } from "@/components/ui/button"
+import { useAccount } from "@/features/account/api"
+import { useAddDesignRoom, useDesign } from "@/features/designs/api"
 import { roomKeys, uploadRoom, useAiAvailability } from "@/features/rooms/api"
 import { AiSwitch } from "@/features/upload/ai-switch"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
@@ -33,9 +36,16 @@ const steps = [
   },
 ]
 
-/** Landing page: upload a room photo, then open it in the editor. */
+/**
+ * Landing page: upload a room photo, then open it in the editor. With `?design=` (Add room on a
+ * design's page) the photo goes straight into that design.
+ */
 export function HomePage() {
   const navigate = useNavigate()
+  const { design: designId } = useSearch({ from: "/" })
+  const signedIn = useAccount().data?.signedIn === true
+  const target = useDesign(signedIn ? designId : undefined).data
+  const addRoom = useAddDesignRoom()
   const queryClient = useQueryClient()
   const { setFile, attachRoom, clear } = useUploadStore()
   const [progress, setProgress] = useState<number | null>(null)
@@ -53,11 +63,19 @@ export function HomePage() {
       setFile(file)
       setProgress(0)
     },
-    onSuccess: (room) => {
+    onSuccess: async (room) => {
       queryClient.setQueryData(roomKeys.detail(room.id), room)
-      void queryClient.invalidateQueries({ queryKey: roomKeys.mine })
       attachRoom(room.id)
-      navigate({ to: "/rooms/$roomId", params: { roomId: room.id } })
+      if (target) {
+        try {
+          await addRoom.mutateAsync({ designId: target.id, roomId: room.id, edits: [] })
+          void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: { design: target.id } })
+          return
+        } catch (error) {
+          toast.error(errorMessage(error))
+        }
+      }
+      void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: {} })
     },
     onError: (error) => {
       clear()
@@ -90,6 +108,19 @@ export function HomePage() {
         transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
         className="mx-auto mt-10 max-w-2xl space-y-5"
       >
+        {target && (
+          <div className="flex items-center gap-3 rounded-2xl border bg-accent/40 p-4" role="status">
+            <LayoutGridIcon className="size-5 shrink-0 text-primary" aria-hidden />
+            <p className="min-w-0 flex-1 text-sm">
+              The photo will be added to <span className="font-medium">{target.name}</span>.
+            </p>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/designs/$designId" params={{ designId: target.id }}>
+                Cancel
+              </Link>
+            </Button>
+          </div>
+        )}
         <ScopePicker value={scope} onChange={setScope} disabled={progress !== null} />
         {availability?.canChoose && ai && (
           <AiSwitch availability={availability} value={ai} onChange={setAi} disabled={progress !== null} />

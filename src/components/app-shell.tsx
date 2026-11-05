@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
-import { ImagesIcon, LayoutGridIcon, LogInIcon, LogOutIcon, PlusIcon, UserRoundIcon } from "lucide-react"
+import { LayoutGridIcon, LogInIcon, LogOutIcon, PlusIcon, UserRoundIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Logo } from "@/components/logo"
@@ -33,19 +33,11 @@ export function AppShell() {
             <Link to="/" className={navLinkClass} activeOptions={{ exact: true }}>
               New design
             </Link>
-            <Link to="/rooms" className={navLinkClass} activeOptions={{ exact: true }}>
-              My rooms
-            </Link>
             <Link to="/designs" className={navLinkClass}>
               My designs
             </Link>
           </nav>
           <div className="ml-auto flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="md:hidden" asChild>
-              <Link to="/rooms" aria-label="My rooms">
-                <ImagesIcon />
-              </Link>
-            </Button>
             <Button variant="ghost" size="icon" className="md:hidden" asChild>
               <Link to="/designs" aria-label="My designs">
                 <LayoutGridIcon />
@@ -70,7 +62,7 @@ export function AppShell() {
 }
 
 /**
- * "Sign in" for guests; for an account, a menu with its email, its rooms and designs, and sign out.
+ * "Sign in" for guests; for an account, a menu with its email, its designs, and sign out.
  * Signing in from here comes back to the page the user was on.
  */
 function AccountMenu() {
@@ -106,12 +98,6 @@ function AccountMenu() {
           <span className="block truncate font-medium">{account.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link to="/rooms">
-            <ImagesIcon />
-            My rooms
-          </Link>
-        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/designs">
             <LayoutGridIcon />

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { Edits } from "@/features/editor/editor-store"
 import { getJson, sendJson } from "@/lib/api"
 
-/** One recolor in a saved design (mirrors the API's EditRequest). */
+/** One recolor in a saved room (mirrors the API's EditRequest). */
 export type DesignEdit = {
   /** The object, as in the room's objects and label map. */
   objectIndex: number
@@ -13,21 +13,30 @@ export type DesignEdit = {
   strength: number
 }
 
-/** A saved design (mirrors the API's DesignResponse). */
-export type Design = {
-  id: string
-  /** The restyled room. */
+/** One room of a design, with its colors (mirrors the API's DesignRoomResponse). */
+export type DesignRoom = {
   roomId: string
-  name: string
-  /** When it was last saved (ISO 8601). */
-  updatedAt: string
   /** The room's photo, for a thumbnail. */
   photoUrl: string
   edits: DesignEdit[]
 }
 
-/** The longest design name the API accepts (mirrors Design.MaxNameLength). */
-export const MAX_DESIGN_NAME = 80
+/** A saved design: a name, a description and one or more rooms (mirrors the API's DesignResponse). */
+export type Design = {
+  id: string
+  name: string
+  /** Empty when there is none. */
+  description: string
+  /** ISO 8601. */
+  createdAt: string
+  /** When the design or one of its rooms last changed (ISO 8601). */
+  updatedAt: string
+  /** In the order they were added. */
+  rooms: DesignRoom[]
+}
+
+/** The API's limits (mirror the Design class). */
+export const DESIGN_LIMITS = { name: 80, description: 300, rooms: 20 } as const
 
 /** React Query cache keys for designs. */
 export const designKeys = {
@@ -48,8 +57,8 @@ export function toDesignEdits(edits: Edits): DesignEdit[] {
 }
 
 /**
- * A saved design's recolors as the editor's map.
- * @param edits - The design's recolors.
+ * A saved room's recolors as the editor's map.
+ * @param edits - The room's recolors.
  */
 export function toEditorEdits(edits: DesignEdit[]): Edits {
   return Object.fromEntries(edits.map((e) => [e.objectIndex, { color: e.color, strength: e.strength }]))
@@ -81,7 +90,7 @@ export function useDesign(id: string | undefined) {
 }
 
 /** Keeps the cached list and the design itself up to date after a change. */
-function useDesignSaved() {
+function useDesignChanged() {
   const queryClient = useQueryClient()
   return (design: Design) => {
     queryClient.setQueryData(designKeys.detail(design.id), design)
@@ -89,26 +98,57 @@ function useDesignSaved() {
   }
 }
 
-/** Saves a room's recolors as a new design. */
+/** Creates a design from a room and its colors. */
 export function useCreateDesign() {
-  const saved = useDesignSaved()
+  const changed = useDesignChanged()
   return useMutation({
-    mutationFn: (design: { roomId: string; name: string; edits: DesignEdit[] }) => sendJson<Design>("POST", "/api/designs", design),
-    onSuccess: saved,
+    mutationFn: (design: { roomId: string; name: string; description: string; edits: DesignEdit[] }) =>
+      sendJson<Design>("POST", "/api/designs", design),
+    onSuccess: changed,
   })
 }
 
-/** Renames a design and replaces its recolors. */
-export function useUpdateDesign() {
-  const saved = useDesignSaved()
+/** Changes a design's name and description. */
+export function useEditDesign() {
+  const changed = useDesignChanged()
   return useMutation({
-    mutationFn: ({ id, ...change }: { id: string; name: string; edits: DesignEdit[] }) =>
-      sendJson<Design>("PUT", `/api/designs/${id}`, change),
-    onSuccess: saved,
+    mutationFn: ({ id, ...details }: { id: string; name: string; description: string }) =>
+      sendJson<Design>("PUT", `/api/designs/${id}`, details),
+    onSuccess: changed,
   })
 }
 
-/** Deletes a design; the room stays. */
+/** Adds a room to a design, with its colors (none for a room that is still being analyzed). */
+export function useAddDesignRoom() {
+  const changed = useDesignChanged()
+  return useMutation({
+    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) =>
+      sendJson<Design>("POST", `/api/designs/${designId}/rooms`, { roomId, edits }),
+    onSuccess: changed,
+  })
+}
+
+/** Saves the colors of one room of a design. */
+export function useSaveRoomColors() {
+  const changed = useDesignChanged()
+  return useMutation({
+    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) =>
+      sendJson<Design>("PUT", `/api/designs/${designId}/rooms/${roomId}`, { edits }),
+    onSuccess: changed,
+  })
+}
+
+/** Takes a room out of a design; the API deletes the room. */
+export function useRemoveDesignRoom() {
+  const changed = useDesignChanged()
+  return useMutation({
+    mutationFn: ({ designId, roomId }: { designId: string; roomId: string }) =>
+      sendJson<Design>("DELETE", `/api/designs/${designId}/rooms/${roomId}`),
+    onSuccess: changed,
+  })
+}
+
+/** Deletes a design with its rooms. */
 export function useDeleteDesign() {
   const queryClient = useQueryClient()
   return useMutation({

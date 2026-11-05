@@ -61,7 +61,7 @@ function AuthPage({ mode, redirect }: { mode: "sign-in" | "sign-up"; redirect?: 
 const copy = {
   "sign-in": {
     title: "Welcome back",
-    text: "Sign in to see your saved designs and rooms on any device.",
+    text: "Sign in to see your saved designs on any device.",
     submit: "Sign in",
     busy: "Signing in…",
     done: "Signed in",
@@ -70,7 +70,7 @@ const copy = {
   },
   "sign-up": {
     title: "Create your account",
-    text: "Save your designs and find your rooms on any device. Rooms you made in this browser come with you.",
+    text: "Save your designs and open them on any device. Rooms you're editing in this browser come with you.",
     submit: "Create account",
     busy: "Creating your account…",
     done: "Account created",
