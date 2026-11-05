@@ -5,6 +5,8 @@ import { isAnalysisFinished, type AiMode, type AnalysisScope, type Room } from "
 
 /** React Query cache keys for rooms. */
 export const roomKeys = {
+  /** Key of the current user's list of rooms. */
+  mine: ["rooms", "mine"] as const,
   /** Key of one room by id. */
   detail: (id: string) => ["rooms", id] as const,
   /** Key of the AI availability. */
@@ -27,6 +29,16 @@ export function useAiAvailability() {
     queryKey: roomKeys.ai,
     queryFn: ({ signal }) => getJson<AiAvailability>("/api/ai", signal),
     staleTime: Infinity,
+  })
+}
+
+/** Loads the current user's rooms, newest first: the account's, or this browser's while signed out. */
+export function useRooms() {
+  return useQuery({
+    queryKey: roomKeys.mine,
+    queryFn: ({ signal }) => getJson<Room[]>("/api/rooms", signal),
+    // Rooms still being analyzed change by themselves.
+    refetchInterval: (query) => (query.state.data?.some((room) => !isAnalysisFinished(room.status)) ? 5000 : false),
   })
 }
 

@@ -36,7 +36,7 @@ const NETWORK_MESSAGE = "Can't reach DesignApp right now. Check your connection 
 const STATUS_MESSAGES: Record<number, string> = {
   404: "We couldn't find that.",
   413: "That photo is too large. Use one under 15 MB.",
-  429: "You've uploaded a lot of photos in a short time. Try again in a little while.",
+  429: "That's a lot of tries in a short time. Try again in a little while.",
   502: NETWORK_MESSAGE,
   503: NETWORK_MESSAGE,
   504: NETWORK_MESSAGE,
@@ -87,22 +87,23 @@ export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T>
  * Sends JSON to the API and reads the JSON answer.
  * @param method - The HTTP method, such as "POST".
  * @param path - An API path such as `/api/rooms/123/outline`.
- * @param body - What to send.
- * @returns The parsed answer.
+ * @param body - What to send; nothing when undefined.
+ * @returns The parsed answer, or undefined when the API answered with no content (204).
  * @throws ApiError with a user-facing message when the request fails.
  */
-export async function sendJson<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
+export async function sendJson<T>(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   let response: Response
   try {
     response = await fetch(apiUrl(path), {
       method,
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers: body === undefined ? { Accept: "application/json" } : { Accept: "application/json", "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
     throw toApiError(0, undefined)
   }
   if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
+  if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
 

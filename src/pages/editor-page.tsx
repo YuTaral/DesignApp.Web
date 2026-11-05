@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react"
-import { Link, useParams } from "@tanstack/react-router"
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react"
+import { Link, useNavigate, useParams, useRouterState, useSearch } from "@tanstack/react-router"
 import {
   ArrowLeftIcon,
   CheckIcon,
+  LogInIcon,
   ColumnsIcon,
   FlaskConicalIcon,
   ImageOffIcon,
@@ -17,11 +18,23 @@ import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useAccount } from "@/features/account/api"
+import {
+  MAX_DESIGN_NAME,
+  toDesignEdits,
+  toEditorEdits,
+  useCreateDesign,
+  useDesign,
+  useUpdateDesign,
+} from "@/features/designs/api"
 import { ColorPanel } from "@/features/editor/color-panel"
-import { useEditorStore } from "@/features/editor/editor-store"
+import { sameEdits, useEditorStore, type Edits } from "@/features/editor/editor-store"
 import { OutlinePanel } from "@/features/editor/outline-panel"
 import { useOutlineFixes } from "@/features/editor/use-outline-fixes"
 import { RoomCanvas } from "@/features/editor/room-canvas"
@@ -32,6 +45,7 @@ import { useLiveRoom } from "@/features/rooms/live"
 import { isAnalysisFinished, type Room, type RoomStatus } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
+import { toast } from "sonner"
 
 /** Badge text for each analysis status. */
 const statusLabels: Record<RoomStatus, string> = {
@@ -86,6 +100,7 @@ function Editor({ room }: { room: Room }) {
   useLiveRoom(room.id, finished)
   const open = useEditorStore((state) => state.open)
   useEffect(() => open(room.id), [open, room.id])
+  const designName = useOpenDesign(room)
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
@@ -97,6 +112,11 @@ function Editor({ room }: { room: Room }) {
               Back
             </Link>
           </Button>
+          {designName && (
+            <h1 className="min-w-0 truncate text-sm font-medium" title={designName}>
+              {designName}
+            </h1>
+          )}
           <Badge
             variant={room.status === "Failed" ? "destructive" : "secondary"}
             className="ml-auto gap-1.5"
@@ -144,17 +164,7 @@ function Editor({ room }: { room: Room }) {
           </div>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="mt-auto" tabIndex={0}>
-              <Button size="lg" className="w-full" disabled>
-                <SaveIcon data-icon="inline-start" />
-                Save design
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>Saving designs arrives with accounts.</TooltipContent>
-        </Tooltip>
+        <SaveDesign room={room} editable={editable} />
       </aside>
     </div>
   )
@@ -256,6 +266,206 @@ function EditorToolbar() {
         Reset all
       </Button>
     </div>
+  )
+}
+
+/**
+ * Opens the saved design named by the `?design=` search parameter: once the room is ready, its
+ * recolors replace what the editor shows (unless that design is already open). A design that
+ * can't be opened, or belongs to another room, is dropped from the address with a message.
+ * @param room - The room shown.
+ * @returns The name of the design being edited, if any.
+ */
+function useOpenDesign(room: Room) {
+  const { design: requested } = useSearch({ from: "/rooms/$roomId" })
+  const navigate = useNavigate()
+  const loadDesign = useEditorStore((state) => state.loadDesign)
+  const openId = useEditorStore((state) => (state.roomId === room.id ? state.designId : null))
+  const design = useDesign(requested)
+  const ready = room.status === "Ready"
+
+  useEffect(() => {
+    if (ready && design.data && design.data.roomId === room.id) {
+      loadDesign(room.id, design.data.id, toEditorEdits(design.data.edits))
+    }
+  }, [ready, design.data, room.id, loadDesign])
+
+  const failed = requested !== undefined && (design.isError || (design.data !== undefined && design.data.roomId !== room.id))
+  useEffect(() => {
+    if (!failed) return
+    toast.error("We couldn't open that design. It may have been deleted.")
+    void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: {}, replace: true })
+  }, [failed, navigate, room.id])
+
+  // The design being edited: the one just opened, or one saved here.
+  return useDesign(openId ?? undefined).data?.name ?? null
+}
+
+/**
+ * Saving the recolors. Guests are asked to sign in first (the recolors stay while they do). A new
+ * design asks for a name; an open design saves its changes, or can be saved as a new one.
+ * @param props.room - The room shown.
+ * @param props.editable - Whether the room is ready to edit.
+ */
+function SaveDesign({ room, editable }: { room: Room; editable: boolean }) {
+  const account = useAccount().data
+  const here = useRouterState({ select: (state) => state.location.href })
+  const { roomId, edits, designId, savedEdits, markSaved } = useEditorStore()
+  const design = useDesign(roomId === room.id && designId !== null ? designId : undefined).data
+  const update = useUpdateDesign()
+  const [naming, setNaming] = useState(false)
+  const recolored = Object.keys(edits).length > 0
+  const dirty = savedEdits ? !sameEdits(edits, savedEdits) : recolored
+
+  if (!account?.signedIn) {
+    return (
+      <div className="mt-auto space-y-2">
+        <Button size="lg" className="w-full" variant={recolored ? "default" : "outline"} disabled={!account} asChild>
+          <Link to="/sign-in" search={{ redirect: here }}>
+            <LogInIcon data-icon="inline-start" />
+            Sign in to save
+          </Link>
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">Your colors stay here while you sign in.</p>
+      </div>
+    )
+  }
+
+  const saveChanges = () => {
+    if (!design) return
+    const snapshot = edits
+    update.mutate(
+      { id: design.id, name: design.name, edits: toDesignEdits(snapshot) },
+      {
+        onSuccess: (saved) => {
+          markSaved(saved.id, snapshot)
+          toast.success("Changes saved")
+        },
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    )
+  }
+
+  return (
+    <div className="mt-auto space-y-2">
+      {design ? (
+        <>
+          <Button size="lg" className="w-full" disabled={!editable || !dirty || update.isPending} onClick={saveChanges}>
+            {update.isPending ? (
+              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+            ) : dirty ? (
+              <SaveIcon data-icon="inline-start" />
+            ) : (
+              <CheckIcon data-icon="inline-start" />
+            )}
+            {update.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          </Button>
+          <Button variant="ghost" size="sm" className="w-full" disabled={!editable} onClick={() => setNaming(true)}>
+            Save as new design
+          </Button>
+        </>
+      ) : (
+        <Button size="lg" className="w-full" disabled={!editable} onClick={() => setNaming(true)}>
+          <SaveIcon data-icon="inline-start" />
+          Save design
+        </Button>
+      )}
+      <NameDesignDialog room={room} edits={edits} open={naming} onOpenChange={setNaming} />
+    </div>
+  )
+}
+
+/**
+ * Asks for a name, then saves the recolors as a new design and puts it in the address, so a
+ * reload or a bookmark opens it again.
+ * @param props.room - The room.
+ * @param props.edits - The recolors to save.
+ * @param props.open - Whether the dialog is shown.
+ * @param props.onOpenChange - Shows or hides it.
+ */
+function NameDesignDialog({
+  room,
+  edits,
+  open,
+  onOpenChange,
+}: {
+  room: Room
+  edits: Edits
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {/* The dialog drops its content once closed, so the name starts empty on every open. */}
+        <NameDesignForm room={room} edits={edits} onDone={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * The name field and buttons of {@link NameDesignDialog}.
+ * @param props.room - The room.
+ * @param props.edits - The recolors to save.
+ * @param props.onDone - Closes the dialog (after saving, or on Cancel).
+ */
+function NameDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; onDone: () => void }) {
+  const create = useCreateDesign()
+  const markSaved = useEditorStore((state) => state.markSaved)
+  const navigate = useNavigate()
+  const [name, setName] = useState("")
+  const id = useId()
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    const snapshot = edits
+    create.mutate(
+      { roomId: room.id, name: name.trim(), edits: toDesignEdits(snapshot) },
+      {
+        onSuccess: (design) => {
+          markSaved(design.id, snapshot)
+          onDone()
+          toast.success("Design saved")
+          void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: { design: design.id }, replace: true })
+        },
+      },
+    )
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="grid gap-4">
+      <DialogHeader>
+        <DialogTitle>Save design</DialogTitle>
+        <DialogDescription>Give it a name so you can find it in My designs.</DialogDescription>
+      </DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor={`${id}-name`}>Name</Label>
+        <Input
+          id={`${id}-name`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={MAX_DESIGN_NAME}
+          placeholder="Sage walls, oak floor"
+          autoFocus
+          aria-invalid={create.isError}
+        />
+        {create.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage(create.error)}
+          </p>
+        )}
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={name.trim().length === 0 || create.isPending}>
+          {create.isPending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
+          Save
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 

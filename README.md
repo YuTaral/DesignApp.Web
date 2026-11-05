@@ -34,8 +34,9 @@ npm run dev
 src/
   components/      App shell, theme provider and toggle, logo
   components/ui/   shadcn/ui primitives (generated, styled by the design tokens)
-  features/        Feature modules (upload, rooms; later: editor, designs)
-  pages/           Route screens: home/upload, editor (/rooms/$roomId), my designs
+  features/        Feature modules: upload, rooms, editor, account, designs
+  pages/           Route screens: home/upload, editor (/rooms/$roomId, ?design= to open a saved design),
+                   my rooms (/rooms), my designs (/designs), sign in and sign up
   lib/api.ts       API base URL, fetch helper and readable error messages
   stores/          Zustand stores
   router.tsx       Route tree

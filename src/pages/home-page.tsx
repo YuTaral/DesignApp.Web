@@ -55,6 +55,7 @@ export function HomePage() {
     },
     onSuccess: (room) => {
       queryClient.setQueryData(roomKeys.detail(room.id), room)
+      void queryClient.invalidateQueries({ queryKey: roomKeys.mine })
       attachRoom(room.id)
       navigate({ to: "/rooms/$roomId", params: { roomId: room.id } })
     },

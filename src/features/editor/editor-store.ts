@@ -47,9 +47,20 @@ type EditorState = {
   outlineTool: OutlineBrushMode | null
   /** The brush diameter on screen, in CSS px. */
   brushSize: number
+  /** The saved design being edited, or null for recolors not saved yet. */
+  designId: string | null
+  /** The recolors as last saved or opened, to tell whether there are unsaved changes; null before the first save. */
+  savedEdits: Edits | null
 
   /** Starts editing a room, keeping its edits if it's the room already open. */
   open: (roomId: string) => void
+  /**
+   * Opens a saved design: its recolors become the starting point (one history entry). Does
+   * nothing when that design is already open, so its unsaved changes stay.
+   */
+  loadDesign: (roomId: string, designId: string, edits: Edits) => void
+  /** Records that the recolors shown were saved as a design. */
+  markSaved: (designId: string, edits: Edits) => void
   /** Sets the label map version the room had when the editor opened (only the first time). */
   setBaseRevision: (revision: number) => void
   /** Selects an object (0 to deselect, which also ends the outline tool). */
@@ -91,11 +102,14 @@ const initial = (roomId: string | null) => ({
   hovered: 0,
   comparing: false,
   outlineTool: null,
+  designId: null,
+  savedEdits: null,
 })
 
 /**
- * The editor's state for the open room. Recolors live in memory (a reload starts over until saved
- * designs arrive in milestone 5); outline fixes are stored by the API, and undo switches versions.
+ * The editor's state for the open room. Recolors live in memory until they're saved as a design
+ * (a reload of an unsaved room starts over); outline fixes are stored by the API, and undo
+ * switches versions.
  */
 export const useEditorStore = create<EditorState>((set, get) => {
   /**
@@ -135,6 +149,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
     open: (roomId) => {
       if (get().roomId !== roomId) set(initial(roomId))
     },
+    loadDesign: (roomId, designId, edits) => {
+      const state = get()
+      if (state.roomId === roomId && state.designId === designId) return
+      // The outlines shown don't depend on the design; keep them when the room stays the same.
+      const revision = state.roomId === roomId ? state.revision : null
+      set({ ...initial(roomId), edits, revision, history: [{ edits, revision }], designId, savedEdits: edits })
+    },
+    markSaved: (designId, edits) => set({ designId, savedEdits: edits }),
     setBaseRevision: (revision) => {
       const state = get()
       if (state.revision !== null) return
@@ -183,3 +205,20 @@ export const useEditorStore = create<EditorState>((set, get) => {
     toggleCompare: () => set({ comparing: !get().comparing, outlineTool: null }),
   }
 })
+
+/**
+ * Whether two sets of recolors are the same.
+ * @param a - One set.
+ * @param b - The other.
+ */
+export function sameEdits(a: Edits, b: Edits) {
+  const keys = Object.keys(a)
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      const x = a[Number(key)]
+      const y = b[Number(key)]
+      return y !== undefined && x.color.toUpperCase() === y.color.toUpperCase() && x.strength === y.strength
+    })
+  )
+}
