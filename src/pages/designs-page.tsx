@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react"
+import { useId, useRef, useState, type FormEvent } from "react"
 import { Link } from "@tanstack/react-router"
 import { LayoutGridIcon, LoaderCircleIcon, LogInIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
@@ -99,6 +99,13 @@ function CardGrid({ children }: { children: React.ReactNode }) {
  */
 function DesignCard({ design }: { design: Design }) {
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null)
+  // Set when a menu item opens a dialog: the closing menu then mustn't move focus back to its
+  // button, or the first keys typed into the dialog would land there.
+  const openingDialog = useRef(false)
+  const open = (which: "rename" | "delete") => {
+    openingDialog.current = true
+    setDialog(which)
+  }
   const link = { to: "/rooms/$roomId", params: { roomId: design.roomId }, search: { design: design.id } } as const
 
   return (
@@ -125,12 +132,19 @@ function DesignCard({ design }: { design: Design }) {
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setDialog("rename")}>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(event) => {
+              if (!openingDialog.current) return
+              openingDialog.current = false
+              event.preventDefault()
+            }}
+          >
+            <DropdownMenuItem onSelect={() => open("rename")}>
               <PencilIcon />
               Rename
             </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={() => setDialog("delete")}>
+            <DropdownMenuItem variant="destructive" onSelect={() => open("delete")}>
               <Trash2Icon />
               Delete
             </DropdownMenuItem>
@@ -174,6 +188,22 @@ function Swatches({ design }: { design: Design }) {
  * @param props.onOpenChange - Shows or hides it.
  */
 function RenameDialog({ design, open, onOpenChange }: { design: Design; open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {/* The dialog drops its content once closed, so the field starts from the current name on every open. */}
+        <RenameForm design={design} onDone={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * The name field and buttons of {@link RenameDialog}.
+ * @param props.design - The design.
+ * @param props.onDone - Closes the dialog (after saving, or on Cancel).
+ */
+function RenameForm({ design, onDone }: { design: Design; onDone: () => void }) {
   const update = useUpdateDesign()
   const [name, setName] = useState(design.name)
   const id = useId()
@@ -184,7 +214,7 @@ function RenameDialog({ design, open, onOpenChange }: { design: Design; open: bo
       { id: design.id, name: name.trim(), edits: design.edits },
       {
         onSuccess: () => {
-          onOpenChange(false)
+          onDone()
           toast.success("Design renamed")
         },
       },
@@ -192,47 +222,36 @@ function RenameDialog({ design, open, onOpenChange }: { design: Design; open: bo
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setName(design.name)
-        else update.reset()
-        onOpenChange(next)
-      }}
-    >
-      <DialogContent>
-        <form onSubmit={onSubmit} className="grid gap-4">
-          <DialogHeader>
-            <DialogTitle>Rename design</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor={`${id}-name`}>Name</Label>
-            <Input
-              id={`${id}-name`}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={MAX_DESIGN_NAME}
-              autoFocus
-              aria-invalid={update.isError}
-            />
-            {update.isError && (
-              <p role="alert" className="text-sm text-destructive">
-                {errorMessage(update.error)}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={name.trim().length === 0 || update.isPending}>
-              {update.isPending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form onSubmit={onSubmit} className="grid gap-4">
+      <DialogHeader>
+        <DialogTitle>Rename design</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor={`${id}-name`}>Name</Label>
+        <Input
+          id={`${id}-name`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={MAX_DESIGN_NAME}
+          autoFocus
+          aria-invalid={update.isError}
+        />
+        {update.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage(update.error)}
+          </p>
+        )}
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={name.trim().length === 0 || update.isPending}>
+          {update.isPending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
+          Save
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 
