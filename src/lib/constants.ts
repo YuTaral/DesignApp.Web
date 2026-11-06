@@ -1,6 +1,6 @@
 /**
- * The web app's fixed values: API paths, routes, cache and storage keys, limits, timings and the
- * messages it shows. Add new values here first, then use them; never inline them in components.
+ * The web app's fixed values: API paths, routes, cache and storage keys, limits, timings, the API's
+ * enums and the messages it shows. Add new values here first, then use them; never inline them in components.
  * Values that mirror the API say which API constant they follow.
  */
 
