@@ -1,4 +1,5 @@
 import { apiUrl } from "@/lib/api"
+import { MESSAGES } from "@/lib/constants"
 
 /** A room's label map: for every pixel, the index of the object there (0 for none). */
 export type LabelMap = {
@@ -18,7 +19,7 @@ export type LabelMap = {
  */
 export async function loadLabelMap(url: string, signal?: AbortSignal): Promise<LabelMap> {
   const response = await fetch(apiUrl(url), { signal })
-  if (!response.ok) throw new Error(`The label map couldn't be loaded (${response.status}).`)
+  if (!response.ok) throw new Error(MESSAGES.labelMapFailed(response.status))
 
   const bitmap = await createImageBitmap(await response.blob(), {
     colorSpaceConversion: "none",
@@ -26,7 +27,7 @@ export async function loadLabelMap(url: string, signal?: AbortSignal): Promise<L
   })
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
   const context = canvas.getContext("2d", { willReadFrequently: true })
-  if (!context) throw new Error("This browser can't read the label map.")
+  if (!context) throw new Error(MESSAGES.labelMapUnreadable)
   context.drawImage(bitmap, 0, 0)
   const rgba = context.getImageData(0, 0, bitmap.width, bitmap.height).data
   bitmap.close()

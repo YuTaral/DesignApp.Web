@@ -39,7 +39,12 @@ src/
                    (/rooms/$roomId, ?design= when the room is in a design), my designs (/designs),
                    one design (/designs/$designId), sign in and sign up
   lib/api.ts       API base URL, fetch helper and readable error messages
+  lib/constants.ts API paths, routes, cache and storage keys, limits, timings and messages
   stores/          Zustand stores
   router.tsx       Route tree
   index.css        Design tokens for light and dark themes
 ```
+
+Fixed values go in `src/lib/constants.ts` (`API`, `ROUTES`, `QUERY_KEYS`, `LIMITS`, `MESSAGES`...),
+never inline. Limits that mirror the API name the API constant they follow. Static button labels,
+headings, page copy and Tailwind classes stay in the components.

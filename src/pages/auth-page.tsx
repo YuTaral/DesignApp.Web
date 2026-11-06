@@ -6,9 +6,10 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MIN_PASSWORD_LENGTH, useAccount, useSignIn, useSignOut, useSignUp } from "@/features/account/api"
+import { useAccount, useSignIn, useSignOut, useSignUp } from "@/features/account/api"
 import { errorMessage } from "@/lib/api"
 import { safeRedirect } from "@/lib/redirect"
+import { LIMITS } from "@/lib/constants"
 
 /** The routes' search parameters (`?redirect=`). */
 const signInRoute = getRouteApi("/sign-in")
@@ -141,7 +142,7 @@ function AuthForm({ mode, redirect, onSubmitted }: { mode: "sign-in" | "sign-up"
                 type={showPassword ? "text" : "password"}
                 autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
                 required
-                minLength={mode === "sign-up" ? MIN_PASSWORD_LENGTH : undefined}
+                minLength={mode === "sign-up" ? LIMITS.minPasswordLength : undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 aria-invalid={error !== null}
@@ -162,7 +163,7 @@ function AuthForm({ mode, redirect, onSubmitted }: { mode: "sign-in" | "sign-up"
             </div>
             {mode === "sign-up" && (
               <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-                At least {MIN_PASSWORD_LENGTH} characters.
+                At least {LIMITS.minPasswordLength} characters.
               </p>
             )}
           </div>

@@ -3,8 +3,8 @@ import { useQueryClient } from "@tanstack/react-query"
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr"
 
 import { apiUrl } from "@/lib/api"
-import { roomKeys } from "./api"
 import { isAnalysisFinished, type Room } from "./types"
+import { HUB, QUERY_KEYS } from "@/lib/constants"
 
 /**
  * Keeps a room's cached data live while its analysis runs: connects to the API's SignalR hub,
@@ -19,19 +19,19 @@ export function useLiveRoom(roomId: string, finished: boolean) {
   useEffect(() => {
     if (finished) return
 
-    const update = (room: Room) => queryClient.setQueryData(roomKeys.detail(room.id), room)
+    const update = (room: Room) => queryClient.setQueryData(QUERY_KEYS.room(room.id), room)
     const connection = new HubConnectionBuilder()
-      .withUrl(apiUrl("/api/hubs/rooms"))
+      .withUrl(apiUrl(HUB.path))
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build()
 
-    connection.on("RoomChanged", (room: Room) => {
+    connection.on(HUB.events.roomChanged, (room: Room) => {
       update(room)
       if (isAnalysisFinished(room.status)) void connection.stop()
     })
     // Watch returns the current state, which also covers anything missed while reconnecting.
-    const watch = () => connection.invoke<Room>("Watch", roomId).then(update)
+    const watch = () => connection.invoke<Room>(HUB.methods.watch, roomId).then(update)
     connection.onreconnected(() => void watch().catch(() => {}))
 
     // Start on the next tick: React's development double-mount runs this effect's cleanup

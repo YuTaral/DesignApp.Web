@@ -15,6 +15,7 @@ import { useDesigns, type Design } from "@/features/designs/api"
 import { DeleteDesignDialog, DesignCover, DesignDetailsDialog, EmptyState } from "@/features/designs/components"
 import { dateFormat, roomCount } from "@/features/designs/format"
 import { errorMessage } from "@/lib/api"
+import { MESSAGES, ROUTES } from "@/lib/constants"
 
 /** Route `/designs`: the account's designs, or an invitation to sign in. */
 export function DesignsPage() {
@@ -37,11 +38,11 @@ export function DesignsPage() {
       ) : !signedIn ? (
         <EmptyState
           icon={LogInIcon}
-          title="Sign in to see your designs"
-          text="Designs are saved to your account, so you can open them on any device."
+          title={MESSAGES.designsSignIn}
+          text={MESSAGES.designsAnyDevice}
           action={
             <Button size="lg" asChild>
-              <Link to="/sign-in" search={{ redirect: "/designs" }}>
+              <Link to={ROUTES.signIn} search={{ redirect: ROUTES.designs }}>
                 Sign in
               </Link>
             </Button>
@@ -50,7 +51,7 @@ export function DesignsPage() {
       ) : designs.isError ? (
         <EmptyState
           icon={LayoutGridIcon}
-          title="We couldn't load your designs"
+          title={MESSAGES.designsLoadFailed}
           text={errorMessage(designs.error)}
           action={
             <Button size="lg" onClick={() => designs.refetch()}>
@@ -61,11 +62,11 @@ export function DesignsPage() {
       ) : list.length === 0 ? (
         <EmptyState
           icon={LayoutGridIcon}
-          title="No designs yet"
-          text="Upload a room, try some colors, then press Save design."
+          title={MESSAGES.noDesigns}
+          text={MESSAGES.noDesignsHint}
           action={
             <Button size="lg" asChild>
-              <Link to="/" search={{}}>
+              <Link to={ROUTES.home} search={{}}>
                 Start a design
               </Link>
             </Button>
@@ -104,7 +105,7 @@ function DesignCard({ design }: { design: Design }) {
     openingDialog.current = true
     setDialog(which)
   }
-  const link = { to: "/designs/$designId", params: { designId: design.id } } as const
+  const link = { to: ROUTES.design, params: { designId: design.id } } as const
 
   return (
     <li className="group overflow-hidden rounded-2xl border bg-card shadow-soft">

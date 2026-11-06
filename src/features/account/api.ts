@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { getJson, sendJson } from "@/lib/api"
+import { API, QUERY_KEYS, TIMINGS } from "@/lib/constants"
 
 /** Who is signed in (mirrors the API's AccountResponse). */
 export type Account = {
@@ -13,18 +14,12 @@ export type Account = {
 /** An email and a password, for signing up or in. */
 export type Credentials = { email: string; password: string }
 
-/** The shortest password the API accepts (mirrors AccountSetup.MinPasswordLength). */
-export const MIN_PASSWORD_LENGTH = 8
-
-/** React Query cache key of the account. */
-export const accountKey = ["account"] as const
-
 /** Loads who is signed in. */
 export function useAccount() {
   return useQuery({
-    queryKey: accountKey,
-    queryFn: ({ signal }) => getJson<Account>("/api/account", signal),
-    staleTime: 60_000,
+    queryKey: QUERY_KEYS.account,
+    queryFn: ({ signal }) => getJson<Account>(API.account, signal),
+    staleTime: TIMINGS.accountStaleMs,
   })
 }
 
@@ -35,8 +30,8 @@ export function useAccount() {
 function useAccountChange() {
   const queryClient = useQueryClient()
   return (account: Account) => {
-    queryClient.setQueryData(accountKey, account)
-    void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] !== accountKey[0] })
+    queryClient.setQueryData(QUERY_KEYS.account, account)
+    void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] !== QUERY_KEYS.account[0] })
   }
 }
 
@@ -44,7 +39,7 @@ function useAccountChange() {
 export function useSignUp() {
   const changed = useAccountChange()
   return useMutation({
-    mutationFn: (credentials: Credentials) => sendJson<Account>("POST", "/api/account/sign-up", credentials),
+    mutationFn: (credentials: Credentials) => sendJson<Account>("POST", API.signUp, credentials),
     onSuccess: changed,
   })
 }
@@ -53,7 +48,7 @@ export function useSignUp() {
 export function useSignIn() {
   const changed = useAccountChange()
   return useMutation({
-    mutationFn: (credentials: Credentials) => sendJson<Account>("POST", "/api/account/sign-in", credentials),
+    mutationFn: (credentials: Credentials) => sendJson<Account>("POST", API.signIn, credentials),
     onSuccess: changed,
   })
 }
@@ -62,7 +57,7 @@ export function useSignIn() {
 export function useSignOut() {
   const changed = useAccountChange()
   return useMutation({
-    mutationFn: () => sendJson<void>("POST", "/api/account/sign-out"),
+    mutationFn: () => sendJson<void>("POST", API.signOut),
     onSuccess: () => changed({ signedIn: false, email: null }),
   })
 }

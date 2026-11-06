@@ -5,11 +5,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-
-/** File types the API accepts. */
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"]
-/** Same 15 MB limit as the API, checked here first so big files fail fast. */
-const MAX_BYTES = 15 * 1024 * 1024
+import { LIMITS, MESSAGES, MIME } from "@/lib/constants"
 
 /**
  * Checks a file before uploading.
@@ -17,8 +13,8 @@ const MAX_BYTES = 15 * 1024 * 1024
  * @returns A message for the user, or null when the file is fine.
  */
 function validate(file: File): string | null {
-  if (!ACCEPTED_TYPES.includes(file.type)) return "Use a JPG, PNG or WebP photo."
-  if (file.size > MAX_BYTES) return "That photo is over 15 MB. Try a smaller one."
+  if (!(MIME.photos as readonly string[]).includes(file.type)) return MESSAGES.wrongFileType
+  if (file.size > LIMITS.photoBytes) return MESSAGES.fileTooLarge
   return null
 }
 
@@ -98,7 +94,7 @@ export function PhotoDropzone({ onSelect, progress = null, onCancel }: PhotoDrop
       <input
         ref={fileInput}
         type="file"
-        accept={ACCEPTED_TYPES.join(",")}
+        accept={MIME.photos.join(",")}
         className="sr-only"
         tabIndex={-1}
         onChange={(event) => {
@@ -109,7 +105,7 @@ export function PhotoDropzone({ onSelect, progress = null, onCancel }: PhotoDrop
       <input
         ref={cameraInput}
         type="file"
-        accept="image/*"
+        accept={MIME.anyImage}
         capture="environment"
         className="sr-only"
         tabIndex={-1}

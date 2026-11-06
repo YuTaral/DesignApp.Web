@@ -2,14 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { ApiError, apiUrl, getJson, sendJson, toApiError } from "@/lib/api"
 import { isAnalysisFinished, type AiMode, type AnalysisScope, type Room } from "./types"
-
-/** React Query cache keys for rooms. */
-export const roomKeys = {
-  /** Key of one room by id. */
-  detail: (id: string) => ["rooms", id] as const,
-  /** Key of the AI availability. */
-  ai: ["ai"] as const,
-}
+import { API, HTTP_STATUS, LIMITS, MESSAGES, MIME, QUERY_KEYS, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
 
 /** Which AI uploads use, and whether each upload may choose (mirrors AiAvailabilityResponse). */
 export type AiAvailability = {
@@ -24,8 +17,8 @@ export type AiAvailability = {
 /** Loads which AI uploads can use; it doesn't change while the API runs. */
 export function useAiAvailability() {
   return useQuery({
-    queryKey: roomKeys.ai,
-    queryFn: ({ signal }) => getJson<AiAvailability>("/api/ai", signal),
+    queryKey: QUERY_KEYS.ai,
+    queryFn: ({ signal }) => getJson<AiAvailability>(API.ai, signal),
     staleTime: Infinity,
   })
 }
@@ -37,11 +30,11 @@ export function useAiAvailability() {
  */
 export function useRoom(id: string) {
   return useQuery({
-    queryKey: roomKeys.detail(id),
-    queryFn: ({ signal }) => getJson<Room>(`/api/rooms/${id}`, signal),
+    queryKey: QUERY_KEYS.room(id),
+    queryFn: ({ signal }) => getJson<Room>(API.room(id), signal),
     // A missing room won't appear by asking again.
-    retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 2,
-    refetchInterval: (query) => (query.state.data && !isAnalysisFinished(query.state.data.status) ? 5000 : false),
+    retry: (failureCount, error) => !(error instanceof ApiError && error.status === HTTP_STATUS.notFound) && failureCount < LIMITS.roomRetries,
+    refetchInterval: (query) => (query.state.data && !isAnalysisFinished(query.state.data.status) ? TIMINGS.roomPollMs : false),
   })
 }
 
@@ -68,25 +61,25 @@ type UploadOptions = {
 export function uploadRoom(file: File, { onProgress, signal, scope, ai }: UploadOptions = {}): Promise<Room> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()
-    request.open("POST", apiUrl("/api/rooms"))
+    request.open("POST", apiUrl(API.rooms))
     request.responseType = "json"
-    request.setRequestHeader("Accept", "application/json")
+    request.setRequestHeader("Accept", MIME.json)
 
     request.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total)
     }
     request.onload = () => {
-      if (request.status === 201) resolve(request.response as Room)
+      if (request.status === HTTP_STATUS.created) resolve(request.response as Room)
       else reject(toApiError(request.status, request.response))
     }
-    request.onerror = () => reject(toApiError(0, undefined))
-    request.onabort = () => reject(new DOMException("The upload was cancelled.", "AbortError"))
+    request.onerror = () => reject(toApiError(HTTP_STATUS.network, undefined))
+    request.onabort = () => reject(new DOMException(MESSAGES.uploadCancelled, "AbortError"))
     signal?.addEventListener("abort", () => request.abort(), { once: true })
 
     const form = new FormData()
-    form.append("photo", file)
-    if (scope) form.append("scope", scope)
-    if (ai) form.append("ai", ai)
+    form.append(UPLOAD_FIELDS.photo, file)
+    if (scope) form.append(UPLOAD_FIELDS.scope, scope)
+    if (ai) form.append(UPLOAD_FIELDS.ai, ai)
     request.send(form)
   })
 }
@@ -116,7 +109,7 @@ export type OutlineStroke = {
  * @throws ApiError with a message for the user when the stroke can't be saved (such as one that changes nothing).
  */
 export function saveOutlineStroke(roomId: string, stroke: OutlineStroke): Promise<Room> {
-  return sendJson<Room>("POST", `/api/rooms/${roomId}/outline`, stroke)
+  return sendJson<Room>("POST", API.roomOutline(roomId), stroke)
 }
 
 /**
@@ -126,5 +119,5 @@ export function saveOutlineStroke(roomId: string, stroke: OutlineStroke): Promis
  * @returns The room.
  */
 export function selectLabelMapRevision(roomId: string, revision: number): Promise<Room> {
-  return sendJson<Room>("PUT", `/api/rooms/${roomId}/labels/current`, { revision })
+  return sendJson<Room>("PUT", API.roomCurrentLabels(roomId), { revision })
 }

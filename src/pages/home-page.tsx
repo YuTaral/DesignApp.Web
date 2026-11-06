@@ -8,7 +8,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useAccount } from "@/features/account/api"
 import { useAddDesignRoom, useDesign } from "@/features/designs/api"
-import { roomKeys, uploadRoom, useAiAvailability } from "@/features/rooms/api"
+import { uploadRoom, useAiAvailability } from "@/features/rooms/api"
 import { AiSwitch } from "@/features/upload/ai-switch"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
 import { PhotoDropzone } from "@/features/upload/photo-dropzone"
@@ -16,6 +16,7 @@ import { ScopePicker } from "@/features/upload/scope-picker"
 import { useScopeChoice } from "@/features/upload/use-scope-choice"
 import { errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
+import { QUERY_KEYS, ROUTES } from "@/lib/constants"
 
 /** The "How it works" cards. */
 const steps = [
@@ -64,18 +65,18 @@ export function HomePage() {
       setProgress(0)
     },
     onSuccess: async (room) => {
-      queryClient.setQueryData(roomKeys.detail(room.id), room)
+      queryClient.setQueryData(QUERY_KEYS.room(room.id), room)
       attachRoom(room.id)
       if (target) {
         try {
           await addRoom.mutateAsync({ designId: target.id, roomId: room.id, edits: [] })
-          void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: { design: target.id } })
+          void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: { design: target.id } })
           return
         } catch (error) {
           toast.error(errorMessage(error))
         }
       }
-      void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: {} })
+      void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: {} })
     },
     onError: (error) => {
       clear()
@@ -115,7 +116,7 @@ export function HomePage() {
               The photo will be added to <span className="font-medium">{target.name}</span>.
             </p>
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/designs/$designId" params={{ designId: target.id }}>
+              <Link to={ROUTES.design} params={{ designId: target.id }}>
                 Cancel
               </Link>
             </Button>

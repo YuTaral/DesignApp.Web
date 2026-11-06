@@ -2,11 +2,12 @@ import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-import { roomKeys, saveOutlineStroke, selectLabelMapRevision, type OutlineBrushMode } from "@/features/rooms/api"
+import { saveOutlineStroke, selectLabelMapRevision, type OutlineBrushMode } from "@/features/rooms/api"
 import type { Room } from "@/features/rooms/types"
 import { errorMessage } from "@/lib/api"
 import type { StrokePoint } from "./brush"
 import { useEditorStore } from "./editor-store"
+import { QUERY_KEYS } from "@/lib/constants"
 
 /** A finished brush stroke, ready to save. */
 export type FinishedStroke = {
@@ -33,7 +34,7 @@ export function useOutlineFixes(room: Room) {
   useEffect(() => {
     if (revision === null || revision === room.labelMapRevision) return
     selectLabelMapRevision(room.id, revision)
-      .then((updated) => queryClient.setQueryData(roomKeys.detail(room.id), updated))
+      .then((updated) => queryClient.setQueryData(QUERY_KEYS.room(room.id), updated))
       .catch((error: unknown) => toast.error(errorMessage(error)))
   }, [revision, room.id, room.labelMapRevision, queryClient])
 
@@ -50,7 +51,7 @@ export function useOutlineFixes(room: Room) {
       // The editor first: if a render came between the two, the sync above would only repeat the
       // new version to the API, never send back the old one.
       applyOutlineFix(updated.labelMapRevision)
-      queryClient.setQueryData(roomKeys.detail(room.id), updated)
+      queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
       return true
     } catch (error) {
       toast.error(errorMessage(error))

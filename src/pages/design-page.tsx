@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccount } from "@/features/account/api"
-import { DESIGN_LIMITS, useDesign, useRemoveDesignRoom, type Design, type DesignRoom } from "@/features/designs/api"
+import { useDesign, useRemoveDesignRoom, type Design, type DesignRoom } from "@/features/designs/api"
 import { ConfirmDialog, DeleteDesignDialog, DesignDetailsDialog, EmptyState, Swatches } from "@/features/designs/components"
 import { dateFormat, roomCount } from "@/features/designs/format"
 import { useRoom } from "@/features/rooms/api"
 import { isAnalysisFinished } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
+import { HTTP_STATUS, LIMITS, MESSAGES, PATHS, ROUTES } from "@/lib/constants"
 
 /**
  * Route `/designs/$designId`: one design with its name, description and rooms. The details can be
@@ -43,11 +44,11 @@ export function DesignPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
         <EmptyState
           icon={ImageOffIcon}
-          title="Sign in to see this design"
-          text="Designs are saved to your account."
+          title={MESSAGES.designSignIn}
+          text={MESSAGES.designsInAccount}
           action={
             <Button size="lg" asChild>
-              <Link to="/sign-in" search={{ redirect: `/designs/${designId}` }}>
+              <Link to={ROUTES.signIn} search={{ redirect: PATHS.design(designId) }}>
                 Sign in
               </Link>
             </Button>
@@ -58,16 +59,16 @@ export function DesignPage() {
   }
 
   if (design.isError || !design.data) {
-    const notFound = design.error instanceof ApiError && design.error.status === 404
+    const notFound = design.error instanceof ApiError && design.error.status === HTTP_STATUS.notFound
     return (
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
         <EmptyState
           icon={notFound ? ImageOffIcon : TriangleAlertIcon}
-          title={notFound ? "We couldn't find that design" : "We couldn't load this design"}
-          text={notFound ? "It may have been deleted." : errorMessage(design.error)}
+          title={notFound ? MESSAGES.designNotFound : MESSAGES.designLoadFailed}
+          text={notFound ? MESSAGES.designMaybeDeleted : errorMessage(design.error)}
           action={
             <Button size="lg" asChild>
-              <Link to="/designs">My designs</Link>
+              <Link to={ROUTES.designs}>My designs</Link>
             </Button>
           }
         />
@@ -85,12 +86,12 @@ export function DesignPage() {
 function DesignView({ design }: { design: Design }) {
   const navigate = useNavigate()
   const [dialog, setDialog] = useState<"edit" | "delete" | null>(null)
-  const full = design.rooms.length >= DESIGN_LIMITS.rooms
+  const full = design.rooms.length >= LIMITS.design.rooms
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <Button variant="ghost" size="sm" className="-ml-2" asChild>
-        <Link to="/designs">
+        <Link to={ROUTES.designs}>
           <ArrowLeftIcon data-icon="inline-start" />
           My designs
         </Link>
@@ -128,11 +129,11 @@ function DesignView({ design }: { design: Design }) {
           {full ? (
             <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
               <p className="font-medium text-foreground">This design is full</p>
-              <p>A design holds up to {DESIGN_LIMITS.rooms} rooms.</p>
+              <p>A design holds up to {LIMITS.design.rooms} rooms.</p>
             </div>
           ) : (
             <Link
-              to="/"
+              to={ROUTES.home}
               search={{ design: design.id }}
               className="flex aspect-[4/3] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed text-muted-foreground outline-none transition-colors hover:border-primary hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
             >
@@ -151,7 +152,7 @@ function DesignView({ design }: { design: Design }) {
         design={design}
         open={dialog === "delete"}
         onOpenChange={(open) => setDialog(open ? "delete" : null)}
-        onDeleted={() => void navigate({ to: "/designs" })}
+        onDeleted={() => void navigate({ to: ROUTES.designs })}
       />
     </div>
   )
@@ -175,7 +176,7 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
   return (
     <li className="group relative overflow-hidden rounded-2xl border bg-card shadow-soft">
       <Link
-        to="/rooms/$roomId"
+        to={ROUTES.room}
         params={{ roomId: room.roomId }}
         search={{ design: design.id }}
         className="block outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -213,7 +214,7 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
         size="icon-sm"
         className="absolute top-2 right-2 opacity-90 shadow-soft"
         aria-label={`Remove ${label}`}
-        title={only ? "A design needs at least one room. Delete the design instead." : `Remove ${label}`}
+        title={only ? MESSAGES.lastRoom : `Remove ${label}`}
         disabled={only}
         onClick={() => setConfirming(true)}
       >
@@ -222,8 +223,8 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Remove ${label.toLowerCase()}?`}
-        text="The room, its photo and its colors are deleted. The rest of the design stays."
+        title={MESSAGES.removeRoomTitle(label)}
+        text={MESSAGES.removeRoomText}
         action="Remove room"
         pending={remove.isPending}
         onConfirm={() =>
@@ -232,7 +233,7 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
             {
               onSuccess: () => {
                 setConfirming(false)
-                toast.success("Room removed")
+                toast.success(MESSAGES.roomRemoved)
               },
               onError: (error) => toast.error(errorMessage(error)),
             },

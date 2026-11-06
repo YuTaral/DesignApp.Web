@@ -10,13 +10,7 @@ import { useEditorStore } from "./editor-store"
 import { labelAt, loadLabelMap, type LabelMap } from "./label-map"
 import { hexToOklab } from "./oklab"
 import { RoomRenderer, type PhotoRect, type RenderEdit } from "./renderer"
-
-const MIN_ZOOM = 1
-const MAX_ZOOM = 8
-/** A press that moves less than this (CSS px) is a tap, not a drag. */
-const TAP_SLOP = 5
-/** The API's limit on points per stroke. */
-const MAX_STROKE_POINTS = 10_000
+import { LIMITS, MESSAGES } from "@/lib/constants"
 
 /** A brush stroke being drawn: painted into a copy of the label map for the live preview. */
 type Stroke = {
@@ -85,7 +79,7 @@ export function RoomCanvas({
         setMap({ url: firstLabelsUrl.current, ...labelMap })
       })
       .catch((reason: unknown) => {
-        if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : "The editor couldn't start.")
+        if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : MESSAGES.editorFailed)
       })
 
     return () => {
@@ -108,7 +102,7 @@ export function RoomCanvas({
         setMap({ url: labelsUrl, ...labelMap })
       })
       .catch((reason: unknown) => {
-        if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : "The outlines couldn't be loaded.")
+        if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : MESSAGES.outlinesFailed)
       })
     return () => abort.abort()
   }, [labelsUrl, map])
@@ -154,7 +148,7 @@ export function RoomCanvas({
   const zoomAround = useCallback(
     (factor: number, cx: number, cy: number) =>
       setView((v) => {
-        const zoom = clamp(v.zoom * factor, MIN_ZOOM, MAX_ZOOM)
+        const zoom = clamp(v.zoom * factor, LIMITS.zoom.min, LIMITS.zoom.max)
         const applied = zoom / v.zoom
         // Keep the point under (cx, cy) fixed while zooming.
         const centerX = size.width / 2 + v.x
@@ -245,7 +239,7 @@ export function RoomCanvas({
 
     const s = stroke.current
     if (s && s.pointerId === event.pointerId && map) {
-      if (Math.hypot(point.x - s.lastScreen.x, point.y - s.lastScreen.y) < 1 || s.points.length >= MAX_STROKE_POINTS) return
+      if (Math.hypot(point.x - s.lastScreen.x, point.y - s.lastScreen.y) < 1 || s.points.length >= LIMITS.maxStrokePoints) return
       const next = toPhoto(point.x, point.y)
       s.changed += stampStroke(s.working, map.width, map.height, [next], s.radius, outlineTool!, selected, s.points[s.points.length - 1])
       s.points.push(next)
@@ -262,7 +256,7 @@ export function RoomCanvas({
       g.moved = true
       return
     }
-    if (!g.moved && Math.hypot(point.x - g.startX, point.y - g.startY) > TAP_SLOP) g.moved = true
+    if (!g.moved && Math.hypot(point.x - g.startX, point.y - g.startY) > LIMITS.tapSlop) g.moved = true
     if (g.moved) setView((v) => clampView(size, room, { ...v, x: v.x + point.x - previous.x, y: v.y + point.y - previous.y }))
   }
 
@@ -365,11 +359,11 @@ export function RoomCanvas({
 
       {map && (
         <div className="absolute right-3 bottom-3 flex gap-1 rounded-xl bg-background/85 p-1 shadow-soft backdrop-blur">
-          <Button variant="ghost" size="icon" aria-label="Zoom out" disabled={view.zoom <= MIN_ZOOM}
+          <Button variant="ghost" size="icon" aria-label="Zoom out" disabled={view.zoom <= LIMITS.zoom.min}
             onClick={() => zoomAround(1 / 1.5, size.width / 2, size.height / 2)}>
             <ZoomOutIcon />
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Zoom in" disabled={view.zoom >= MAX_ZOOM}
+          <Button variant="ghost" size="icon" aria-label="Zoom in" disabled={view.zoom >= LIMITS.zoom.max}
             onClick={() => zoomAround(1.5, size.width / 2, size.height / 2)}>
             <ZoomInIcon />
           </Button>

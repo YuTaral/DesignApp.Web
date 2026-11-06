@@ -2,9 +2,7 @@ import { useState } from "react"
 
 import type { AiAvailability } from "@/features/rooms/api"
 import type { AiMode } from "@/features/rooms/types"
-
-/** Where the choice is kept for this tab. Session storage, so a new visit starts on the free default. */
-const STORAGE_KEY = "designapp.ai"
+import { STORAGE_KEYS } from "@/lib/constants"
 
 /**
  * The AI the user picked in this tab, if any.
@@ -12,7 +10,7 @@ const STORAGE_KEY = "designapp.ai"
  */
 function remembered(): AiMode | null {
   try {
-    const saved = sessionStorage.getItem(STORAGE_KEY)
+    const saved = sessionStorage.getItem(STORAGE_KEYS.ai)
     return saved === "Fake" || saved === "Real" ? saved : null
   } catch {
     return null
@@ -30,7 +28,7 @@ export function useAiChoice(availability: AiAvailability | undefined) {
   const choose = (mode: AiMode) => {
     setPicked(mode)
     try {
-      sessionStorage.setItem(STORAGE_KEY, mode)
+      sessionStorage.setItem(STORAGE_KEYS.ai, mode)
     } catch {
       // Not remembered; the choice still applies to this upload.
     }

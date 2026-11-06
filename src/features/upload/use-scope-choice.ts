@@ -1,12 +1,10 @@
 import { useState } from "react"
 
 import type { AnalysisScope } from "@/features/rooms/types"
+import { STORAGE_KEYS } from "@/lib/constants"
 
 /** The scopes that may be remembered. */
 const KNOWN: AnalysisScope[] = ["WholeRoom", "NoDoorsOrWindows", "ObjectsOnly"]
-
-/** Where the last choice is remembered for this browser. */
-const STORAGE_KEY = "designapp.scope"
 
 /**
  * The last scope this browser chose, or the whole room.
@@ -14,7 +12,7 @@ const STORAGE_KEY = "designapp.scope"
  */
 function rememberedScope(): AnalysisScope {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const saved = localStorage.getItem(STORAGE_KEYS.scope)
     return KNOWN.includes(saved as AnalysisScope) ? (saved as AnalysisScope) : "WholeRoom"
   } catch {
     return "WholeRoom"
@@ -30,7 +28,7 @@ export function useScopeChoice() {
   const choose = (next: AnalysisScope) => {
     setScope(next)
     try {
-      localStorage.setItem(STORAGE_KEY, next)
+      localStorage.setItem(STORAGE_KEYS.scope, next)
     } catch {
       // Not remembered; the choice still applies to this upload.
     }

@@ -4,14 +4,8 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import type { Room } from "@/features/rooms/types"
-import { DEFAULT_STRENGTH, useEditorStore } from "./editor-store"
-
-/** Paint-like colors offered for every object: warm neutrals, earthy tones and a few deep accents. */
-const SWATCHES = [
-  "#F4F1EA", "#E8DCC8", "#D8C3A5", "#C9A27E", "#B5543C", "#8C3B2E",
-  "#D9C27A", "#A8B89A", "#7D8B6A", "#4F6B3A", "#9DB4C0", "#4A6274",
-  "#2E4057", "#6E5A7E", "#8A8580", "#2F2C2A",
-]
+import { useEditorStore } from "./editor-store"
+import { DEFAULT_STRENGTH, SWATCHES } from "@/lib/constants"
 
 /**
  * The inspector's Color section: recolors the selected object with a swatch or any color, sets how

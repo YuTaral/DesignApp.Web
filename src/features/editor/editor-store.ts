@@ -1,6 +1,7 @@
 import { create } from "zustand"
 
 import type { OutlineBrushMode } from "@/features/rooms/api"
+import { DEFAULT_STRENGTH, LIMITS } from "@/lib/constants"
 
 /** One object's recolor. */
 export type ObjectEdit = {
@@ -19,12 +20,6 @@ type Snapshot = {
   /** The label map version; null until the room's is known. */
   revision: number | null
 }
-
-/** Strength a newly recolored object starts with. */
-export const DEFAULT_STRENGTH = 0.8
-
-/** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
-export const BRUSH_SIZES = { min: 2, max: 120, default: 24 } as const
 
 type EditorState = {
   /** The room these edits belong to; switching rooms starts fresh. */
@@ -79,7 +74,7 @@ type EditorState = {
   resetAll: () => void
   /** Turns an outline brush on, or off with null. */
   setOutlineTool: (tool: OutlineBrushMode | null) => void
-  /** Sets the brush diameter (clamped to BRUSH_SIZES). */
+  /** Sets the brush diameter (clamped to LIMITS.brushSizes). */
   setBrushSize: (size: number) => void
   /** Shows a fixed label map version, as one undo step. */
   applyOutlineFix: (revision: number) => void
@@ -144,7 +139,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
   return {
     ...initial(null),
-    brushSize: BRUSH_SIZES.default,
+    brushSize: LIMITS.brushSizes.default,
 
     open: (roomId) => {
       if (get().roomId !== roomId) set(initial(roomId))
@@ -187,7 +182,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (Object.keys(get().edits).length > 0) commitEdits({})
     },
     setOutlineTool: (tool) => set({ outlineTool: get().selected ? tool : null, comparing: false }),
-    setBrushSize: (size) => set({ brushSize: Math.round(Math.min(BRUSH_SIZES.max, Math.max(BRUSH_SIZES.min, size))) }),
+    setBrushSize: (size) => set({ brushSize: Math.round(Math.min(LIMITS.brushSizes.max, Math.max(LIMITS.brushSizes.min, size))) }),
     applyOutlineFix: (revision) => {
       flush()
       commit({ edits: get().edits, revision })

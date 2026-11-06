@@ -1,3 +1,5 @@
+import { API } from "@/lib/constants"
+
 // Mirrors RoomResponse in DesignApp.Api (src/DesignApp.Api/Rooms/RoomResponse.cs).
 // The full contract is in the API docs at /scalar.
 
@@ -101,5 +103,5 @@ export type Room = {
  * @param revision - The version.
  */
 export function labelMapUrl(roomId: string, revision: number) {
-  return `/api/rooms/${roomId}/labels/${revision}`
+  return API.roomLabelMap(roomId, revision)
 }

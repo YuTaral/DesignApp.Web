@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAccount, useSignOut } from "@/features/account/api"
 import { errorMessage } from "@/lib/api"
+import { MESSAGES, ROUTES } from "@/lib/constants"
 
 /** Style of the header links; the active page's link is highlighted. */
 const navLinkClass =
@@ -26,27 +27,27 @@ export function AppShell() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
-          <Link to="/" className="mr-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          <Link to={ROUTES.home} className="mr-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
             <Logo />
           </Link>
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
-            <Link to="/" className={navLinkClass} activeOptions={{ exact: true }}>
+            <Link to={ROUTES.home} className={navLinkClass} activeOptions={{ exact: true }}>
               New design
             </Link>
-            <Link to="/designs" className={navLinkClass}>
+            <Link to={ROUTES.designs} className={navLinkClass}>
               My designs
             </Link>
           </nav>
           <div className="ml-auto flex items-center gap-1">
             <Button variant="ghost" size="icon" className="md:hidden" asChild>
-              <Link to="/designs" aria-label="My designs">
+              <Link to={ROUTES.designs} aria-label="My designs">
                 <LayoutGridIcon />
               </Link>
             </Button>
             <ThemeToggle />
             <AccountMenu />
             <Button size="lg" className="hidden md:inline-flex" asChild>
-              <Link to="/">
+              <Link to={ROUTES.home}>
                 <PlusIcon data-icon="inline-start" />
                 New design
               </Link>
@@ -77,7 +78,7 @@ function AccountMenu() {
     const onAuthPage = here.startsWith("/sign-in") || here.startsWith("/sign-up")
     return (
       <Button variant="ghost" size="sm" asChild>
-        <Link to="/sign-in" search={onAuthPage ? {} : { redirect: here }}>
+        <Link to={ROUTES.signIn} search={onAuthPage ? {} : { redirect: here }}>
           <LogInIcon data-icon="inline-start" />
           Sign in
         </Link>
@@ -99,7 +100,7 @@ function AccountMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link to="/designs">
+          <Link to={ROUTES.designs}>
             <LayoutGridIcon />
             My designs
           </Link>
@@ -110,8 +111,8 @@ function AccountMenu() {
           onSelect={() =>
             signOut.mutate(undefined, {
               onSuccess: () => {
-                toast.success("Signed out")
-                void navigate({ to: "/" })
+                toast.success(MESSAGES.signedOut)
+                void navigate({ to: ROUTES.home })
               },
               onError: (error) => toast.error(errorMessage(error)),
             })

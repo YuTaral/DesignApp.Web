@@ -3,7 +3,8 @@ import { BrushIcon, EraserIcon, MinusIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import type { Room } from "@/features/rooms/types"
-import { BRUSH_SIZES, useEditorStore } from "./editor-store"
+import { useEditorStore } from "./editor-store"
+import { LIMITS } from "@/lib/constants"
 
 /**
  * The inspector's "Fix outline" section for the selected object: Add and Erase turn on a round
@@ -63,7 +64,7 @@ export function OutlinePanel({ room }: { room: Room }) {
             variant="outline"
             size="icon-sm"
             aria-label="Smaller brush"
-            disabled={brushSize <= BRUSH_SIZES.min}
+            disabled={brushSize <= LIMITS.brushSizes.min}
             onClick={() => setBrushSize(brushSize - 1)}
           >
             <MinusIcon />
@@ -71,8 +72,8 @@ export function OutlinePanel({ room }: { room: Room }) {
           <Slider
             className="flex-1"
             value={[brushSize]}
-            min={BRUSH_SIZES.min}
-            max={BRUSH_SIZES.max}
+            min={LIMITS.brushSizes.min}
+            max={LIMITS.brushSizes.max}
             step={1}
             aria-label="Brush size"
             onValueChange={([value]) => setBrushSize(value)}
@@ -81,7 +82,7 @@ export function OutlinePanel({ room }: { room: Room }) {
             variant="outline"
             size="icon-sm"
             aria-label="Bigger brush"
-            disabled={brushSize >= BRUSH_SIZES.max}
+            disabled={brushSize >= LIMITS.brushSizes.max}
             onClick={() => setBrushSize(brushSize + 1)}
           >
             <PlusIcon />

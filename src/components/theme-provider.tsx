@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
+import { STORAGE_KEYS } from "@/lib/constants"
 
 /** The user's theme choice; "system" follows the OS setting. */
 export type Theme = "light" | "dark" | "system"
 
-const STORAGE_KEY = "designapp-theme" // also read by the pre-paint script in index.html
 /** Media query that matches when the OS is in dark mode. */
 const darkQuery = "(prefers-color-scheme: dark)"
 
@@ -22,7 +22,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 /** Reads the saved choice, defaulting to "system". */
 function readStoredTheme(): Theme {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(STORAGE_KEYS.theme)
     if (stored === "light" || stored === "dark" || stored === "system") return stored
   } catch {
     // Storage can be blocked (private mode); fall back to the system theme.
@@ -63,7 +63,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
     try {
-      localStorage.setItem(STORAGE_KEY, next)
+      localStorage.setItem(STORAGE_KEYS.theme, next)
     } catch {
       // Ignore: the choice still applies for this session.
     }

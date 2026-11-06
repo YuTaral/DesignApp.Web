@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEditorStore } from "@/features/editor/editor-store"
 import { categoryNames, type ObjectCategory, type Room, type RoomStatus } from "./types"
+import { MESSAGES, ROUTES } from "@/lib/constants"
 
 /** The visible analysis steps and the statuses during which each one is running. */
 const steps: { label: string; runningFor: RoomStatus[] }[] = [
@@ -131,11 +132,11 @@ function AnalysisFailed({ reason }: { reason: string | null }) {
         <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
         <div className="space-y-1">
           <p className="text-sm font-medium">We couldn't analyze this photo</p>
-          <p className="text-sm text-muted-foreground">{reason ?? "Try uploading it again."}</p>
+          <p className="text-sm text-muted-foreground">{reason ?? MESSAGES.analysisFailedHint}</p>
         </div>
       </div>
       <Button size="lg" variant="outline" className="mt-3 w-full" asChild>
-        <Link to="/">Upload another photo</Link>
+        <Link to={ROUTES.home}>Upload another photo</Link>
       </Button>
     </div>
   )

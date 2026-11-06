@@ -1,3 +1,5 @@
+import { HTTP_STATUS, MESSAGES, MIME } from "@/lib/constants"
+
 /**
  * Base URL of DesignApp.Api. Empty by default: the dev server forwards /api to the API, so calls
  * stay on the page's own origin. Set VITE_API_URL only when the API is hosted on another origin.
@@ -29,17 +31,14 @@ export class ApiError extends Error {
   }
 }
 
-/** Shown when the request never reached the API (offline, API down, bad gateway). */
-const NETWORK_MESSAGE = "Can't reach DesignApp right now. Check your connection and try again."
-
 /** Fallback messages per status, used when the API sent no usable `detail`. */
 const STATUS_MESSAGES: Record<number, string> = {
-  404: "We couldn't find that.",
-  413: "That photo is too large. Use one under 15 MB.",
-  429: "That's a lot of tries in a short time. Try again in a little while.",
-  502: NETWORK_MESSAGE,
-  503: NETWORK_MESSAGE,
-  504: NETWORK_MESSAGE,
+  [HTTP_STATUS.notFound]: MESSAGES.notFound,
+  [HTTP_STATUS.tooLarge]: MESSAGES.tooLarge,
+  [HTTP_STATUS.tooManyRequests]: MESSAGES.tooManyRequests,
+  [HTTP_STATUS.badGateway]: MESSAGES.network,
+  [HTTP_STATUS.unavailable]: MESSAGES.network,
+  [HTTP_STATUS.gatewayTimeout]: MESSAGES.network,
 }
 
 /**
@@ -48,11 +47,11 @@ const STATUS_MESSAGES: Record<number, string> = {
  * @param body - The parsed response body, if there was one.
  */
 export function toApiError(status: number, body: unknown): ApiError {
-  if (status === 0) return new ApiError(0, NETWORK_MESSAGE)
+  if (status === HTTP_STATUS.network) return new ApiError(HTTP_STATUS.network, MESSAGES.network)
   const detail = isProblem(body) ? body.detail : undefined
   // The API writes `detail` for user mistakes (4xx). Server errors never expose internals.
   const message =
-    (status < 500 && detail) || STATUS_MESSAGES[status] || "Something went wrong on our side. Try again in a moment."
+    (status < HTTP_STATUS.serverError && detail) || STATUS_MESSAGES[status] || MESSAGES.serverError
   return new ApiError(status, message)
 }
 
@@ -74,10 +73,10 @@ function isProblem(body: unknown): body is { title?: string; detail?: string } {
 export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   let response: Response
   try {
-    response = await fetch(apiUrl(path), { signal, headers: { Accept: "application/json" } })
+    response = await fetch(apiUrl(path), { signal, headers: { Accept: MIME.json } })
   } catch (error) {
     if (signal?.aborted) throw error
-    throw toApiError(0, undefined)
+    throw toApiError(HTTP_STATUS.network, undefined)
   }
   if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
   return (await response.json()) as T
@@ -96,14 +95,14 @@ export async function sendJson<T>(method: "POST" | "PUT" | "DELETE", path: strin
   try {
     response = await fetch(apiUrl(path), {
       method,
-      headers: body === undefined ? { Accept: "application/json" } : { Accept: "application/json", "Content-Type": "application/json" },
+      headers: body === undefined ? { Accept: MIME.json } : { Accept: MIME.json, "Content-Type": MIME.json },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw toApiError(0, undefined)
+    throw toApiError(HTTP_STATUS.network, undefined)
   }
   if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
-  if (response.status === 204) return undefined as T
+  if (response.status === HTTP_STATUS.noContent) return undefined as T
   return (await response.json()) as T
 }
 
@@ -112,5 +111,5 @@ export async function sendJson<T>(method: "POST" | "PUT" | "DELETE", path: strin
  * @param error - Whatever was thrown.
  */
 export function errorMessage(error: unknown) {
-  return error instanceof ApiError ? error.message : "Something went wrong. Try again."
+  return error instanceof ApiError ? error.message : MESSAGES.unknownError
 }

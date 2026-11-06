@@ -6,6 +6,7 @@ import { DesignsPage } from "@/pages/designs-page"
 import { EditorPage } from "@/pages/editor-page"
 import { HomePage } from "@/pages/home-page"
 import { DesignPage } from "@/pages/design-page"
+import { ROUTES } from "@/lib/constants"
 
 /** The root route: every page renders inside the app shell (header + main). */
 const rootRoute = createRootRoute({ component: AppShell })
@@ -19,9 +20,9 @@ const optionalText = (value: unknown) => (typeof value === "string" && value.len
 /** `/sign-in` and `/sign-up` take `?redirect=` (where to go afterwards). */
 const authSearch = (search: Record<string, unknown>) => ({ redirect: optionalText(search.redirect) })
 
-const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-in", validateSearch: authSearch, component: SignInPage })
+const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTES.signIn, validateSearch: authSearch, component: SignInPage })
 
-const signUpRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-up", validateSearch: authSearch, component: SignUpPage })
+const signUpRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTES.signUp, validateSearch: authSearch, component: SignUpPage })
 
 /**
  * The pages: `/` home (upload; `?design=` adds the photo to that design), `/rooms/$roomId` the
@@ -31,19 +32,19 @@ const signUpRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-
 const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
-    path: "/",
+    path: ROUTES.home,
     // ?design= uploads the photo straight into that design ("Add room" on a design's page).
     validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design) }),
     component: HomePage,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
-    path: "/rooms/$roomId",
+    path: ROUTES.room,
     validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design) }),
     component: EditorPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/designs", component: DesignsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/designs/$designId", component: DesignPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: ROUTES.designs, component: DesignsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: ROUTES.design, component: DesignPage }),
   signInRoute,
   signUpRoute,
 ])

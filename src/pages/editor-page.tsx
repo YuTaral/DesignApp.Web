@@ -27,7 +27,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAccount } from "@/features/account/api"
 import {
-  DESIGN_LIMITS,
   toDesignEdits,
   toEditorEdits,
   useAddDesignRoom,
@@ -50,6 +49,7 @@ import { isAnalysisFinished, type Room, type RoomStatus } from "@/features/rooms
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
 import { toast } from "sonner"
+import { HTTP_STATUS, LIMITS, MESSAGES, ROUTES } from "@/lib/constants"
 
 /** Badge text for each analysis status. */
 const statusLabels: Record<RoomStatus, string> = {
@@ -68,16 +68,16 @@ export function EditorPage() {
   if (room.isPending) return <EditorSkeleton />
 
   if (room.isError) {
-    const notFound = room.error instanceof ApiError && room.error.status === 404
+    const notFound = room.error instanceof ApiError && room.error.status === HTTP_STATUS.notFound
     return (
       <CenteredMessage
         icon={notFound ? ImageOffIcon : TriangleAlertIcon}
-        title={notFound ? "We couldn't find that room" : "We couldn't load this room"}
-        text={notFound ? "It may have been removed. Upload a photo to start a new design." : errorMessage(room.error)}
+        title={notFound ? MESSAGES.roomNotFound : MESSAGES.roomLoadFailed}
+        text={notFound ? MESSAGES.roomMaybeRemoved : errorMessage(room.error)}
         action={
           notFound ? (
             <Button size="lg" asChild>
-              <Link to="/">Upload a photo</Link>
+              <Link to={ROUTES.home}>Upload a photo</Link>
             </Button>
           ) : (
             <Button size="lg" onClick={() => room.refetch()}>
@@ -112,12 +112,12 @@ function Editor({ room }: { room: Room }) {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
             {openDesign ? (
-              <Link to="/designs/$designId" params={{ designId: openDesign.id }}>
+              <Link to={ROUTES.design} params={{ designId: openDesign.id }}>
                 <ArrowLeftIcon data-icon="inline-start" />
                 Back
               </Link>
             ) : (
-              <Link to="/">
+              <Link to={ROUTES.home}>
                 <ArrowLeftIcon data-icon="inline-start" />
                 Back
               </Link>
@@ -303,8 +303,8 @@ function useOpenDesign(room: Room): Design | null {
   const failed = requested !== undefined && (design.isError || (design.data !== undefined && !entry))
   useEffect(() => {
     if (!failed) return
-    toast.error("We couldn't open that design. It may have been deleted.")
-    void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: {}, replace: true })
+    toast.error(MESSAGES.designOpenFailed)
+    void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: {}, replace: true })
   }, [failed, navigate, room.id])
 
   return entry && design.data ? design.data : null
@@ -330,7 +330,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
     return (
       <div className="mt-auto space-y-2">
         <Button size="lg" className="w-full" variant={recolored ? "default" : "outline"} disabled={!account} asChild>
-          <Link to="/sign-in" search={{ redirect: here }}>
+          <Link to={ROUTES.signIn} search={{ redirect: here }}>
             <LogInIcon data-icon="inline-start" />
             Sign in to save
           </Link>
@@ -350,7 +350,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
         {
           onSuccess: (saved) => {
             markSaved(saved.id, snapshot)
-            toast.success("Colors saved")
+            toast.success(MESSAGES.colorsSaved)
           },
           onError: (error) => toast.error(errorMessage(error)),
         },
@@ -416,8 +416,8 @@ function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; o
   const saved = (design: Design, snapshot: Edits) => {
     markSaved(design.id, snapshot)
     onDone()
-    toast.success(mode === "new" ? "Design saved" : `Added to ${design.name}`)
-    void navigate({ to: "/rooms/$roomId", params: { roomId: room.id }, search: { design: design.id }, replace: true })
+    toast.success(mode === "new" ? MESSAGES.designSaved : MESSAGES.addedTo(design.name))
+    void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: { design: design.id }, replace: true })
   }
 
   const onSubmit = (event: FormEvent) => {
@@ -471,7 +471,7 @@ function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; o
               id={`${id}-name`}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              maxLength={DESIGN_LIMITS.name}
+              maxLength={LIMITS.design.name}
               placeholder="Sage walls, oak floor"
               autoFocus
             />
@@ -484,7 +484,7 @@ function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; o
               id={`${id}-description`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              maxLength={DESIGN_LIMITS.description}
+              maxLength={LIMITS.design.description}
               placeholder="Calm greens for the whole flat"
               rows={2}
             />
@@ -493,7 +493,7 @@ function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; o
       ) : (
         <div role="radiogroup" aria-label="Design" className="grid max-h-64 gap-1 overflow-y-auto">
           {existing.map((design) => {
-            const full = design.rooms.length >= DESIGN_LIMITS.rooms
+            const full = design.rooms.length >= LIMITS.design.rooms
             return (
               <button
                 key={design.id}

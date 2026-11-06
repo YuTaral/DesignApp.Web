@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type { Edits } from "@/features/editor/editor-store"
 import { getJson, sendJson } from "@/lib/api"
+import { API, QUERY_KEYS } from "@/lib/constants"
 
 /** One recolor in a saved room (mirrors the API's EditRequest). */
 export type DesignEdit = {
@@ -35,17 +36,6 @@ export type Design = {
   rooms: DesignRoom[]
 }
 
-/** The API's limits (mirror the Design class). */
-export const DESIGN_LIMITS = { name: 80, description: 300, rooms: 20 } as const
-
-/** React Query cache keys for designs. */
-export const designKeys = {
-  /** Key of the account's list of designs. */
-  all: ["designs"] as const,
-  /** Key of one design by id. */
-  detail: (id: string) => ["designs", id] as const,
-}
-
 /**
  * The editor's recolors as the API's list, in object order.
  * @param edits - The editor's recolors by object index.
@@ -70,8 +60,8 @@ export function toEditorEdits(edits: DesignEdit[]): Edits {
  */
 export function useDesigns(enabled: boolean) {
   return useQuery({
-    queryKey: designKeys.all,
-    queryFn: ({ signal }) => getJson<Design[]>("/api/designs", signal),
+    queryKey: QUERY_KEYS.designs,
+    queryFn: ({ signal }) => getJson<Design[]>(API.designs, signal),
     enabled,
   })
 }
@@ -82,8 +72,8 @@ export function useDesigns(enabled: boolean) {
  */
 export function useDesign(id: string | undefined) {
   return useQuery({
-    queryKey: designKeys.detail(id ?? ""),
-    queryFn: ({ signal }) => getJson<Design>(`/api/designs/${id}`, signal),
+    queryKey: QUERY_KEYS.design(id ?? ""),
+    queryFn: ({ signal }) => getJson<Design>(API.design(id ?? ""), signal),
     enabled: id !== undefined,
     retry: false,
   })
@@ -93,8 +83,8 @@ export function useDesign(id: string | undefined) {
 function useDesignChanged() {
   const queryClient = useQueryClient()
   return (design: Design) => {
-    queryClient.setQueryData(designKeys.detail(design.id), design)
-    void queryClient.invalidateQueries({ queryKey: designKeys.all, exact: true })
+    queryClient.setQueryData(QUERY_KEYS.design(design.id), design)
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.designs, exact: true })
   }
 }
 
@@ -103,7 +93,7 @@ export function useCreateDesign() {
   const changed = useDesignChanged()
   return useMutation({
     mutationFn: (design: { roomId: string; name: string; description: string; edits: DesignEdit[] }) =>
-      sendJson<Design>("POST", "/api/designs", design),
+      sendJson<Design>("POST", API.designs, design),
     onSuccess: changed,
   })
 }
@@ -113,7 +103,7 @@ export function useEditDesign() {
   const changed = useDesignChanged()
   return useMutation({
     mutationFn: ({ id, ...details }: { id: string; name: string; description: string }) =>
-      sendJson<Design>("PUT", `/api/designs/${id}`, details),
+      sendJson<Design>("PUT", API.design(id), details),
     onSuccess: changed,
   })
 }
@@ -123,7 +113,7 @@ export function useAddDesignRoom() {
   const changed = useDesignChanged()
   return useMutation({
     mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) =>
-      sendJson<Design>("POST", `/api/designs/${designId}/rooms`, { roomId, edits }),
+      sendJson<Design>("POST", API.designRooms(designId), { roomId, edits }),
     onSuccess: changed,
   })
 }
@@ -133,7 +123,7 @@ export function useSaveRoomColors() {
   const changed = useDesignChanged()
   return useMutation({
     mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) =>
-      sendJson<Design>("PUT", `/api/designs/${designId}/rooms/${roomId}`, { edits }),
+      sendJson<Design>("PUT", API.designRoom(designId, roomId), { edits }),
     onSuccess: changed,
   })
 }
@@ -143,7 +133,7 @@ export function useRemoveDesignRoom() {
   const changed = useDesignChanged()
   return useMutation({
     mutationFn: ({ designId, roomId }: { designId: string; roomId: string }) =>
-      sendJson<Design>("DELETE", `/api/designs/${designId}/rooms/${roomId}`),
+      sendJson<Design>("DELETE", API.designRoom(designId, roomId)),
     onSuccess: changed,
   })
 }
@@ -152,10 +142,10 @@ export function useRemoveDesignRoom() {
 export function useDeleteDesign() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => sendJson<void>("DELETE", `/api/designs/${id}`),
+    mutationFn: (id: string) => sendJson<void>("DELETE", API.design(id)),
     onSuccess: (_, id) => {
-      queryClient.removeQueries({ queryKey: designKeys.detail(id) })
-      void queryClient.invalidateQueries({ queryKey: designKeys.all, exact: true })
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.design(id) })
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.designs, exact: true })
     },
   })
 }

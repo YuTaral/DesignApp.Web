@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { apiUrl, errorMessage } from "@/lib/api"
-import { DESIGN_LIMITS, useDeleteDesign, useEditDesign, type Design, type DesignEdit } from "./api"
+import { useDeleteDesign, useEditDesign, type Design, type DesignEdit } from "./api"
 import { roomCount } from "./format"
+import { LIMITS, MESSAGES } from "@/lib/constants"
 
 /**
  * A room's colors as small dots, or a note when it has none.
@@ -94,7 +95,7 @@ function DesignDetailsForm({ design, onDone }: { design: Design; onDone: () => v
       {
         onSuccess: () => {
           onDone()
-          toast.success("Design updated")
+          toast.success(MESSAGES.designUpdated)
         },
       },
     )
@@ -111,7 +112,7 @@ function DesignDetailsForm({ design, onDone }: { design: Design; onDone: () => v
           id={`${id}-name`}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          maxLength={DESIGN_LIMITS.name}
+          maxLength={LIMITS.design.name}
           autoFocus
           aria-invalid={edit.isError}
         />
@@ -124,11 +125,11 @@ function DesignDetailsForm({ design, onDone }: { design: Design; onDone: () => v
           id={`${id}-description`}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          maxLength={DESIGN_LIMITS.description}
+          maxLength={LIMITS.design.description}
           rows={3}
         />
         <p className="text-right text-xs text-muted-foreground tabular-nums">
-          {description.length}/{DESIGN_LIMITS.description}
+          {description.length}/{LIMITS.design.description}
         </p>
       </div>
       {edit.isError && (
@@ -172,15 +173,15 @@ export function DeleteDesignDialog({
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Delete “${design.name}”?`}
-      text={`Its ${roomCount(design.rooms.length)}, their photos and colors are deleted for good.`}
+      title={MESSAGES.deleteDesignTitle(design.name)}
+      text={MESSAGES.deleteDesignText(roomCount(design.rooms.length))}
       action="Delete design"
       pending={remove.isPending}
       onConfirm={() =>
         remove.mutate(design.id, {
           onSuccess: () => {
             onOpenChange(false)
-            toast.success("Design deleted")
+            toast.success(MESSAGES.designDeleted)
             onDeleted?.()
           },
           onError: (error) => toast.error(errorMessage(error)),
