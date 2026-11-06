@@ -1,0 +1,192 @@
+// Designs with several rooms, in the browser: a guest recolors a room, signs up from the editor,
+// saves it as a new design (name + description), adds a second room from the design's page and a
+// third from the editor ("Add to a design"), edits the details, removes a room, reopens a room
+// with its colors, finds the design in My designs, deletes it, signs out; no My rooms anywhere;
+// phone layouts. Usage: node e2e/designs-ui-pass.mjs [web url]
+import path from 'node:path'
+import { launch, sleep, until, WEB, ROOMS } from './ff.mjs'
+
+const email = `dz-${Date.now()}@example.com`
+const password = 'correct horse battery'
+const results = []
+const step = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
+
+const { browser, page, log, shot } = await launch()
+const hasText = (needle) => page.evaluate((n) => document.body.innerText.includes(n), needle)
+const recolored = () => page.evaluate(() => document.querySelectorAll('aside [aria-label=recolored]').length)
+const saveText = () => page.evaluate(() => [...document.querySelectorAll('aside button, aside a')].map((b) => b.textContent.trim()).find((t) => /^(save|sign in)/i.test(t)) ?? null)
+const noDialog = () => until(page, () => !document.querySelector('[role=dialog]'), { label: 'dialog closed' })
+const editorReady = () => until(page, () => !!document.querySelector('canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
+const clickText = (selector, text) => page.evaluate((s, t) => [...document.querySelectorAll(s)].find((e) => e.textContent.trim() === t).click(), selector, text)
+const typeInto = async (selector, value) => {
+  await page.click(selector)
+  await page.keyboard.down('Control')
+  await page.keyboard.press('a')
+  await page.keyboard.up('Control')
+  await page.keyboard.press('Backspace')
+  await page.type(selector, value)
+}
+const upload = async (file) => {
+  const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click('::-p-text(Choose photo)')])
+  await chooser.accept([path.join(ROOMS, file)])
+  await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'editor page' })
+  await editorReady()
+  await sleep(300)
+}
+const recolor = async (count, offset = 0) => {
+  const indexes = await page.evaluate(() => [...document.querySelectorAll('aside button[data-index]')].map((b) => b.dataset.index))
+  for (const i of indexes.slice(offset, offset + count)) {
+    await page.click(`aside button[data-index="${i}"]`)
+    await page.click('[role=radiogroup][aria-label^="Color for"] button')
+    await sleep(120)
+  }
+}
+const designId = () => new URL(page.url()).searchParams.get('design')
+const roomOf = () => new URL(page.url()).pathname.split('/').at(-1)
+
+try {
+  // 1. A guest recolors a room and signs up from the editor.
+  await page.goto(WEB, { waitUntil: 'networkidle0' })
+  step('Header has no My rooms', !(await hasText('My rooms')))
+  await upload('kitchen_with_table.png')
+  await recolor(2)
+  step('Guest sees "Sign in to save" and the one-day note', (await saveText()) === 'Sign in to save' && (await hasText('deleted after a day')))
+  const firstRoom = roomOf()
+  await page.click('::-p-text(Sign in to save)')
+  await until(page, () => location.pathname === '/sign-in', { label: 'sign-in' })
+  await page.click('::-p-text(Create an account)')
+  await until(page, () => location.pathname === '/sign-up', { label: 'sign-up' })
+  await page.type('input[type=email]', email)
+  await page.type('input[autocomplete=new-password]', password)
+  await page.click('button[type=submit]')
+  await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'back in editor' })
+  await editorReady()
+  await sleep(300)
+  step('Back in the room with both colors after signing up', roomOf() === firstRoom && (await recolored()) === 2, `${await recolored()} colors`)
+
+  // 2. Save it as a new design with a description.
+  await page.click('::-p-text(Save design)')
+  await page.waitForSelector('[role=dialog] input')
+  await page.type('[role=dialog] input', 'Whole flat')
+  await page.type('[role=dialog] textarea', 'Calm greens')
+  await page.click('[role=dialog] button[type=submit]')
+  await until(page, () => !!new URL(location.href).searchParams.get('design'), { label: 'design in address' })
+  await noDialog()
+  await until(page, () => [...document.querySelectorAll('aside button')].some((b) => b.textContent.trim() === 'Saved'), { label: 'Saved' })
+  const design = designId()
+  step('New design saved: in the address, "Saved", name in the header', !!design && (await hasText('Whole flat')))
+
+  // 3. Change a color, save the change.
+  await recolor(1, 2)
+  step('A new color makes it "Save changes"', (await saveText()) === 'Save changes', `${await saveText()}`)
+  await page.click('::-p-text(Save changes)')
+  await until(page, () => [...document.querySelectorAll('aside button')].some((b) => b.textContent.trim() === 'Saved'), { label: 'Saved again' })
+  step('Saving the change shows "Saved" again', true)
+
+  // 4. Back goes to the design's page.
+  await page.click('main a[href^="/designs/"]')
+  await until(page, () => location.pathname === `/designs/${new URLSearchParams(location.search).get('x') ?? ''}` || location.pathname.startsWith('/designs/'), { label: 'design page' })
+  await until(page, () => document.body.innerText.includes('Calm greens'), { label: 'design details' })
+  const onlyRemove = await page.evaluate(() => document.querySelector('[aria-label="Remove Room 1"]')?.disabled)
+  step('Design page shows name, description, 1 room; its only room can\'t be removed', (await hasText('Whole flat')) && (await hasText('1 room')) && onlyRemove === true)
+  await shot('designs-page-1')
+
+  // 5. Add room from the design's page: upload goes straight into the design.
+  await page.click('::-p-text(Add room)')
+  await until(page, () => location.pathname === '/' && document.body.innerText.includes('will be added to'), { label: 'add-room banner' })
+  step('Home shows which design the photo goes into', await hasText('The photo will be added to Whole flat.'))
+  await upload('bedroom.png')
+  step('The new room opens in the design', designId() === design)
+  await recolor(1)
+  step('Its first color makes it "Save changes"', (await saveText()) === 'Save changes', `${await saveText()}`)
+  await page.click('::-p-text(Save changes)')
+  await until(page, () => [...document.querySelectorAll('aside button')].some((b) => b.textContent.trim() === 'Saved'), { label: 'Saved room 2' })
+  const secondRoom = roomOf()
+
+  // 6. A third room from the editor, added to the existing design.
+  await page.goto(WEB, { waitUntil: 'networkidle0' })
+  await upload('bathroom.png')
+  await recolor(1)
+  const thirdRoom = roomOf()
+  await page.click('::-p-text(Save design)')
+  await page.waitForSelector('[role=dialog]')
+  await clickText('[role=dialog] [role=radio]', 'Add to a design')
+  await until(page, () => [...document.querySelectorAll('[role=dialog] [role=radiogroup][aria-label=Design] [role=radio]')].some((b) => b.textContent.includes('Whole flat')), { label: 'the design list in the dialog' })
+  await page.evaluate(() => [...document.querySelectorAll('[role=dialog] [role=radiogroup][aria-label=Design] [role=radio]')].find((b) => b.textContent.includes('Whole flat')).click())
+  await page.click('[role=dialog] button[type=submit]')
+  await until(page, () => !!new URL(location.href).searchParams.get('design'), { label: 'added to design' })
+  await noDialog()
+  step('"Add to a design" puts the room in the existing design', designId() === design)
+
+  // 7. The design page lists 3 rooms with their colors; edit the details.
+  await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
+  await until(page, () => document.body.innerText.includes('3 rooms'), { label: '3 rooms' })
+  const dots = await page.evaluate(() => [...document.querySelectorAll('main li [aria-label$="recolored objects"], main li [aria-label$="recolored object"]')].map((e) => e.getAttribute('aria-label')))
+  step('Design page shows 3 rooms with their own colors', dots.length === 3, dots.join(' | '))
+  await page.click('::-p-text(Edit details)')
+  await page.waitForSelector('[role=dialog] input')
+  await typeInto('[role=dialog] input', 'Flat, final')
+  await typeInto('[role=dialog] textarea', 'Greens and oak')
+  await page.click('[role=dialog] button[type=submit]')
+  await noDialog()
+  await until(page, () => document.body.innerText.includes('Flat, final') && document.body.innerText.includes('Greens and oak'), { label: 'details saved' })
+  const saved = await page.evaluate(async (id) => (await (await fetch(`/api/designs/${id}`)).json()), design)
+  step('Edit details saves the name and description exactly', saved.name === 'Flat, final' && saved.description === 'Greens and oak', `${saved.name} / ${saved.description}`)
+
+  // 8. Remove the third room: it's gone, the rest stays.
+  await page.click('[aria-label="Remove Room 3"]')
+  await page.waitForSelector('[role=dialog]')
+  await clickText('[role=dialog] button', 'Remove room')
+  await noDialog()
+  await until(page, () => document.body.innerText.includes('2 rooms'), { label: '2 rooms' })
+  const gone = await page.evaluate(async (id) => (await fetch(`/api/rooms/${id}`)).status, thirdRoom)
+  step('Removing a room deletes it; the design keeps the others', gone === 404, `room answers ${gone}`)
+  await shot('designs-page-2')
+
+  // 9. Opening a room shows its saved colors.
+  await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
+  await page.click('[aria-label="Open Room 1"]')
+  await editorReady()
+  await until(page, () => document.querySelectorAll('aside [aria-label=recolored]').length === 3, { timeout: 10000, label: '3 colors' }).catch(() => {})
+  step('Room 1 opens with its 3 saved colors, counted as saved', (await recolored()) === 3 && (await saveText()) === 'Saved', `${await recolored()} colors, ${await saveText()}`)
+
+  // 10. My designs: the card; phone layouts.
+  await page.goto(`${WEB}/designs`, { waitUntil: 'networkidle0' })
+  await until(page, () => document.body.innerText.includes('Flat, final'), { label: 'card' })
+  step('My designs shows the card with description and room count', (await hasText('Greens and oak')) && (await hasText('2 rooms')))
+  await shot('designs-list')
+  await page.setViewport({ width: 390, height: 844 })
+  for (const p of ['/designs', `/designs/${design}`]) {
+    await page.goto(`${WEB}${p}`, { waitUntil: 'networkidle0' })
+    await sleep(300)
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+    step(`Phone width: ${p.replace(design, '$id')} has no sideways scroll`, overflow <= 0, `overflow ${overflow}px`)
+  }
+  await shot('designs-phone')
+  await page.setViewport({ width: 1280, height: 860 })
+
+  // 11. Delete the design: its rooms go too.
+  await page.goto(`${WEB}/designs`, { waitUntil: 'networkidle0' })
+  await page.click('[aria-label="More for Flat, final"]')
+  await page.click('::-p-text(Delete)')
+  await page.waitForSelector('[role=dialog]')
+  await clickText('[role=dialog] button', 'Delete design')
+  await noDialog()
+  await until(page, () => document.body.innerText.includes('No designs yet'), { label: 'deleted' })
+  const roomsGone = await page.evaluate(async (ids) => Promise.all(ids.map(async (id) => (await fetch(`/api/rooms/${id}`)).status)), [firstRoom, secondRoom])
+  step('Deleting the design deletes its rooms', roomsGone.every((s) => s === 404), roomsGone.join(', '))
+
+  // 12. Sign out.
+  await page.click('[aria-label=Account]')
+  await page.click('::-p-text(Sign out)')
+  await until(page, () => location.pathname === '/', { label: 'home' })
+  await page.goto(`${WEB}/designs`, { waitUntil: 'networkidle0' })
+  step('Signed out, My designs asks to sign in', await hasText('Sign in to see your designs'))
+} catch (error) {
+  step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
+  await shot('designs-stopped').catch(() => {})
+} finally {
+  console.log(results.join('\n'))
+  console.log('Browser console/network problems:', log.filter((l) => !/NS_BINDING_ABORTED|http 40[014]\] .*\/api\/(account|designs|rooms)|WebSocket failed|Failed to start the transport/.test(l)).join('\n') || 'none')
+  await browser.close()
+}

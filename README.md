@@ -27,6 +27,7 @@ npm run dev
 | `npm run build` | Type-check and build for production |
 | `npm run lint` | Lint with oxlint |
 | `npm run preview` | Serve the production build locally |
+| `npm run e2e` | Run the four Firefox passes in `e2e/` against the running app (start it with F5 on DesignApp.AppHost) and print a summary |
 
 ## Project layout
 
