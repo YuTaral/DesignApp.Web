@@ -2,12 +2,12 @@ import { FlaskConicalIcon, SparklesIcon } from "lucide-react"
 import { cn } from "cn"
 
 import type { AiAvailability } from "@/features/rooms/api"
-import type { AiMode } from "@/features/rooms/types"
+import { AI_MODE, type AiMode } from "@/lib/constants"
 
 /** The two choices. */
 const MODES: { value: AiMode; title: string; note: string; icon: typeof SparklesIcon }[] = [
-  { value: "Fake", title: "Fake AI", note: "Free, instant", icon: FlaskConicalIcon },
-  { value: "Real", title: "Real AI", note: "Claude + SAM 3, costs a few cents", icon: SparklesIcon },
+  { value: AI_MODE.Fake, title: "Fake AI", note: "Free, instant", icon: FlaskConicalIcon },
+  { value: AI_MODE.Real, title: "Real AI", note: "Claude + SAM 3, costs a few cents", icon: SparklesIcon },
 ]
 
 /**
@@ -37,7 +37,7 @@ export function AiSwitch({
       </span>
       <div role="radiogroup" aria-label="Which AI analyzes the photo" className="flex rounded-xl border bg-card p-1 shadow-soft">
         {MODES.map(({ value: mode, title, note, icon: Icon }) => {
-          const unavailable = mode === "Real" && !availability.realAvailable
+          const unavailable = mode === AI_MODE.Real && !availability.realAvailable
           return (
             <button
               key={mode}
@@ -50,7 +50,7 @@ export function AiSwitch({
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
                 value === mode
-                  ? mode === "Real"
+                  ? mode === AI_MODE.Real
                     ? "bg-primary text-primary-foreground"
                     : "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -63,7 +63,7 @@ export function AiSwitch({
         })}
       </div>
       <span className="text-xs text-muted-foreground" aria-live="polite">
-        {value === "Real"
+        {value === AI_MODE.Real
           ? "Claude and SAM 3 analyze the photo. Costs a few cents."
           : availability.realAvailable
             ? "Free. The five sample photos get recorded outlines."

@@ -2,12 +2,12 @@ import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-import { saveOutlineStroke, selectLabelMapRevision, type OutlineBrushMode } from "@/features/rooms/api"
+import { saveOutlineStroke, selectLabelMapRevision } from "@/features/rooms/api"
 import type { Room } from "@/features/rooms/types"
 import { errorMessage } from "@/lib/api"
 import type { StrokePoint } from "./brush"
 import { useEditorStore } from "./editor-store"
-import { QUERY_KEYS } from "@/lib/constants"
+import { type OutlineBrushMode, QUERY_KEYS } from "@/lib/constants"
 
 /** A finished brush stroke, ready to save. */
 export type FinishedStroke = {

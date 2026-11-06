@@ -1,4 +1,4 @@
-import type { OutlineBrushMode } from "@/features/rooms/api"
+import { OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
 
 /** A stroke point, 0..1 of the photo's width and height. */
 export type StrokePoint = { x: number; y: number }
@@ -40,10 +40,10 @@ export function stampStroke(
         const dx = x + 0.5 - cx, dy = y + 0.5 - cy
         if (dx * dx + dy * dy > radius * radius) continue
         const p = y * width + x
-        if (mode === "Paint" && labels[p] !== target) {
+        if (mode === OUTLINE_BRUSH_MODE.Paint && labels[p] !== target) {
           labels[p] = target
           changed++
-        } else if (mode === "Erase" && labels[p] === target) {
+        } else if (mode === OUTLINE_BRUSH_MODE.Erase && labels[p] === target) {
           labels[p] = 0
           changed++
         }

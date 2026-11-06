@@ -1,5 +1,5 @@
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react"
-import { useTheme, type Theme } from "@/components/theme-provider"
+import { useTheme } from "@/components/theme-provider"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -9,12 +9,13 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { THEME, type Theme } from "@/lib/constants"
 
 /** The theme menu's entries. */
 const options = [
-  { value: "light", label: "Light", icon: SunIcon },
-  { value: "dark", label: "Dark", icon: MoonIcon },
-  { value: "system", label: "System", icon: MonitorIcon },
+  { value: THEME.light, label: "Light", icon: SunIcon },
+  { value: THEME.dark, label: "Dark", icon: MoonIcon },
+  { value: THEME.system, label: "System", icon: MonitorIcon },
 ] as const
 
 /** Header button that opens a Light / Dark / System menu. */

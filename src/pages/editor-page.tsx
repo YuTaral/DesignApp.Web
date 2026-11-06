@@ -45,11 +45,11 @@ import { useEditorShortcuts } from "@/features/editor/use-editor-shortcuts"
 import { AnalysisPanel } from "@/features/rooms/analysis-panel"
 import { useAiAvailability, useRoom } from "@/features/rooms/api"
 import { useLiveRoom } from "@/features/rooms/live"
-import { isAnalysisFinished, type Room, type RoomStatus } from "@/features/rooms/types"
+import { isAnalysisFinished, type Room } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
 import { toast } from "sonner"
-import { HTTP_STATUS, LIMITS, MESSAGES, ROUTES } from "@/lib/constants"
+import { AI_MODE, HTTP_STATUS, LIMITS, MESSAGES, ROOM_STATUS, type RoomStatus, ROUTES } from "@/lib/constants"
 
 /** Badge text for each analysis status. */
 const statusLabels: Record<RoomStatus, string> = {
@@ -100,7 +100,7 @@ export function EditorPage() {
  */
 function Editor({ room }: { room: Room }) {
   const finished = isAnalysisFinished(room.status)
-  const editable = room.status === "Ready" && room.labelMapUrl !== null
+  const editable = room.status === ROOM_STATUS.Ready && room.labelMapUrl !== null
   useLiveRoom(room.id, finished)
   const open = useEditorStore((state) => state.open)
   useEffect(() => open(room.id), [open, room.id])
@@ -129,12 +129,12 @@ function Editor({ room }: { room: Room }) {
             </h1>
           )}
           <Badge
-            variant={room.status === "Failed" ? "destructive" : "secondary"}
+            variant={room.status === ROOM_STATUS.Failed ? "destructive" : "secondary"}
             className="ml-auto gap-1.5"
             aria-live="polite"
           >
-            {room.status === "Ready" && <CheckIcon className="size-3" aria-hidden />}
-            {room.status === "Failed" && <TriangleAlertIcon className="size-3" aria-hidden />}
+            {room.status === ROOM_STATUS.Ready && <CheckIcon className="size-3" aria-hidden />}
+            {room.status === ROOM_STATUS.Failed && <TriangleAlertIcon className="size-3" aria-hidden />}
             {!finished && <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />}
             {statusLabels[room.status]}
           </Badge>
@@ -230,8 +230,8 @@ function AiBadge({ room }: { room: Room }) {
   if (!canChoose) return null
   return (
     <Badge variant="outline" className="gap-1">
-      {room.aiMode === "Real" ? <SparklesIcon className="size-3" aria-hidden /> : <FlaskConicalIcon className="size-3" aria-hidden />}
-      {room.aiMode === "Real" ? "Real AI" : "Fake AI"}
+      {room.aiMode === AI_MODE.Real ? <SparklesIcon className="size-3" aria-hidden /> : <FlaskConicalIcon className="size-3" aria-hidden />}
+      {room.aiMode === AI_MODE.Real ? "Real AI" : "Fake AI"}
     </Badge>
   )
 }
@@ -294,7 +294,7 @@ function useOpenDesign(room: Room): Design | null {
   const loadDesign = useEditorStore((state) => state.loadDesign)
   const design = useDesign(requested)
   const entry = design.data?.rooms.find((r) => r.roomId === room.id)
-  const ready = room.status === "Ready"
+  const ready = room.status === ROOM_STATUS.Ready
 
   useEffect(() => {
     if (ready && design.data && entry) loadDesign(room.id, design.data.id, toEditorEdits(entry.edits))

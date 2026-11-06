@@ -13,7 +13,7 @@ import { dateFormat, roomCount } from "@/features/designs/format"
 import { useRoom } from "@/features/rooms/api"
 import { isAnalysisFinished } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
-import { HTTP_STATUS, LIMITS, MESSAGES, PATHS, ROUTES } from "@/lib/constants"
+import { HTTP_STATUS, LIMITS, MESSAGES, PATHS, ROOM_STATUS, ROUTES } from "@/lib/constants"
 
 /**
  * Route `/designs/$designId`: one design with its name, description and rooms. The details can be
@@ -195,17 +195,17 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
             <p className="font-medium">{label}</p>
             <Swatches edits={room.edits} />
           </div>
-          {status && status !== "Ready" && (
-            <Badge variant={status === "Failed" ? "destructive" : "secondary"} className="gap-1">
-              {status === "Failed" ? (
+          {status && status !== ROOM_STATUS.Ready && (
+            <Badge variant={status === ROOM_STATUS.Failed ? "destructive" : "secondary"} className="gap-1">
+              {status === ROOM_STATUS.Failed ? (
                 <TriangleAlertIcon className="size-3" aria-hidden />
               ) : (
                 <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
               )}
-              {status === "Failed" ? "Failed" : "Analyzing"}
+              {status === ROOM_STATUS.Failed ? "Failed" : "Analyzing"}
             </Badge>
           )}
-          {status === "Ready" && room.edits.length > 0 && <CheckIcon className="size-4 text-muted-foreground" aria-hidden />}
+          {status === ROOM_STATUS.Ready && room.edits.length > 0 && <CheckIcon className="size-4 text-muted-foreground" aria-hidden />}
           {details && !isAnalysisFinished(details.status) && <span className="sr-only">Still being analyzed</span>}
         </div>
       </Link>

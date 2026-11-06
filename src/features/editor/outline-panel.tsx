@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import type { Room } from "@/features/rooms/types"
 import { useEditorStore } from "./editor-store"
-import { LIMITS } from "@/lib/constants"
+import { LIMITS, OUTLINE_BRUSH_MODE } from "@/lib/constants"
 
 /**
  * The inspector's "Fix outline" section for the selected object: Add and Erase turn on a round
@@ -22,26 +22,26 @@ export function OutlinePanel({ room }: { room: Room }) {
       <div>
         <h2 className="font-medium">Fix outline</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {outlineTool === "Paint"
+          {outlineTool === OUTLINE_BRUSH_MODE.Paint
             ? `Click or drag over the photo where the ${object.label} is missing.`
-            : outlineTool === "Erase"
+            : outlineTool === OUTLINE_BRUSH_MODE.Erase
               ? `Click or drag over the photo where the ${object.label} is marked by mistake.`
               : "If the color misses part of it or spills over, brush the outline here."}
         </p>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Button
-          variant={outlineTool === "Paint" ? "default" : "outline"}
-          aria-pressed={outlineTool === "Paint"}
-          onClick={() => setOutlineTool(outlineTool === "Paint" ? null : "Paint")}
+          variant={outlineTool === OUTLINE_BRUSH_MODE.Paint ? "default" : "outline"}
+          aria-pressed={outlineTool === OUTLINE_BRUSH_MODE.Paint}
+          onClick={() => setOutlineTool(outlineTool === OUTLINE_BRUSH_MODE.Paint ? null : OUTLINE_BRUSH_MODE.Paint)}
         >
           <BrushIcon data-icon="inline-start" />
           Add
         </Button>
         <Button
-          variant={outlineTool === "Erase" ? "default" : "outline"}
-          aria-pressed={outlineTool === "Erase"}
-          onClick={() => setOutlineTool(outlineTool === "Erase" ? null : "Erase")}
+          variant={outlineTool === OUTLINE_BRUSH_MODE.Erase ? "default" : "outline"}
+          aria-pressed={outlineTool === OUTLINE_BRUSH_MODE.Erase}
+          onClick={() => setOutlineTool(outlineTool === OUTLINE_BRUSH_MODE.Erase ? null : OUTLINE_BRUSH_MODE.Erase)}
         >
           <EraserIcon data-icon="inline-start" />
           Erase

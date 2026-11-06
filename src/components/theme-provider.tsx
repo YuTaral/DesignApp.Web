@@ -1,8 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
-import { STORAGE_KEYS } from "@/lib/constants"
-
-/** The user's theme choice; "system" follows the OS setting. */
-export type Theme = "light" | "dark" | "system"
+import { isEnumValue, STORAGE_KEYS, THEME, type Theme } from "@/lib/constants"
 
 /** Media query that matches when the OS is in dark mode. */
 const darkQuery = "(prefers-color-scheme: dark)"
@@ -12,7 +9,7 @@ type ThemeContextValue = {
   /** The user's choice. */
   theme: Theme
   /** The theme actually shown, with "system" resolved. */
-  resolvedTheme: "light" | "dark"
+  resolvedTheme: Exclude<Theme, typeof THEME.system>
   /** Changes and remembers the choice. */
   setTheme: (theme: Theme) => void
 }
@@ -23,20 +20,20 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 function readStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.theme)
-    if (stored === "light" || stored === "dark" || stored === "system") return stored
+    if (isEnumValue(THEME, stored)) return stored
   } catch {
     // Storage can be blocked (private mode); fall back to the system theme.
   }
-  return "system"
+  return THEME.system
 }
 
 /**
  * Resolves "system" to light or dark using the OS setting.
  * @param theme - The user's choice.
  */
-function resolve(theme: Theme): "light" | "dark" {
-  if (theme !== "system") return theme
-  return matchMedia(darkQuery).matches ? "dark" : "light"
+function resolve(theme: Theme): Exclude<Theme, typeof THEME.system> {
+  if (theme !== THEME.system) return theme
+  return matchMedia(darkQuery).matches ? THEME.dark : THEME.light
 }
 
 /**
@@ -51,10 +48,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const apply = () => {
       const next = resolve(theme)
       setResolvedTheme(next)
-      document.documentElement.classList.toggle("dark", next === "dark")
+      document.documentElement.classList.toggle("dark", next === THEME.dark)
     }
     apply()
-    if (theme !== "system") return
+    if (theme !== THEME.system) return
     const media = matchMedia(darkQuery)
     media.addEventListener("change", apply)
     return () => media.removeEventListener("change", apply)

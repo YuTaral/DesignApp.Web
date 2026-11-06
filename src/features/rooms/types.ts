@@ -1,51 +1,15 @@
-import { API } from "@/lib/constants"
+import { type AiMode, type AnalysisScope, API, type ObjectCategory, ROOM_STATUS, type RoomStatus } from "@/lib/constants"
 
 // Mirrors RoomResponse in DesignApp.Api (src/DesignApp.Api/Rooms/RoomResponse.cs).
 // The full contract is in the API docs at /scalar.
-
-/** Where a room is in the AI analysis, from upload to ready. */
-export type RoomStatus = "Uploaded" | "Analyzing" | "Segmenting" | "Ready" | "Failed"
 
 /**
  * Whether the analysis is over, successfully or not.
  * @param status - The room's status.
  */
 export function isAnalysisFinished(status: RoomStatus) {
-  return status === "Ready" || status === "Failed"
+  return status === ROOM_STATUS.Ready || status === ROOM_STATUS.Failed
 }
-
-/** The kind of a detected object. */
-export type ObjectCategory =
-  | "Wall"
-  | "Floor"
-  | "Ceiling"
-  | "Furniture"
-  | "Textile"
-  | "Decor"
-  | "Lighting"
-  | "Fixture"
-  | "Other"
-  | "Opening"
-
-/** How each category is shown to the user. */
-export const categoryNames: Record<ObjectCategory, string> = {
-  Wall: "Wall",
-  Floor: "Floor",
-  Ceiling: "Ceiling",
-  Furniture: "Furniture",
-  Textile: "Textile",
-  Decor: "Decor",
-  Lighting: "Lighting",
-  Fixture: "Fixture",
-  Other: "Other",
-  Opening: "Door/window",
-}
-
-/** What the AI looks for, chosen at upload. */
-export type AnalysisScope = "WholeRoom" | "NoDoorsOrWindows" | "ObjectsOnly"
-
-/** Which AI analyzes a photo: the free built-in fakes or Claude and SAM 3. */
-export type AiMode = "Fake" | "Real"
 
 /** Normalized to 0..1 of the photo's width and height. */
 export type BoundingBox = { x: number; y: number; width: number; height: number }

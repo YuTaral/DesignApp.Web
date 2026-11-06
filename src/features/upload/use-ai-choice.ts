@@ -1,8 +1,7 @@
 import { useState } from "react"
 
 import type { AiAvailability } from "@/features/rooms/api"
-import type { AiMode } from "@/features/rooms/types"
-import { STORAGE_KEYS } from "@/lib/constants"
+import { AI_MODE, type AiMode, isEnumValue, STORAGE_KEYS } from "@/lib/constants"
 
 /**
  * The AI the user picked in this tab, if any.
@@ -11,7 +10,7 @@ import { STORAGE_KEYS } from "@/lib/constants"
 function remembered(): AiMode | null {
   try {
     const saved = sessionStorage.getItem(STORAGE_KEYS.ai)
-    return saved === "Fake" || saved === "Real" ? saved : null
+    return isEnumValue(AI_MODE, saved) ? saved : null
   } catch {
     return null
   }
@@ -34,6 +33,6 @@ export function useAiChoice(availability: AiAvailability | undefined) {
     }
   }
   if (!availability?.canChoose) return [undefined, choose] as const
-  const usable = picked === "Real" && !availability.realAvailable ? null : picked
+  const usable = picked === AI_MODE.Real && !availability.realAvailable ? null : picked
   return [usable ?? availability.default, choose] as const
 }

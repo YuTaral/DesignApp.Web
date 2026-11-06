@@ -1,12 +1,12 @@
 import { cn } from "cn"
+import { ANALYSIS_SCOPE, type AnalysisScope } from "@/lib/constants"
 
-import type { AnalysisScope } from "@/features/rooms/types"
 
 /** The choices, with what each finds. */
 const SCOPES: { value: AnalysisScope; title: string; text: string }[] = [
-  { value: "WholeRoom", title: "Whole room", text: "Walls, floor, ceiling, doors, windows, furniture and decor" },
-  { value: "NoDoorsOrWindows", title: "Skip doors & windows", text: "Everything except doors and windows" },
-  { value: "ObjectsOnly", title: "Objects only", text: "Furniture, cabinets and decor; no walls or floor" },
+  { value: ANALYSIS_SCOPE.WholeRoom, title: "Whole room", text: "Walls, floor, ceiling, doors, windows, furniture and decor" },
+  { value: ANALYSIS_SCOPE.NoDoorsOrWindows, title: "Skip doors & windows", text: "Everything except doors and windows" },
+  { value: ANALYSIS_SCOPE.ObjectsOnly, title: "Objects only", text: "Furniture, cabinets and decor; no walls or floor" },
 ]
 
 /**

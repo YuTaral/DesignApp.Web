@@ -47,4 +47,6 @@ src/
 
 Fixed values go in `src/lib/constants.ts` (`API`, `ROUTES`, `QUERY_KEYS`, `LIMITS`, `MESSAGES`...),
 never inline. Limits that mirror the API name the API constant they follow. Static button labels,
-headings, page copy and Tailwind classes stay in the components.
+headings, page copy and Tailwind classes stay in the components. The API's enums are const objects
+there too (`ROOM_STATUS`, `AI_MODE`, `ANALYSIS_SCOPE`...), with their types derived from them, so code
+compares against `ROOM_STATUS.Ready` rather than a string.

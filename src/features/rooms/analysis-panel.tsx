@@ -6,8 +6,8 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEditorStore } from "@/features/editor/editor-store"
-import { categoryNames, type ObjectCategory, type Room, type RoomStatus } from "./types"
-import { MESSAGES, ROUTES } from "@/lib/constants"
+import type { Room } from "./types"
+import { CATEGORY_NAMES, MESSAGES, type ObjectCategory, ROOM_STATUS, type RoomStatus, ROUTES } from "@/lib/constants"
 
 /** The visible analysis steps and the statuses during which each one is running. */
 const steps: { label: string; runningFor: RoomStatus[] }[] = [
@@ -24,8 +24,8 @@ const categoryOrder: ObjectCategory[] = ["Wall", "Floor", "Ceiling", "Opening", 
  * @param props.room - The room being edited.
  */
 export function AnalysisPanel({ room }: { room: Room }) {
-  if (room.status === "Failed") return <AnalysisFailed reason={room.failureReason} />
-  if (room.status === "Ready") return <ObjectList room={room} />
+  if (room.status === ROOM_STATUS.Failed) return <AnalysisFailed reason={room.failureReason} />
+  if (room.status === ROOM_STATUS.Ready) return <ObjectList room={room} />
   return <AnalysisProgress status={room.status} />
 }
 
@@ -111,7 +111,7 @@ function ObjectList({ room }: { room: Room }) {
               />
               <span className="min-w-0 flex-1 truncate text-sm first-letter:uppercase">{object.label}</span>
               {edits[object.index] && <span className="size-1.5 rounded-full bg-primary" aria-label="recolored" />}
-              <span className="text-xs text-muted-foreground">{categoryNames[object.category] ?? object.category}</span>
+              <span className="text-xs text-muted-foreground">{CATEGORY_NAMES[object.category] ?? object.category}</span>
             </button>
           </li>
         ))}

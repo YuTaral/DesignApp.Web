@@ -10,7 +10,7 @@ import { useEditorStore } from "./editor-store"
 import { labelAt, loadLabelMap, type LabelMap } from "./label-map"
 import { hexToOklab } from "./oklab"
 import { RoomRenderer, type PhotoRect, type RenderEdit } from "./renderer"
-import { LIMITS, MESSAGES } from "@/lib/constants"
+import { LIMITS, MESSAGES, OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
 
 /** A brush stroke being drawn: painted into a copy of the label map for the live preview. */
 type Stroke = {
@@ -27,7 +27,7 @@ type Stroke = {
 type View = { zoom: number; x: number; y: number }
 
 /** A finished stroke, as the canvas hands it over. */
-export type CanvasStroke = { mode: "Paint" | "Erase"; radius: number; points: StrokePoint[] }
+export type CanvasStroke = { mode: OutlineBrushMode; radius: number; points: StrokePoint[] }
 
 /**
  * The interactive photo: shows the room with its recolors, outlines the object under the pointer
@@ -293,7 +293,7 @@ export function RoomCanvas({
         role="img"
         aria-label={
           brushing
-            ? `Click or drag over the photo to ${outlineTool === "Paint" ? "add to" : "erase from"} the selected object.`
+            ? `Click or drag over the photo to ${outlineTool === OUTLINE_BRUSH_MODE.Paint ? "add to" : "erase from"} the selected object.`
             : "Your room. Click an object in the photo, or choose it from the list, to restyle it."
         }
         data-photo-rect={JSON.stringify(rect)}
@@ -335,7 +335,7 @@ export function RoomCanvas({
       {map && brushing && (
         <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 rounded-lg bg-background/85 px-2.5 py-1 text-xs font-medium shadow-soft backdrop-blur">
           {saving && <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />}
-          {saving ? "Saving…" : outlineTool === "Paint" ? "Adding: drag over what's missing" : "Erasing: drag over what's wrong"}
+          {saving ? "Saving…" : outlineTool === OUTLINE_BRUSH_MODE.Paint ? "Adding: drag over what's missing" : "Erasing: drag over what's wrong"}
         </div>
       )}
 
@@ -345,7 +345,7 @@ export function RoomCanvas({
           data-brush-cursor
           className={cn(
             "pointer-events-none absolute rounded-full border-2 shadow-[0_0_0_1px_rgb(0_0_0/0.45)]",
-            outlineTool === "Paint" ? "border-white" : "border-dashed border-white"
+            outlineTool === OUTLINE_BRUSH_MODE.Paint ? "border-white" : "border-dashed border-white"
           )}
           style={{ left: cursor.x - brushSize / 2, top: cursor.y - brushSize / 2, width: brushSize, height: brushSize }}
         />

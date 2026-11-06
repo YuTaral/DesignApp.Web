@@ -1,7 +1,6 @@
 import { create } from "zustand"
 
-import type { OutlineBrushMode } from "@/features/rooms/api"
-import { DEFAULT_STRENGTH, LIMITS } from "@/lib/constants"
+import { DEFAULT_STRENGTH, LIMITS, type OutlineBrushMode } from "@/lib/constants"
 
 /** One object's recolor. */
 export type ObjectEdit = {

@@ -1,10 +1,6 @@
 import { useState } from "react"
 
-import type { AnalysisScope } from "@/features/rooms/types"
-import { STORAGE_KEYS } from "@/lib/constants"
-
-/** The scopes that may be remembered. */
-const KNOWN: AnalysisScope[] = ["WholeRoom", "NoDoorsOrWindows", "ObjectsOnly"]
+import { ANALYSIS_SCOPE, type AnalysisScope, isEnumValue, STORAGE_KEYS } from "@/lib/constants"
 
 /**
  * The last scope this browser chose, or the whole room.
@@ -13,9 +9,9 @@ const KNOWN: AnalysisScope[] = ["WholeRoom", "NoDoorsOrWindows", "ObjectsOnly"]
 function rememberedScope(): AnalysisScope {
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.scope)
-    return KNOWN.includes(saved as AnalysisScope) ? (saved as AnalysisScope) : "WholeRoom"
+    return isEnumValue(ANALYSIS_SCOPE, saved) ? saved : ANALYSIS_SCOPE.WholeRoom
   } catch {
-    return "WholeRoom"
+    return ANALYSIS_SCOPE.WholeRoom
   }
 }
 

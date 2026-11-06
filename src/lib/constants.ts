@@ -112,6 +112,77 @@ export const MIME = {
   anyImage: "image/*",
 } as const
 
+// Enums. Each mirrors the API enum of the same name (Domain or Application Constants) and is sent
+// as its name in JSON; the type is derived from the values, so the two never drift apart.
+
+/** Where a room is in the AI analysis, from upload to ready. */
+export const ROOM_STATUS = {
+  Uploaded: "Uploaded",
+  Analyzing: "Analyzing",
+  Segmenting: "Segmenting",
+  Ready: "Ready",
+  Failed: "Failed",
+} as const
+export type RoomStatus = (typeof ROOM_STATUS)[keyof typeof ROOM_STATUS]
+
+/** The kind of a detected object. */
+export const OBJECT_CATEGORY = {
+  Wall: "Wall",
+  Floor: "Floor",
+  Ceiling: "Ceiling",
+  Furniture: "Furniture",
+  Textile: "Textile",
+  Decor: "Decor",
+  Lighting: "Lighting",
+  Fixture: "Fixture",
+  Other: "Other",
+  Opening: "Opening",
+} as const
+export type ObjectCategory = (typeof OBJECT_CATEGORY)[keyof typeof OBJECT_CATEGORY]
+
+/** How each category is shown to the user. */
+export const CATEGORY_NAMES: Record<ObjectCategory, string> = {
+  Wall: "Wall",
+  Floor: "Floor",
+  Ceiling: "Ceiling",
+  Furniture: "Furniture",
+  Textile: "Textile",
+  Decor: "Decor",
+  Lighting: "Lighting",
+  Fixture: "Fixture",
+  Other: "Other",
+  Opening: "Door/window",
+}
+
+/** What the AI looks for, chosen at upload. */
+export const ANALYSIS_SCOPE = {
+  WholeRoom: "WholeRoom",
+  NoDoorsOrWindows: "NoDoorsOrWindows",
+  ObjectsOnly: "ObjectsOnly",
+} as const
+export type AnalysisScope = (typeof ANALYSIS_SCOPE)[keyof typeof ANALYSIS_SCOPE]
+
+/** Which AI analyzes a photo: the free built-in fakes or Claude and SAM 3. */
+export const AI_MODE = { Fake: "Fake", Real: "Real" } as const
+export type AiMode = (typeof AI_MODE)[keyof typeof AI_MODE]
+
+/** Whether a brush stroke adds pixels to the object or takes them away. */
+export const OUTLINE_BRUSH_MODE = { Paint: "Paint", Erase: "Erase" } as const
+export type OutlineBrushMode = (typeof OUTLINE_BRUSH_MODE)[keyof typeof OUTLINE_BRUSH_MODE]
+
+/** The user's theme choice; system follows the OS setting. */
+export const THEME = { light: "light", dark: "dark", system: "system" } as const
+export type Theme = (typeof THEME)[keyof typeof THEME]
+
+/**
+ * Whether a stored value is one of an enum's values.
+ * @param values - The enum object, such as AI_MODE.
+ * @param value - The value to check.
+ */
+export function isEnumValue<T extends Record<string, string>>(values: T, value: unknown): value is T[keyof T] {
+  return typeof value === "string" && (Object.values(values) as string[]).includes(value)
+}
+
 /** Paint-like colors offered for every object: warm neutrals, earthy tones and a few deep accents. */
 export const SWATCHES = [
   "#F4F1EA", "#E8DCC8", "#D8C3A5", "#C9A27E", "#B5543C", "#8C3B2E",

@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { ApiError, apiUrl, getJson, sendJson, toApiError } from "@/lib/api"
-import { isAnalysisFinished, type AiMode, type AnalysisScope, type Room } from "./types"
-import { API, HTTP_STATUS, LIMITS, MESSAGES, MIME, QUERY_KEYS, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
+import { isAnalysisFinished, type Room } from "./types"
+import { type AiMode, type AnalysisScope, API, HTTP_STATUS, LIMITS, MESSAGES, MIME, type OutlineBrushMode, QUERY_KEYS, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
 
 /** Which AI uploads use, and whether each upload may choose (mirrors AiAvailabilityResponse). */
 export type AiAvailability = {
@@ -83,9 +83,6 @@ export function uploadRoom(file: File, { onProgress, signal, scope, ai }: Upload
     request.send(form)
   })
 }
-
-/** Whether a brush stroke adds pixels to the object or takes them away. */
-export type OutlineBrushMode = "Paint" | "Erase"
 
 /** One brush stroke on an object's outline. */
 export type OutlineStroke = {
