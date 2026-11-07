@@ -14,7 +14,7 @@ npm run e2e         # the four Firefox passes against the running app (Visual St
 ```
 
 `npm run e2e` takes an optional URL (`npm run e2e -- http://localhost:5173`); `DESIGNAPP_ROOMS` points
-at the five sample photos (default `C:\Users\yutar\Desktop\rooms`). Screenshots go to `e2e/shots/`. A
+at the five sample photos (default `C:\Users\yutar\Desktop\DesignApp\rooms`). Screenshots go to `e2e/shots/`. A
 single pass runs with `node e2e/<pass>.mjs`; `--show` opens a visible browser.
 
 ## Code conventions

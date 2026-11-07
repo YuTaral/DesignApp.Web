@@ -13,7 +13,7 @@ export const WEB = (args.find((a) => /^https?:\/\//.test(a)) ?? process.env.DESI
 /** The other arguments (such as photo names), without the URL and the --flags. */
 export const ARGS = args.filter((a) => !/^https?:\/\//.test(a) && !a.startsWith('--'))
 /** The five sample photos: DESIGNAPP_ROOMS, else the usual folder. */
-export const ROOMS = process.env.DESIGNAPP_ROOMS ?? 'C:\\Users\\yutar\\Desktop\\rooms'
+export const ROOMS = process.env.DESIGNAPP_ROOMS ?? 'C:\\Users\\yutar\\Desktop\\DesignApp\\rooms'
 
 export async function launch({ headless = !process.argv.includes('--show') } = {}) {
   fs.mkdirSync(SHOTS, { recursive: true })
