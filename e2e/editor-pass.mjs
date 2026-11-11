@@ -147,6 +147,35 @@ try {
     await page.click('[aria-label="Fit photo"]'); await frame()
     step(`${file}: zoom in and fit`, zoomed > 0, `photo width ${Math.round(zoomed)} px when zoomed`)
 
+    // New object (first photo): mark an area by hand, name it, save; it can be selected there, and undo hides it.
+    if (file === files[0]) {
+      const listed = () => page.evaluate(() => [...document.querySelectorAll('ul [data-index]')].map((b) => b.textContent.toLowerCase()))
+      await page.click('::-p-text(New object)'); await frame()
+      const start = await toPage(op.u, op.v)
+      await page.mouse.move(start.x, start.y)
+      await page.mouse.down()
+      for (let i = 1; i <= 5; i++) { await page.mouse.move(start.x + i * 4, start.y + i * 2); await sleep(16) }
+      await page.mouse.up(); await frame()
+      const saveDisabled = await page.evaluate(() => document.querySelector('form[aria-label="New object"] button[type=submit]').disabled)
+      await page.type('#new-object-name', 'test lamp')
+      await page.select('#new-object-type', 'Lighting')
+      await shot(`${name}-marking`)
+      await page.click('form[aria-label="New object"] button[type=submit]')
+      await until(page, () => document.querySelector('aside h2.truncate')?.textContent?.trim() === 'test lamp', { label: 'new object selected' })
+      const inList = (await listed()).some((t) => t.includes('test lamp'))
+      step(`${file}: a hand-marked object is saved, selected and listed`, saveDisabled && inList, `Save waited for a name: ${saveDisabled}`)
+
+      await page.keyboard.press('Escape'); await frame()
+      await page.mouse.click(start.x + 8, start.y + 4); await frame()
+      step(`${file}: clicking the marked area selects the new object`, (await heading()) === 'test lamp', (await heading()) ?? 'none')
+
+      await page.click('[aria-label="Undo"]')
+      await until(page, () => ![...document.querySelectorAll('ul [data-index]')].some((b) => b.textContent.toLowerCase().includes('test lamp')), { label: 'undo hides it' })
+      await page.click('[aria-label="Redo"]')
+      await until(page, () => [...document.querySelectorAll('ul [data-index]')].some((b) => b.textContent.toLowerCase().includes('test lamp')), { label: 'redo shows it' })
+      step(`${file}: undo hides the new object, redo brings it back`, true)
+    }
+
     await page.mouse.move(5, 5); await frame()
     await shot(`${name}-edited`)
   }

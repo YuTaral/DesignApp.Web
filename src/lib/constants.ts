@@ -18,6 +18,7 @@ export const API = {
   rooms: "/api/rooms",
   room: (id: string) => `/api/rooms/${id}`,
   roomOutline: (id: string) => `/api/rooms/${id}/outline`,
+  roomObjects: (id: string) => `/api/rooms/${id}/objects`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
   roomLabelMap: (id: string, revision: number) => `/api/rooms/${id}/labels/${revision}`,
 } as const
@@ -88,6 +89,8 @@ export const LIMITS = {
   minPasswordLength: 8,
   /** Application Constants.Strokes.MaxPoints. */
   maxStrokePoints: 10_000,
+  /** A hand-marked object: Application Constants.Marks. */
+  mark: { maxStrokes: 100, nameLength: 60 },
   /** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
   brushSizes: { min: 2, max: 120, default: 24 },
   zoom: { min: 1, max: 8 },
@@ -165,6 +168,9 @@ export type AnalysisScope = (typeof ANALYSIS_SCOPE)[keyof typeof ANALYSIS_SCOPE]
 /** Which AI analyzes a photo: the free built-in fakes or Claude and SAM 3. */
 export const AI_MODE = { Fake: "Fake", Real: "Real" } as const
 export type AiMode = (typeof AI_MODE)[keyof typeof AI_MODE]
+
+/** How the area being marked as a new object is tinted while marking: the accent color over a mid gray. */
+export const MARK_PREVIEW = { color: "#F97316", source: "#808080", strength: 0.75 } as const
 
 /** Whether a brush stroke adds pixels to the object or takes them away. */
 export const OUTLINE_BRUSH_MODE = { Paint: "Paint", Erase: "Erase" } as const

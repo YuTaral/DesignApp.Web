@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { ApiError, apiUrl, getJson, sendJson, toApiError } from "@/lib/api"
 import { isAnalysisFinished, type Room } from "./types"
-import { type AiMode, type AnalysisScope, API, HTTP_STATUS, LIMITS, MESSAGES, MIME, type OutlineBrushMode, QUERY_KEYS, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
+import { type AiMode, type AnalysisScope, API, HTTP_STATUS, LIMITS, MESSAGES, MIME, type ObjectCategory, type OutlineBrushMode, QUERY_KEYS, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
 
 /** Which AI uploads use, and whether each upload may choose (mirrors AiAvailabilityResponse). */
 export type AiAvailability = {
@@ -107,6 +107,29 @@ export type OutlineStroke = {
  */
 export function saveOutlineStroke(roomId: string, stroke: OutlineStroke): Promise<Room> {
   return sendJson<Room>("POST", API.roomOutline(roomId), stroke)
+}
+
+/** An object the user marked by hand, as sent to the API. */
+export type NewObject = {
+  /** The label map version the mark was drawn on. */
+  baseRevision: number
+  /** Its name. */
+  label: string
+  /** Its type. */
+  category: ObjectCategory
+  /** The strokes, in order: Paint marks, Erase unmarks; each with its brush radius in label map pixels. */
+  strokes: { mode: OutlineBrushMode; radius: number; points: { x: number; y: number }[] }[]
+}
+
+/**
+ * Adds an object the user marked by hand: the marked pixels become a new object in a new label map version.
+ * @param roomId - The room.
+ * @param object - The name, type and strokes.
+ * @returns The room, with the new object and its new labelMapRevision.
+ * @throws ApiError with a message for the user when it can't be added (such as a missing name).
+ */
+export function addRoomObject(roomId: string, object: NewObject): Promise<Room> {
+  return sendJson<Room>("POST", API.roomObjects(roomId), object)
 }
 
 /**

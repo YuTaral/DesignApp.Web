@@ -4,10 +4,10 @@ import { useEditorStore } from "./editor-store"
 
 /**
  * Keyboard shortcuts for the editor: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Escape
- * ends the brush or else deselects. Ignored while typing in a field.
+ * cancels marking a new object, ends the brush, or else deselects. Ignored while typing in a field.
  */
 export function useEditorShortcuts() {
-  const { undo, redo, select, outlineTool, setOutlineTool } = useEditorStore()
+  const { undo, redo, select, outlineTool, setOutlineTool, marking, stopMarking } = useEditorStore()
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -18,7 +18,8 @@ export function useEditorShortcuts() {
       if (mod && key === "z" && !event.shiftKey) undo()
       else if (mod && ((key === "z" && event.shiftKey) || key === "y")) redo()
       else if (key === "escape") {
-        if (outlineTool) setOutlineTool(null)
+        if (marking) stopMarking()
+        else if (outlineTool) setOutlineTool(null)
         else select(0)
       }
       else return
@@ -26,5 +27,5 @@ export function useEditorShortcuts() {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [undo, redo, select, outlineTool, setOutlineTool])
+  }, [undo, redo, select, outlineTool, setOutlineTool, marking, stopMarking])
 }

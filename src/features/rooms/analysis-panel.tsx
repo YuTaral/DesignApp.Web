@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { Link } from "@tanstack/react-router"
-import { CheckIcon, CircleIcon, LoaderCircleIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, CircleIcon, LoaderCircleIcon, PlusIcon, TriangleAlertIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
@@ -69,13 +69,16 @@ function AnalysisProgress({ status }: { status: RoomStatus }) {
 
 /**
  * The detected objects, surfaces first, each with its current color. Choosing one selects it in
- * the editor; pointing at one highlights it in the photo.
+ * the editor; pointing at one highlights it in the photo. Objects without pixels in the outlines shown (a new
+ * object after undo) are left out. "New object" starts marking one the AI missed.
  * @param props.room - The analyzed room.
  */
 function ObjectList({ room }: { room: Room }) {
-  const { selected, edits, select, hover } = useEditorStore()
+  const { selected, edits, select, hover, marking, comparing, revision, presentObjects, startMarking } = useEditorStore()
   const listRef = useRef<HTMLUListElement>(null)
-  const objects = [...room.objects].sort(
+  // Until the outlines of the version shown are loaded, every object is listed (a new one must not blink out).
+  const present = presentObjects?.revision === (revision ?? room.labelMapRevision) ? presentObjects.indexes : null
+  const objects = room.objects.filter((o) => present?.has(o.index) ?? true).sort(
     (a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category) || a.index - b.index
   )
 
@@ -86,9 +89,17 @@ function ObjectList({ room }: { room: Room }) {
 
   return (
     <div className="flex min-h-0 flex-col">
-      <h2 className="font-medium">Objects</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-medium">Objects</h2>
+        <Button variant="outline" size="sm" disabled={marking || comparing} onClick={startMarking}>
+          <PlusIcon data-icon="inline-start" />
+          New object
+        </Button>
+      </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        {objects.length === 1 ? "1 object" : `${objects.length} objects`} found in your photo.
+        {marking
+          ? "Mark the new object on the photo, then name it and save."
+          : `${objects.length === 1 ? "1 object" : `${objects.length} objects`} in your photo.`}
       </p>
       <ul ref={listRef} className="-mx-2 mt-3 max-h-[9.5rem] space-y-0.5 overflow-y-auto sm:max-h-72 lg:max-h-[min(24rem,38dvh)]" onMouseLeave={() => hover(0)}>
         {objects.map((object) => (
@@ -97,10 +108,11 @@ function ObjectList({ room }: { room: Room }) {
               type="button"
               data-index={object.index}
               aria-pressed={selected === object.index}
+              disabled={marking}
               onClick={() => select(selected === object.index ? 0 : object.index)}
               onMouseEnter={() => hover(object.index)}
               className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
+                "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
                 selected === object.index && "bg-accent text-accent-foreground hover:bg-accent"
               )}
             >

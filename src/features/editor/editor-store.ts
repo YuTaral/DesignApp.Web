@@ -1,6 +1,7 @@
 import { create } from "zustand"
 
-import { DEFAULT_STRENGTH, LIMITS, type OutlineBrushMode } from "@/lib/constants"
+import type { StrokePoint } from "./brush"
+import { DEFAULT_STRENGTH, LIMITS, OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
 
 /** One object's recolor. */
 export type ObjectEdit = {
@@ -12,6 +13,15 @@ export type ObjectEdit = {
 
 /** All recolors of a room, by object index. */
 export type Edits = Readonly<Record<number, ObjectEdit>>
+
+/** One stroke of an object being marked by hand: Paint marks, Erase unmarks. */
+export type MarkStroke = {
+  mode: OutlineBrushMode
+  /** The brush radius, in label map pixels. */
+  radius: number
+  /** The path, each point 0..1 of the photo's width and height. */
+  points: StrokePoint[]
+}
 
 /** One undo step: the recolors and which label map version (outlines) was shown. */
 type Snapshot = {
@@ -41,6 +51,19 @@ type EditorState = {
   outlineTool: OutlineBrushMode | null
   /** The brush diameter on screen, in CSS px. */
   brushSize: number
+  /** Whether the user is marking a new object by hand (strokes then build its mask instead of being saved). */
+  marking: boolean
+  /** The marking brush: Paint marks pixels, Erase unmarks them. */
+  markTool: OutlineBrushMode
+  /** The strokes of the object being marked, in order. */
+  markStrokes: MarkStroke[]
+  /** How many pixels the object being marked has. */
+  markPixels: number
+  /**
+   * The objects that have pixels in a loaded label map version (an undone new object has none), or null until
+   * one is loaded. Only meaningful while `revision` is that version.
+   */
+  presentObjects: { revision: number; indexes: ReadonlySet<number> } | null
   /** The saved design being edited, or null for recolors not saved yet. */
   designId: string | null
   /** The recolors as last saved or opened, to tell whether there are unsaved changes; null before the first save. */
@@ -75,8 +98,18 @@ type EditorState = {
   setOutlineTool: (tool: OutlineBrushMode | null) => void
   /** Sets the brush diameter (clamped to LIMITS.brushSizes). */
   setBrushSize: (size: number) => void
-  /** Shows a fixed label map version, as one undo step. */
-  applyOutlineFix: (revision: number) => void
+  /** Shows a fixed label map version, as one undo step, and optionally selects an object (a new one). */
+  applyOutlineFix: (revision: number, selectIndex?: number) => void
+  /** Starts marking a new object: deselects, and turns the outline brush and the before/after split off. */
+  startMarking: () => void
+  /** Ends marking, dropping the strokes. */
+  stopMarking: () => void
+  /** Picks the marking brush. */
+  setMarkTool: (tool: OutlineBrushMode) => void
+  /** Records a finished marking stroke and the mask's new pixel count. */
+  addMarkStroke: (stroke: MarkStroke, pixels: number) => void
+  /** Records which objects have pixels in a loaded label map version. */
+  setPresentObjects: (revision: number, indexes: ReadonlySet<number>) => void
   /** Goes one step back. */
   undo: () => void
   /** Goes one step forward again. */
@@ -96,6 +129,11 @@ const initial = (roomId: string | null) => ({
   hovered: 0,
   comparing: false,
   outlineTool: null,
+  marking: false,
+  markTool: OUTLINE_BRUSH_MODE.Paint,
+  markStrokes: [],
+  markPixels: 0,
+  presentObjects: null,
   designId: null,
   savedEdits: null,
 })
@@ -156,7 +194,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (state.revision !== null) return
       set({ revision, history: state.history.map((s) => (s.revision === null ? { ...s, revision } : s)) })
     },
-    select: (index) => set(index === 0 ? { selected: 0, outlineTool: null } : { selected: index }),
+    select: (index) => {
+      if (get().marking) return
+      set(index === 0 ? { selected: 0, outlineTool: null } : { selected: index })
+    },
     hover: (index) => {
       if (get().hovered !== index) set({ hovered: index })
     },
@@ -182,21 +223,34 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     setOutlineTool: (tool) => set({ outlineTool: get().selected ? tool : null, comparing: false }),
     setBrushSize: (size) => set({ brushSize: Math.round(Math.min(LIMITS.brushSizes.max, Math.max(LIMITS.brushSizes.min, size))) }),
-    applyOutlineFix: (revision) => {
+    applyOutlineFix: (revision, selectIndex) => {
       flush()
       commit({ edits: get().edits, revision })
+      if (selectIndex !== undefined) set({ selected: selectIndex })
     },
+    startMarking: () => {
+      flush()
+      set({ marking: true, markTool: OUTLINE_BRUSH_MODE.Paint, markStrokes: [], markPixels: 0, selected: 0, outlineTool: null, comparing: false })
+    },
+    stopMarking: () => set({ marking: false, markStrokes: [], markPixels: 0 }),
+    setMarkTool: (tool) => set({ markTool: tool }),
+    addMarkStroke: (stroke, pixels) => set({ markStrokes: [...get().markStrokes, stroke], markPixels: pixels }),
+    setPresentObjects: (revision, indexes) => set({ presentObjects: { revision, indexes } }),
     undo: () => {
+      if (get().marking) return
       flush()
       const { position } = get()
       if (position > 0) go(position - 1)
     },
     redo: () => {
+      if (get().marking) return
       flush()
       const { history, position } = get()
       if (position < history.length - 1) go(position + 1)
     },
-    toggleCompare: () => set({ comparing: !get().comparing, outlineTool: null }),
+    toggleCompare: () => {
+      if (!get().marking) set({ comparing: !get().comparing, outlineTool: null })
+    },
   }
 })
 

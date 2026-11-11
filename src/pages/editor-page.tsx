@@ -38,6 +38,7 @@ import {
 } from "@/features/designs/api"
 import { ColorPanel } from "@/features/editor/color-panel"
 import { sameEdits, useEditorStore, type Edits } from "@/features/editor/editor-store"
+import { NewObjectPanel } from "@/features/editor/new-object-panel"
 import { OutlinePanel } from "@/features/editor/outline-panel"
 import { useOutlineFixes } from "@/features/editor/use-outline-fixes"
 import { RoomCanvas } from "@/features/editor/room-canvas"
@@ -103,6 +104,7 @@ function Editor({ room }: { room: Room }) {
   const editable = room.status === ROOM_STATUS.Ready && room.labelMapUrl !== null
   useLiveRoom(room.id, finished)
   const open = useEditorStore((state) => state.open)
+  const marking = useEditorStore((state) => state.marking)
   useEffect(() => open(room.id), [open, room.id])
   const openDesign = useOpenDesign(room)
 
@@ -163,7 +165,9 @@ function Editor({ room }: { room: Room }) {
 
         <Separator />
 
-        {editable ? (
+        {editable && marking ? (
+          <NewObjectPanel room={room} />
+        ) : editable ? (
           <>
             <ColorPanel room={room} />
             <OutlinePanel room={room} />
@@ -247,7 +251,7 @@ function ReadyCanvas({ room }: { room: Room }) {
 
 /** Undo, redo, before/after and reset-all, above the canvas. Also turns on the keyboard shortcuts. */
 function EditorToolbar() {
-  const { history, position, comparing, edits, undo, redo, toggleCompare, resetAll } = useEditorStore()
+  const { history, position, comparing, edits, marking, undo, redo, toggleCompare, resetAll } = useEditorStore()
   useEditorShortcuts()
   const edited = Object.keys(edits).length > 0
 
@@ -255,7 +259,7 @@ function EditorToolbar() {
     <div className="flex items-center gap-1">
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Undo" disabled={position === 0} onClick={undo}>
+          <Button variant="ghost" size="icon" aria-label="Undo" disabled={marking || position === 0} onClick={undo}>
             <Undo2Icon />
           </Button>
         </TooltipTrigger>
@@ -263,13 +267,13 @@ function EditorToolbar() {
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Redo" disabled={position >= history.length - 1} onClick={redo}>
+          <Button variant="ghost" size="icon" aria-label="Redo" disabled={marking || position >= history.length - 1} onClick={redo}>
             <Redo2Icon />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Redo (Ctrl+Shift+Z)</TooltipContent>
       </Tooltip>
-      <Button variant={comparing ? "secondary" : "ghost"} size="sm" aria-pressed={comparing} disabled={!edited} onClick={toggleCompare}>
+      <Button variant={comparing ? "secondary" : "ghost"} size="sm" aria-pressed={comparing} disabled={marking || !edited} onClick={toggleCompare}>
         <ColumnsIcon data-icon="inline-start" />
         Compare
       </Button>
@@ -313,6 +317,8 @@ function useOpenDesign(room: Room): Design | null {
 /**
  * Saving the colors. Guests are asked to sign in first (the colors stay while they do). A room in
  * a design saves its colors there; any other room is saved into a new design or an existing one.
+ * While a new object is being marked, saving is off until the object is saved or cancelled, so a design is
+ * never saved with a half-finished mark left out.
  * @param props.room - The room shown.
  * @param props.editable - Whether the room is ready to edit.
  * @param props.design - The design the room is in, if any.
@@ -320,11 +326,23 @@ function useOpenDesign(room: Room): Design | null {
 function SaveDesign({ room, editable, design }: { room: Room; editable: boolean; design: Design | null }) {
   const account = useAccount().data
   const here = useRouterState({ select: (state) => state.location.href })
-  const { edits, savedEdits, markSaved } = useEditorStore()
+  const { edits, savedEdits, markSaved, marking } = useEditorStore()
   const saveColors = useSaveRoomColors()
   const [choosing, setChoosing] = useState(false)
   const recolored = Object.keys(edits).length > 0
   const dirty = savedEdits ? !sameEdits(edits, savedEdits) : recolored
+
+  if (marking) {
+    return (
+      <div className="mt-auto space-y-2">
+        <Button size="lg" className="w-full" disabled>
+          <SaveIcon data-icon="inline-start" />
+          {!account?.signedIn ? "Sign in to save" : design ? "Save changes" : "Save design"}
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">Save or cancel the new object first.</p>
+      </div>
+    )
+  }
 
   if (!account?.signedIn) {
     return (

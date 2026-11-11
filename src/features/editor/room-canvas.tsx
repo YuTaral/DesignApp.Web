@@ -5,17 +5,21 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { labelMapUrl, type Room } from "@/features/rooms/types"
 import { apiUrl } from "@/lib/api"
-import { stampStroke, type StrokePoint } from "./brush"
+import { stampMark, stampStroke, type StrokePoint } from "./brush"
 import { useEditorStore } from "./editor-store"
 import { labelAt, loadLabelMap, type LabelMap } from "./label-map"
 import { hexToOklab } from "./oklab"
 import { RoomRenderer, type PhotoRect, type RenderEdit } from "./renderer"
-import { LIMITS, MESSAGES, OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
+import { LIMITS, MARK_PREVIEW, MESSAGES, OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
 
-/** A brush stroke being drawn: painted into a copy of the label map for the live preview. */
+/**
+ * A brush stroke being drawn: painted into a copy of the label map for the live preview, or, while marking a
+ * new object, into the mark's mask (with the mask as it was before the stroke, to undo a cancelled one).
+ */
 type Stroke = {
   pointerId: number
   working: Uint8Array
+  maskBefore: Uint8Array | null
   points: StrokePoint[]
   /** The last point, in CSS px, to skip moves under a pixel. */
   lastScreen: { x: number; y: number }
@@ -33,7 +37,9 @@ export type CanvasStroke = { mode: OutlineBrushMode; radius: number; points: Str
  * The interactive photo: shows the room with its recolors, outlines the object under the pointer
  * and the selected one, and handles tap/click to select, drag to pan, wheel/pinch/buttons to zoom,
  * and the before/after handle. While an outline brush is on, a click or drag paints or erases the
- * selected object under a round brush instead, shown live; the middle mouse button still pans.
+ * selected object under a round brush instead, shown live; the middle mouse button still pans. While a new
+ * object is being marked, strokes build its mask instead, shown as the selected object, and nothing is saved
+ * until the inspector's Save.
  * @param props.room - A room whose analysis is Ready.
  * @param props.onStroke - Saves a finished stroke; resolves to whether it was saved (if not, the preview is undone).
  * @param props.saving - Whether a stroke is being saved (new strokes wait until it's done).
@@ -56,7 +62,10 @@ export function RoomCanvas({
   const [view, setView] = useState<View>({ zoom: 1, x: 0, y: 0 })
   const [split, setSplit] = useState(0.5)
 
-  const { edits, selected, hovered, comparing, select, hover, revision, outlineTool, brushSize } = useEditorStore()
+  const {
+    edits, selected, hovered, comparing, select, hover, revision, outlineTool, brushSize,
+    marking, markTool, markStrokes, addMarkStroke, presentObjects, setPresentObjects,
+  } = useEditorStore()
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const [previewTick, setPreviewTick] = useState(0)
   // The outlines shown: the version the editor is on (it changes with fixes, undo and redo).
@@ -107,6 +116,31 @@ export function RoomCanvas({
     return () => abort.abort()
   }, [labelsUrl, map])
 
+  // Which objects have pixels in the outlines shown: the object list hides the others (an undone new object).
+  const shownRevision = revision ?? room.labelMapRevision
+  const presentKnown = presentObjects?.revision === shownRevision
+  useEffect(() => {
+    if (!map || map.url !== labelsUrl || presentKnown) return
+    const present = new Set<number>()
+    for (const label of map.labels) present.add(label)
+    present.delete(0)
+    setPresentObjects(shownRevision, present)
+  }, [map, labelsUrl, shownRevision, presentKnown, setPresentObjects])
+
+  // The mask of a new object being marked, one byte per label map pixel; dropped when marking ends.
+  const markMask = useRef<Uint8Array | null>(null)
+  useEffect(() => {
+    if (!map) return
+    if (marking && markMask.current?.length !== map.labels.length) {
+      markMask.current = new Uint8Array(map.labels.length)
+    } else if (!marking && markMask.current) {
+      markMask.current = null
+      // After a save the new outlines are on their way and replace the preview; otherwise show the outlines
+      // again (the draw below runs next, since marking changed).
+      if (map.url === labelsUrl) rendererRef.current?.setLabels(map)
+    }
+  }, [marking, map, labelsUrl])
+
   // Track the container's size, so the canvas fills it at any width.
   useEffect(() => {
     const container = containerRef.current
@@ -120,7 +154,11 @@ export function RoomCanvas({
 
   const rect = useMemo(() => photoRect(size, room, view), [size, room, view])
 
-  // Recolors in the shader's terms: each object's target color and its original main color.
+  // The index the marked object will get, so the preview can show it as the selected object.
+  const markIndex = Math.min(255, Math.max(0, ...room.objects.map((o) => o.index)) + 1)
+
+  // Recolors in the shader's terms: each object's target color and its original main color. While marking, the
+  // mark is tinted too, so even a small one on a pale object is easy to see.
   const renderEdits = useMemo(() => {
     const byIndex = new Map(room.objects.map((o) => [o.index, o]))
     const result = new Map<number, RenderEdit>()
@@ -128,8 +166,9 @@ export function RoomCanvas({
       const object = byIndex.get(Number(index))
       if (object) result.set(object.index, { target: hexToOklab(edit.color), source: hexToOklab(object.dominantColor), strength: edit.strength })
     }
+    if (marking) result.set(markIndex, { target: hexToOklab(MARK_PREVIEW.color), source: hexToOklab(MARK_PREVIEW.source), strength: MARK_PREVIEW.strength })
     return result
-  }, [edits, room.objects])
+  }, [edits, room.objects, marking, markIndex])
 
   useEffect(() => {
     rendererRef.current?.setEdits(renderEdits)
@@ -140,10 +179,13 @@ export function RoomCanvas({
     const renderer = rendererRef.current
     if (!renderer || !map) return
     const frame = requestAnimationFrame(() => {
-      renderer.render({ rect, edits: renderEdits, hovered, selected, split: comparing ? rect.x + rect.width * split : null })
+      renderer.render({
+        rect, edits: renderEdits, hovered: marking ? 0 : hovered, selected: marking ? markIndex : selected,
+        split: comparing ? rect.x + rect.width * split : null,
+      })
     })
     return () => cancelAnimationFrame(frame)
-  }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick])
+  }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick, marking, markIndex])
 
   const zoomAround = useCallback(
     (factor: number, cx: number, cy: number) => {
@@ -184,26 +226,44 @@ export function RoomCanvas({
   }
   const objectAt = (x: number, y: number) => (map ? labelAt(map, (x - rect.x) / rect.width, (y - rect.y) / rect.height) : 0)
   const toPhoto = (x: number, y: number): StrokePoint => ({ x: (x - rect.x) / rect.width, y: (y - rect.y) / rect.height })
-  const brushing = !!outlineTool && !!onStroke && selected > 0
+  const brushing = marking || (!!outlineTool && !!onStroke && selected > 0)
+  const tool = marking ? markTool : outlineTool
 
-  /** Shows the stroke's working copy on the next frame. */
+  /**
+   * The outlines with the mark on top: every marked pixel shows as the new object.
+   * @param mask - The mark.
+   * @param base - The outlines shown.
+   */
+  const markedLabels = (mask: Uint8Array, base: Uint8Array) => {
+    const labels = base.slice()
+    for (let p = 0; p < labels.length; p++) if (mask[p]) labels[p] = markIndex
+    return labels
+  }
+
+  /** Shows the stroke's working copy (or the mark) on the next frame. */
   const showPreview = () => {
     if (previewFrame.current) return
     previewFrame.current = requestAnimationFrame(() => {
       previewFrame.current = 0
       const s = stroke.current
       if (s && map && rendererRef.current) {
-        rendererRef.current.setLabels({ width: map.width, height: map.height, labels: s.working })
+        const labels = s.maskBefore && markMask.current ? markedLabels(markMask.current, map.labels) : s.working
+        rendererRef.current.setLabels({ width: map.width, height: map.height, labels })
         setPreviewTick((n) => n + 1)
       }
     })
   }
 
-  /** Drops the stroke being drawn and shows the saved outlines again. */
+  /** Drops the stroke being drawn and shows the saved outlines (and the mark so far) again. */
   const cancelStroke = () => {
-    if (!stroke.current) return
+    const s = stroke.current
+    if (!s) return
     stroke.current = null
-    if (map) rendererRef.current?.setLabels(map)
+    if (s.maskBefore && markMask.current) markMask.current.set(s.maskBefore)
+    if (map) {
+      const mask = marking ? markMask.current : null
+      rendererRef.current?.setLabels(mask ? { ...map, labels: markedLabels(mask, map.labels) } : map)
+    }
     setPreviewTick((n) => n + 1)
   }
 
@@ -220,9 +280,17 @@ export function RoomCanvas({
     if (brushing && map && !saving && pointers.current.size === 1 && event.button === 0) {
       const radius = Math.max(0.5, (brushSize / 2 / rect.width) * map.width)
       const first = toPhoto(point.x, point.y)
-      const working = map.labels.slice()
-      const changed = stampStroke(working, map.width, map.height, [first], radius, outlineTool!, selected)
-      stroke.current = { pointerId: event.pointerId, working, points: [first], lastScreen: point, radius, changed }
+      const mask = marking ? markMask.current : null
+      if (marking && markStrokes.length >= LIMITS.mark.maxStrokes) return
+      if (mask) {
+        const maskBefore = mask.slice()
+        const changed = stampMark(mask, map.width, map.height, [first], radius, tool!)
+        stroke.current = { pointerId: event.pointerId, working: map.labels, maskBefore, points: [first], lastScreen: point, radius, changed }
+      } else {
+        const working = map.labels.slice()
+        const changed = stampStroke(working, map.width, map.height, [first], radius, tool!, selected)
+        stroke.current = { pointerId: event.pointerId, working, maskBefore: null, points: [first], lastScreen: point, radius, changed }
+      }
       showPreview()
     }
   }
@@ -242,7 +310,10 @@ export function RoomCanvas({
     if (s && s.pointerId === event.pointerId && map) {
       if (Math.hypot(point.x - s.lastScreen.x, point.y - s.lastScreen.y) < 1 || s.points.length >= LIMITS.maxStrokePoints) return
       const next = toPhoto(point.x, point.y)
-      s.changed += stampStroke(s.working, map.width, map.height, [next], s.radius, outlineTool!, selected, s.points[s.points.length - 1])
+      const last = s.points[s.points.length - 1]
+      s.changed += s.maskBefore && markMask.current
+        ? stampMark(markMask.current, map.width, map.height, [next], s.radius, tool!, last)
+        : stampStroke(s.working, map.width, map.height, [next], s.radius, tool!, selected, last)
       s.points.push(next)
       s.lastScreen = point
       showPreview()
@@ -268,12 +339,27 @@ export function RoomCanvas({
 
     const s = stroke.current
     if (s && s.pointerId === event.pointerId) {
+      if (s.maskBefore) {
+        if (event.type === "pointercancel" || s.changed === 0 || !markMask.current) {
+          cancelStroke()
+          return
+        }
+        // The whole mark is drawn now (a quick drag can end before the preview's next frame); it is saved with
+        // the inspector's Save.
+        stroke.current = null
+        if (map) rendererRef.current?.setLabels({ ...map, labels: markedLabels(markMask.current, map.labels) })
+        setPreviewTick((n) => n + 1)
+        let pixels = 0
+        for (const value of markMask.current) pixels += value
+        addMarkStroke({ mode: tool!, radius: s.radius, points: s.points }, pixels)
+        return
+      }
       if (event.type === "pointercancel" || s.changed === 0 || !onStroke) {
         cancelStroke()
         return
       }
       // Keep the preview on screen while it saves; the saved version replaces it, or it is undone.
-      onStroke({ mode: outlineTool!, radius: s.radius, points: s.points }).then((saved) => {
+      onStroke({ mode: tool!, radius: s.radius, points: s.points }).then((saved) => {
         if (stroke.current === s) stroke.current = null
         if (!saved && map) {
           rendererRef.current?.setLabels(map)
@@ -285,7 +371,7 @@ export function RoomCanvas({
     if (wasTap && !brushing) select(objectAt(point.x, point.y))
   }
 
-  const hoveredLabel = room.objects.find((o) => o.index === hovered)?.label
+  const hoveredLabel = marking ? undefined : room.objects.find((o) => o.index === hovered)?.label
 
   return (
     <div ref={containerRef} className="relative h-full min-h-72 w-full overflow-hidden rounded-xl">
@@ -293,7 +379,9 @@ export function RoomCanvas({
         ref={canvasRef}
         role="img"
         aria-label={
-          brushing
+          marking
+            ? `Click or drag over the photo to ${tool === OUTLINE_BRUSH_MODE.Paint ? "mark" : "unmark"} the new object.`
+            : brushing
             ? `Click or drag over the photo to ${outlineTool === OUTLINE_BRUSH_MODE.Paint ? "add to" : "erase from"} the selected object.`
             : "Your room. Click an object in the photo, or choose it from the list, to restyle it."
         }
@@ -336,7 +424,11 @@ export function RoomCanvas({
       {map && brushing && (
         <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 rounded-lg bg-background/85 px-2.5 py-1 text-xs font-medium shadow-soft backdrop-blur">
           {saving && <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />}
-          {saving ? "Saving…" : outlineTool === OUTLINE_BRUSH_MODE.Paint ? "Adding: drag over what's missing" : "Erasing: drag over what's wrong"}
+          {saving
+            ? "Saving…"
+            : marking
+              ? tool === OUTLINE_BRUSH_MODE.Paint ? "Marking: drag over the new object" : "Unmarking: drag over what isn't part of it"
+              : tool === OUTLINE_BRUSH_MODE.Paint ? "Adding: drag over what's missing" : "Erasing: drag over what's wrong"}
         </div>
       )}
 
@@ -346,7 +438,7 @@ export function RoomCanvas({
           data-brush-cursor
           className={cn(
             "pointer-events-none absolute rounded-full border-2 shadow-[0_0_0_1px_rgb(0_0_0/0.45)]",
-            outlineTool === OUTLINE_BRUSH_MODE.Paint ? "border-white" : "border-dashed border-white"
+            tool === OUTLINE_BRUSH_MODE.Paint ? "border-white" : "border-dashed border-white"
           )}
           style={{ left: cursor.x - brushSize / 2, top: cursor.y - brushSize / 2, width: brushSize, height: brushSize }}
         />
