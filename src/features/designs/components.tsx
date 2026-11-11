@@ -177,7 +177,7 @@ export function DeleteDesignDialog({
       text={MESSAGES.deleteDesignText(roomCount(design.rooms.length))}
       action="Delete design"
       pending={remove.isPending}
-      onConfirm={() =>
+      onConfirm={() => {
         remove.mutate(design.id, {
           onSuccess: () => {
             onOpenChange(false)
@@ -186,7 +186,7 @@ export function DeleteDesignDialog({
           },
           onError: (error) => toast.error(errorMessage(error)),
         })
-      }
+      }}
     />
   )
 }

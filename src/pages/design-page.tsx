@@ -227,7 +227,7 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
         text={MESSAGES.removeRoomText}
         action="Remove room"
         pending={remove.isPending}
-        onConfirm={() =>
+        onConfirm={() => {
           remove.mutate(
             { designId: design.id, roomId: room.roomId },
             {
@@ -238,7 +238,7 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
               onError: (error) => toast.error(errorMessage(error)),
             },
           )
-        }
+        }}
       />
     </li>
   )

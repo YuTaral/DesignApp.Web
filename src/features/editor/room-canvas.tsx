@@ -111,9 +111,9 @@ export function RoomCanvas({
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const observer = new ResizeObserver(([entry]) =>
+    const observer = new ResizeObserver(([entry]) => {
       setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
-    )
+    })
     observer.observe(container)
     return () => observer.disconnect()
   }, [])
@@ -139,14 +139,14 @@ export function RoomCanvas({
   useEffect(() => {
     const renderer = rendererRef.current
     if (!renderer || !map) return
-    const frame = requestAnimationFrame(() =>
+    const frame = requestAnimationFrame(() => {
       renderer.render({ rect, edits: renderEdits, hovered, selected, split: comparing ? rect.x + rect.width * split : null })
-    )
+    })
     return () => cancelAnimationFrame(frame)
   }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick])
 
   const zoomAround = useCallback(
-    (factor: number, cx: number, cy: number) =>
+    (factor: number, cx: number, cy: number) => {
       setView((v) => {
         const zoom = clamp(v.zoom * factor, LIMITS.zoom.min, LIMITS.zoom.max)
         const applied = zoom / v.zoom
@@ -154,7 +154,8 @@ export function RoomCanvas({
         const centerX = size.width / 2 + v.x
         const centerY = size.height / 2 + v.y
         return clampView(size, room, { zoom, x: v.x + (cx - centerX) * (1 - applied), y: v.y + (cy - centerY) * (1 - applied) })
-      }),
+      })
+    },
     [size, room]
   )
 

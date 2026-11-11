@@ -92,8 +92,9 @@ function useDesignChanged() {
 export function useCreateDesign() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: (design: { roomId: string; name: string; description: string; edits: DesignEdit[] }) =>
-      sendJson<Design>("POST", API.designs, design),
+    mutationFn: (design: { roomId: string; name: string; description: string; edits: DesignEdit[] }) => {
+      return sendJson<Design>("POST", API.designs, design)
+    },
     onSuccess: changed,
   })
 }
@@ -102,8 +103,9 @@ export function useCreateDesign() {
 export function useEditDesign() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: ({ id, ...details }: { id: string; name: string; description: string }) =>
-      sendJson<Design>("PUT", API.design(id), details),
+    mutationFn: ({ id, ...details }: { id: string; name: string; description: string }) => {
+      return sendJson<Design>("PUT", API.design(id), details)
+    },
     onSuccess: changed,
   })
 }
@@ -112,8 +114,9 @@ export function useEditDesign() {
 export function useAddDesignRoom() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) =>
-      sendJson<Design>("POST", API.designRooms(designId), { roomId, edits }),
+    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) => {
+      return sendJson<Design>("POST", API.designRooms(designId), { roomId, edits })
+    },
     onSuccess: changed,
   })
 }
@@ -122,8 +125,9 @@ export function useAddDesignRoom() {
 export function useSaveRoomColors() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) =>
-      sendJson<Design>("PUT", API.designRoom(designId, roomId), { edits }),
+    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) => {
+      return sendJson<Design>("PUT", API.designRoom(designId, roomId), { edits })
+    },
     onSuccess: changed,
   })
 }
@@ -132,8 +136,9 @@ export function useSaveRoomColors() {
 export function useRemoveDesignRoom() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: ({ designId, roomId }: { designId: string; roomId: string }) =>
-      sendJson<Design>("DELETE", API.designRoom(designId, roomId)),
+    mutationFn: ({ designId, roomId }: { designId: string; roomId: string }) => {
+      return sendJson<Design>("DELETE", API.designRoom(designId, roomId))
+    },
     onSuccess: changed,
   })
 }

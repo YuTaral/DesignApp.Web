@@ -108,7 +108,7 @@ function AccountMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={signOut.isPending}
-          onSelect={() =>
+          onSelect={() => {
             signOut.mutate(undefined, {
               onSuccess: () => {
                 toast.success(MESSAGES.signedOut)
@@ -116,7 +116,7 @@ function AccountMenu() {
               },
               onError: (error) => toast.error(errorMessage(error)),
             })
-          }
+          }}
         >
           <LogOutIcon />
           Sign out
