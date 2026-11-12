@@ -1,7 +1,7 @@
 import { create } from "zustand"
 
 import type { StrokePoint } from "./brush"
-import { DEFAULT_STRENGTH, LIMITS, OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
+import { DEFAULT_STRENGTH, LIMITS, OUTLINE_BRUSH_MODE, STROKE_SHAPE, type OutlineBrushMode, type StrokeShape } from "@/lib/constants"
 
 /** One object's recolor. */
 export type ObjectEdit = {
@@ -17,9 +17,11 @@ export type Edits = Readonly<Record<number, ObjectEdit>>
 /** One stroke of an object being marked by hand: Paint marks, Erase unmarks. */
 export type MarkStroke = {
   mode: OutlineBrushMode
+  /** Brush along the path, or a box's or lasso's area. */
+  shape: StrokeShape
   /** The brush radius, in label map pixels. */
   radius: number
-  /** The path, each point 0..1 of the photo's width and height. */
+  /** The path (a box's two corners, or a lasso), each point 0..1 of the photo's width and height. */
   points: StrokePoint[]
 }
 
@@ -51,6 +53,8 @@ type EditorState = {
   outlineTool: OutlineBrushMode | null
   /** The brush diameter on screen, in CSS px. */
   brushSize: number
+  /** What a drag covers, for fixing outlines and marking alike: the round brush, a box, or a lasso's inside. */
+  brushShape: StrokeShape
   /** Whether the user is marking a new object by hand (strokes then build its mask instead of being saved). */
   marking: boolean
   /** The marking brush: Paint marks pixels, Erase unmarks them. */
@@ -103,6 +107,8 @@ type EditorState = {
   setOutlineTool: (tool: OutlineBrushMode | null) => void
   /** Sets the brush diameter (clamped to LIMITS.brushSizes). */
   setBrushSize: (size: number) => void
+  /** Picks the brush, the box or the lasso. */
+  setBrushShape: (shape: StrokeShape) => void
   /** Shows a fixed label map version, as one undo step, and optionally selects an object (a new one). */
   applyOutlineFix: (revision: number, selectIndex?: number) => void
   /** Starts marking a new object: deselects, and turns the outline brush and the before/after split off. */
@@ -189,6 +195,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
   return {
     ...initial(null),
     brushSize: LIMITS.brushSizes.default,
+    brushShape: STROKE_SHAPE.Brush,
 
     open: (roomId) => {
       if (get().roomId !== roomId) set(initial(roomId))
@@ -239,6 +246,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     setOutlineTool: (tool) => set({ outlineTool: get().selected ? tool : null, comparing: false }),
     setBrushSize: (size) => set({ brushSize: Math.round(Math.min(LIMITS.brushSizes.max, Math.max(LIMITS.brushSizes.min, size))) }),
+    setBrushShape: (shape) => set({ brushShape: shape }),
     applyOutlineFix: (revision, selectIndex) => {
       flush()
       commit({ edits: get().edits, revision })

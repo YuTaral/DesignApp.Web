@@ -36,6 +36,16 @@ async function pixel(u, v) {
   }, u, v)
 }
 
+/** The object index at a photo-relative point in the outlines the canvas shows. */
+async function labelAt(u, v) {
+  return page.evaluate(async (u, v) => {
+    const url = document.querySelector('canvas[data-photo-rect]').dataset.labelMap
+    const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
+    const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
+    return ctx.getImageData(Math.floor(u * bmp.width), Math.floor(v * bmp.height), 1, 1).data[0]
+  }, u, v)
+}
+
 const heading = () => page.evaluate(() => document.querySelector('aside h2.truncate')?.textContent?.trim() ?? null)
 const frame = () => sleep(120)
 
@@ -147,6 +157,50 @@ try {
     await page.click('[aria-label="Fit photo"]'); await frame()
     step(`${file}: zoom in and fit`, zoomed > 0, `photo width ${Math.round(zoomed)} px when zoomed`)
 
+    // Box (first photo): with the box shape, Add fills the dragged rectangle into the selected object and Erase
+    // clears it again; undo goes back.
+    if (file === files[0]) {
+      const mapNow = () => page.evaluate(() => document.querySelector('canvas[data-photo-rect]').dataset.labelMap)
+      const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll('aside button')].find((b) => b.textContent.trim() === t).click(), text)
+      const drag = async (points) => {
+        const [first, ...rest] = await Promise.all(points.map(([u, v]) => toPage(u, v)))
+        await page.mouse.move(first.x, first.y)
+        await page.mouse.down()
+        for (const p of rest) { await page.mouse.move(p.x, p.y, { steps: 4 }); await sleep(16) }
+        const outlined = await page.evaluate(() => document.querySelector('svg[data-stroke-area]')?.dataset.strokeArea ?? null)
+        await page.mouse.up()
+        return outlined
+      }
+      const nextMap = async (before) => {
+        await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap !== ${JSON.stringify(before)}`), { label: 'new outlines' })
+        await sleep(300)
+      }
+      const center = [0.13, 0.125]
+
+      await page.keyboard.press('Escape'); await frame()
+      await page.mouse.click(...Object.values(await toPage(op.u, op.v))); await frame()
+      await clickButton('Add'); await clickButton('Box'); await frame()
+      const sizeHidden = await page.evaluate(() => !document.querySelector('[aria-label="Brush size"]'))
+      const mapBefore = await mapNow()
+      const outlined = await drag([[0.10, 0.10], [0.16, 0.15]])
+      await nextMap(mapBefore)
+      const added = await labelAt(...center)
+      await shot(`${name}-box-add`)
+      step(`${file}: a box adds its whole area to "${other.label}"`, outlined === 'Box' && sizeHidden && added === other.index,
+        `outline shown: ${outlined}; label at its centre ${added}`)
+
+      const mapAdded = await mapNow()
+      await clickButton('Erase'); await frame()
+      await drag([[0.10, 0.10], [0.16, 0.15]])
+      await nextMap(mapAdded)
+      const erased = await labelAt(...center)
+      step(`${file}: a box erases its area from it again`, erased === 0, `label at its centre ${erased}`)
+      await page.click('[aria-label="Undo"]'); await page.click('[aria-label="Undo"]')
+      await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap === ${JSON.stringify(mapBefore)}`), { label: 'undo both boxes' })
+      step(`${file}: undo takes both boxes back`, true)
+      await clickButton('Brush'); await page.keyboard.press('Escape'); await frame()
+    }
+
     // New object (first photo): mark an area by hand, name it, save; it can be selected there, and undo hides it.
     if (file === files[0]) {
       const listed = () => page.evaluate(() => [...document.querySelectorAll('ul [data-index]')].map((b) => b.textContent.toLowerCase()))
@@ -156,6 +210,14 @@ try {
       await page.mouse.down()
       for (let i = 1; i <= 5; i++) { await page.mouse.move(start.x + i * 4, start.y + i * 2); await sleep(16) }
       await page.mouse.up(); await frame()
+      // A second stroke with the lasso: a square drawn around an area away from the brush mark.
+      await page.evaluate(() => [...document.querySelectorAll('aside button')].find((b) => b.textContent.trim() === 'Lasso').click()); await frame()
+      const ring = await Promise.all([[0.30, 0.30], [0.36, 0.30], [0.36, 0.36], [0.30, 0.36]].map(([u, v]) => toPage(u, v)))
+      await page.mouse.move(ring[0].x, ring[0].y)
+      await page.mouse.down()
+      for (const p of ring.slice(1)) { await page.mouse.move(p.x, p.y, { steps: 6 }); await sleep(16) }
+      await page.mouse.up(); await frame()
+      await page.evaluate(() => [...document.querySelectorAll('aside button')].find((b) => b.textContent.trim() === 'Brush').click())
       const saveDisabled = await page.evaluate(() => document.querySelector('form[aria-label="New object"] button[type=submit]').disabled)
       await page.type('#new-object-name', 'test lamp')
       await page.select('#new-object-type', 'Lighting')
@@ -167,6 +229,12 @@ try {
       await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap !== ${JSON.stringify(mapBefore)}`), { label: 'new outlines loaded' })
       const inList = (await listed()).some((t) => t.includes('test lamp'))
       step(`${file}: a hand-marked object is saved, selected and listed`, saveDisabled && inList, `Save waited for a name: ${saveDisabled}`)
+      const lamp = await page.evaluate(async () => {
+        const id = location.pathname.split('/').at(-1)
+        return (await (await fetch(`/api/rooms/${id}`)).json()).objects.find((o) => o.label === 'test lamp')?.index
+      })
+      const lassoed = await labelAt(0.33, 0.33)
+      step(`${file}: the lasso marked the inside of the drawn square too`, lamp !== undefined && lassoed === lamp, `label ${lassoed}, lamp ${lamp}`)
 
       await page.keyboard.press('Escape'); await frame()
       await page.mouse.click(start.x + 8, start.y + 4); await frame()

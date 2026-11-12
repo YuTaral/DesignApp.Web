@@ -7,11 +7,13 @@ import type { Room } from "@/features/rooms/types"
 import { errorMessage } from "@/lib/api"
 import type { StrokePoint } from "./brush"
 import { useEditorStore } from "./editor-store"
-import { type OutlineBrushMode, QUERY_KEYS } from "@/lib/constants"
+import { type OutlineBrushMode, QUERY_KEYS, type StrokeShape } from "@/lib/constants"
 
 /** A finished brush stroke, ready to save. */
 export type FinishedStroke = {
   mode: OutlineBrushMode
+  /** Brush along the path, or a box's or lasso's area. */
+  shape: StrokeShape
   /** The brush radius, in label map pixels. */
   radius: number
   points: StrokePoint[]

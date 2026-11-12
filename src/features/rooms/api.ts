@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { ApiError, apiUrl, getJson, sendJson, toApiError } from "@/lib/api"
 import { isAnalysisFinished, type Room } from "./types"
-import { type AiMode, type AnalysisScope, API, HTTP_STATUS, LIMITS, MESSAGES, MIME, type ObjectCategory, type OutlineBrushMode, QUERY_KEYS, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
+import { type AiMode, type AnalysisScope, API, HTTP_STATUS, LIMITS, MESSAGES, MIME, type ObjectCategory, type OutlineBrushMode, QUERY_KEYS, type StrokeShape, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
 
 /** Which AI uploads use, and whether each upload may choose (mirrors AiAvailabilityResponse). */
 export type AiAvailability = {
@@ -91,9 +91,11 @@ export type OutlineStroke = {
   /** The object to change. */
   objectIndex: number
   mode: OutlineBrushMode
+  /** Brush along the path, or a box's or lasso's area. */
+  shape: StrokeShape
   /** The brush radius, in label map pixels. */
   radius: number
-  /** The path, each point 0..1 of the photo's width and height. */
+  /** The path (a box's two corners, or a lasso), each point 0..1 of the photo's width and height. */
   points: { x: number; y: number }[]
 }
 
@@ -117,8 +119,8 @@ export type NewObject = {
   label: string
   /** Its type. */
   category: ObjectCategory
-  /** The strokes, in order: Paint marks, Erase unmarks; each with its brush radius in label map pixels. */
-  strokes: { mode: OutlineBrushMode; radius: number; points: { x: number; y: number }[] }[]
+  /** The strokes, in order: Paint marks, Erase unmarks; each with its shape and brush radius in label map pixels. */
+  strokes: { mode: OutlineBrushMode; shape: StrokeShape; radius: number; points: { x: number; y: number }[] }[]
 }
 
 /**

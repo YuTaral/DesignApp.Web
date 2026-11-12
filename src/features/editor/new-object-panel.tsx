@@ -5,19 +5,21 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { Room } from "@/features/rooms/types"
+import { BrushShapeControl } from "./brush-shape-control"
 import { BrushSizeControl } from "./brush-size-control"
 import { useEditorStore } from "./editor-store"
+import { shapeGesture } from "./shape-gesture"
 import { useNewObject } from "./use-new-object"
-import { CATEGORY_NAMES, LIMITS, OBJECT_CATEGORY, type ObjectCategory, OUTLINE_BRUSH_MODE } from "@/lib/constants"
+import { CATEGORY_NAMES, LIMITS, OBJECT_CATEGORY, type ObjectCategory, OUTLINE_BRUSH_MODE, STROKE_SHAPE } from "@/lib/constants"
 
 /**
- * The inspector while the user marks an object the AI missed: Mark and Unmark brushes, the brush size, the
+ * The inspector while the user marks an object the AI missed: Mark and Unmark, the brush, box or lasso, the brush size, the
  * object's name and type, and Save or Cancel. Nothing is saved until Save; then the marked pixels become a new
  * object, selected for recoloring, as one undo step.
  * @param props.room - The room being edited (Ready).
  */
 export function NewObjectPanel({ room }: { room: Room }) {
-  const { markTool, setMarkTool, markPixels, markStrokes, stopMarking } = useEditorStore()
+  const { markTool, setMarkTool, markPixels, markStrokes, stopMarking, brushShape } = useEditorStore()
   const { save, saving } = useNewObject(room)
   const [name, setName] = useState("")
   const [category, setCategory] = useState<ObjectCategory>(OBJECT_CATEGORY.Other)
@@ -39,8 +41,8 @@ export function NewObjectPanel({ room }: { room: Room }) {
           {full
             ? "That's as many strokes as one object can have. Save it, or cancel and start again."
             : markTool === OUTLINE_BRUSH_MODE.Paint
-              ? "Click or drag over the photo to mark the object the AI missed."
-              : "Click or drag over the photo where the mark covers something else."}
+              ? `${shapeGesture(brushShape)} the photo to mark the object the AI missed.`
+              : `${shapeGesture(brushShape)} the photo where the mark covers something else.`}
         </p>
       </div>
 
@@ -66,7 +68,8 @@ export function NewObjectPanel({ room }: { room: Room }) {
         </Button>
       </div>
 
-      <BrushSizeControl />
+      <BrushShapeControl />
+      {brushShape === STROKE_SHAPE.Brush && <BrushSizeControl />}
 
       <div className="space-y-1.5">
         <Label htmlFor="new-object-name">Name</Label>

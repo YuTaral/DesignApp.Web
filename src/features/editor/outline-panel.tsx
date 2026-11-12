@@ -2,18 +2,20 @@ import { BrushIcon, EraserIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { Room } from "@/features/rooms/types"
+import { BrushShapeControl } from "./brush-shape-control"
 import { BrushSizeControl } from "./brush-size-control"
 import { useEditorStore } from "./editor-store"
-import { OUTLINE_BRUSH_MODE } from "@/lib/constants"
+import { shapeGesture } from "./shape-gesture"
+import { OUTLINE_BRUSH_MODE, STROKE_SHAPE } from "@/lib/constants"
 
 /**
- * The inspector's "Fix outline" section for the selected object: Add and Erase turn on a round
- * brush, then a click or a drag on the photo marks exactly the pixels it covers. The size sets the
- * brush on screen, so zooming in gives finer control.
+ * The inspector's "Fix outline" section for the selected object: Add and Erase turn on the tool, then a drag on
+ * the photo marks exactly the pixels it covers: under a round brush, inside a box, or inside a lasso drawn around
+ * an area. The size sets the brush on screen, so zooming in gives finer control.
  * @param props.room - The room being edited.
  */
 export function OutlinePanel({ room }: { room: Room }) {
-  const { selected, outlineTool, setOutlineTool } = useEditorStore()
+  const { selected, outlineTool, setOutlineTool, brushShape } = useEditorStore()
   const object = room.objects.find((o) => o.index === selected)
   if (!object) return null
 
@@ -23,9 +25,9 @@ export function OutlinePanel({ room }: { room: Room }) {
         <h2 className="font-medium">Fix outline</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {outlineTool === OUTLINE_BRUSH_MODE.Paint
-            ? `Click or drag over the photo where the ${object.label} is missing.`
+            ? `${shapeGesture(brushShape)} the photo where the ${object.label} is missing.`
             : outlineTool === OUTLINE_BRUSH_MODE.Erase
-              ? `Click or drag over the photo where the ${object.label} is marked by mistake.`
+              ? `${shapeGesture(brushShape)} the photo where the ${object.label} is marked by mistake.`
               : "If the color misses part of it or spills over, brush the outline here."}
         </p>
       </div>
@@ -47,7 +49,8 @@ export function OutlinePanel({ room }: { room: Room }) {
           Erase
         </Button>
       </div>
-      <BrushSizeControl />
+      <BrushShapeControl />
+      {brushShape === STROKE_SHAPE.Brush && <BrushSizeControl />}
     </div>
   )
 }

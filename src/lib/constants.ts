@@ -92,6 +92,8 @@ export const LIMITS = {
   minPasswordLength: 8,
   /** Application Constants.Strokes.MaxPoints. */
   maxStrokePoints: 10_000,
+  /** The smallest box, in CSS px either way; anything smaller is a tap and fills nothing. */
+  minAreaPx: 2,
   /** A hand-marked object: Application Constants.Marks. */
   mark: { maxStrokes: 100, nameLength: 60 },
   /**
@@ -192,6 +194,13 @@ export const MARK_PREVIEW = { color: "#F97316", source: "#808080", strength: 0.7
 /** Whether a brush stroke adds pixels to the object or takes them away. */
 export const OUTLINE_BRUSH_MODE = { Paint: "Paint", Erase: "Erase" } as const
 export type OutlineBrushMode = (typeof OUTLINE_BRUSH_MODE)[keyof typeof OUTLINE_BRUSH_MODE]
+
+/**
+ * What a stroke covers (Application Constants.StrokeShape): a round brush along the path, the rectangle between a
+ * box's two corners, or the inside of a lasso drawn around an area.
+ */
+export const STROKE_SHAPE = { Brush: "Brush", Box: "Box", Lasso: "Lasso" } as const
+export type StrokeShape = (typeof STROKE_SHAPE)[keyof typeof STROKE_SHAPE]
 
 /** The user's theme choice; system follows the OS setting. */
 export const THEME = { light: "light", dark: "dark", system: "system" } as const

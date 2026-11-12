@@ -10,14 +10,18 @@ import { useEditorStore } from "./editor-store"
 import { labelAt, loadLabelMap, restingOn, type LabelMap } from "./label-map"
 import { hexToOklab } from "./oklab"
 import { RoomRenderer, type PhotoRect, type RenderEdit } from "./renderer"
-import { LIMITS, MARK_PREVIEW, MESSAGES, OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
+import { LIMITS, MARK_PREVIEW, MESSAGES, OUTLINE_BRUSH_MODE, STROKE_SHAPE, type OutlineBrushMode, type StrokeShape } from "@/lib/constants"
 
 /**
- * A brush stroke being drawn: painted into a copy of the label map for the live preview, or, while marking a
- * new object, into the mark's mask (with the mask as it was before the stroke, to undo a cancelled one).
+ * A stroke being drawn: painted into a copy of the label map for the live preview, or, while marking a new object,
+ * into the mark's mask (with the mask as it was before the stroke, to undo a cancelled one). A brush paints as it
+ * moves; a box or lasso is only outlined while drawn and fills its area when the pointer is let go.
  */
 type Stroke = {
   pointerId: number
+  shape: StrokeShape
+  /** Where the stroke started, in CSS px (a box this small in either direction is a tap). */
+  startScreen: { x: number; y: number }
   working: Uint8Array
   maskBefore: Uint8Array | null
   points: StrokePoint[]
@@ -31,13 +35,33 @@ type Stroke = {
 type View = { zoom: number; x: number; y: number }
 
 /** A finished stroke, as the canvas hands it over. */
-export type CanvasStroke = { mode: OutlineBrushMode; radius: number; points: StrokePoint[] }
+export type CanvasStroke = { mode: OutlineBrushMode; shape: StrokeShape; radius: number; points: StrokePoint[] }
+
+/**
+ * What the drag does, for the photo's label and the hint badge.
+ * @param shape - The brush shape.
+ * @param action - What it does, such as "add to the selected object".
+ */
+function gestureLabel(shape: StrokeShape, action: string) {
+  if (shape === STROKE_SHAPE.Box) return `Drag a box over the photo to ${action}.`
+  if (shape === STROKE_SHAPE.Lasso) return `Draw around an area of the photo to ${action}.`
+  return `Click or drag over the photo to ${action}.`
+}
+
+/**
+ * The badge's short gesture for a shape: "drag over", "drag a box over" or "draw around".
+ * @param shape - The brush shape.
+ */
+function badgeGesture(shape: StrokeShape) {
+  return shape === STROKE_SHAPE.Box ? "drag a box over" : shape === STROKE_SHAPE.Lasso ? "draw around" : "drag over"
+}
 
 /**
  * The interactive photo: shows the room with its recolors, outlines the object under the pointer
  * and the selected one, and handles tap/click to select, drag to pan, wheel/pinch/buttons to zoom,
  * and the before/after handle. While an outline brush is on, a click or drag paints or erases the
- * selected object under a round brush instead, shown live; the middle mouse button still pans. While a new
+ * selected object under a round brush instead, shown live, or inside a box or lasso, filled when it is let go; the
+ * middle mouse button still pans. While a new
  * object is being marked, strokes build its mask instead, shown as the selected object, and nothing is saved
  * until the inspector's Save.
  * @param props.room - A room whose analysis is Ready.
@@ -63,10 +87,12 @@ export function RoomCanvas({
   const [split, setSplit] = useState(0.5)
 
   const {
-    edits, selected, hovered, comparing, select, hover, revision, outlineTool, brushSize,
+    edits, selected, hovered, comparing, select, hover, revision, outlineTool, brushSize, brushShape,
     marking, markTool, markStrokes, addMarkStroke, presentObjects, setPresentObjects, removing,
   } = useEditorStore()
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
+  // The box or lasso being drawn, in CSS px of the canvas, for its outline.
+  const [area, setArea] = useState<{ shape: StrokeShape; points: { x: number; y: number }[] } | null>(null)
   const [previewTick, setPreviewTick] = useState(0)
   // The outlines and the photo shown: the version the editor is on (it changes with fixes, removals, undo and redo).
   const labelsUrl = labelMapUrl(room.id, revision ?? room.labelMapRevision)
@@ -283,6 +309,7 @@ export function RoomCanvas({
     const s = stroke.current
     if (!s) return
     stroke.current = null
+    setArea(null)
     if (s.maskBefore && markMask.current) markMask.current.set(s.maskBefore)
     if (map) {
       const mask = marking ? markMask.current : null
@@ -306,22 +333,27 @@ export function RoomCanvas({
       const first = toPhoto(point.x, point.y)
       const mask = marking ? markMask.current : null
       if (marking && markStrokes.length >= LIMITS.mark.maxStrokes) return
+      const shape = brushShape
+      const start = { pointerId: event.pointerId, shape, startScreen: point, points: [first], lastScreen: point, radius }
+      // A box or lasso fills its area when it is let go; until then only its outline shows.
+      const brush = shape === STROKE_SHAPE.Brush
       if (mask) {
         const maskBefore = mask.slice()
-        const changed = stampMark(mask, map.width, map.height, [first], radius, tool!)
-        stroke.current = { pointerId: event.pointerId, working: map.labels, maskBefore, points: [first], lastScreen: point, radius, changed }
+        const changed = brush ? stampMark(mask, map.width, map.height, [first], radius, tool!, shape) : 0
+        stroke.current = { ...start, working: map.labels, maskBefore, changed }
       } else {
         const working = map.labels.slice()
-        const changed = stampStroke(working, map.width, map.height, [first], radius, tool!, selected)
-        stroke.current = { pointerId: event.pointerId, working, maskBefore: null, points: [first], lastScreen: point, radius, changed }
+        const changed = brush ? stampStroke(working, map.width, map.height, [first], radius, tool!, selected, shape) : 0
+        stroke.current = { ...start, working, maskBefore: null, changed }
       }
-      showPreview()
+      if (brush) showPreview()
+      else setArea({ shape, points: [point] })
     }
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const point = localPoint(event)
-    if (brushing && event.pointerType !== "touch") setCursor(point)
+    if (brushing && event.pointerType !== "touch" && brushShape === STROKE_SHAPE.Brush) setCursor(point)
     const previous = pointers.current.get(event.pointerId)
     if (!previous) {
       if (event.pointerType === "mouse" && !brushing) hover(objectAt(point.x, point.y))
@@ -334,12 +366,22 @@ export function RoomCanvas({
     if (s && s.pointerId === event.pointerId && map) {
       if (Math.hypot(point.x - s.lastScreen.x, point.y - s.lastScreen.y) < 1 || s.points.length >= LIMITS.maxStrokePoints) return
       const next = toPhoto(point.x, point.y)
+      s.lastScreen = point
+      if (s.shape === STROKE_SHAPE.Box) {
+        s.points = [s.points[0], next]
+        setArea({ shape: s.shape, points: [s.startScreen, point] })
+        return
+      }
+      if (s.shape === STROKE_SHAPE.Lasso) {
+        s.points.push(next)
+        setArea((a) => (a ? { shape: a.shape, points: [...a.points, point] } : a))
+        return
+      }
       const last = s.points[s.points.length - 1]
       s.changed += s.maskBefore && markMask.current
-        ? stampMark(markMask.current, map.width, map.height, [next], s.radius, tool!, last)
-        : stampStroke(s.working, map.width, map.height, [next], s.radius, tool!, selected, last)
+        ? stampMark(markMask.current, map.width, map.height, [next], s.radius, tool!, s.shape, last)
+        : stampStroke(s.working, map.width, map.height, [next], s.radius, tool!, selected, s.shape, last)
       s.points.push(next)
-      s.lastScreen = point
       showPreview()
       return
     }
@@ -363,6 +405,19 @@ export function RoomCanvas({
 
     const s = stroke.current
     if (s && s.pointerId === event.pointerId) {
+      if (s.shape !== STROKE_SHAPE.Brush) {
+        setArea(null)
+        // A box too small to see, or a lasso without an inside, is a tap: nothing to fill.
+        const big = s.shape === STROKE_SHAPE.Box
+          ? s.points.length === 2 && Math.abs(point.x - s.startScreen.x) >= LIMITS.minAreaPx && Math.abs(point.y - s.startScreen.y) >= LIMITS.minAreaPx
+          : s.points.length >= 3
+        if (event.type !== "pointercancel" && big && map) {
+          s.changed = s.maskBefore && markMask.current
+            ? stampMark(markMask.current, map.width, map.height, s.points, s.radius, tool!, s.shape)
+            : stampStroke(s.working, map.width, map.height, s.points, s.radius, tool!, selected, s.shape)
+          if (!s.maskBefore) showPreview()
+        }
+      }
       if (s.maskBefore) {
         if (event.type === "pointercancel" || s.changed === 0 || !markMask.current) {
           cancelStroke()
@@ -375,7 +430,7 @@ export function RoomCanvas({
         setPreviewTick((n) => n + 1)
         let pixels = 0
         for (const value of markMask.current) pixels += value
-        addMarkStroke({ mode: tool!, radius: s.radius, points: s.points }, pixels)
+        addMarkStroke({ mode: tool!, shape: s.shape, radius: s.radius, points: s.points }, pixels)
         return
       }
       if (event.type === "pointercancel" || s.changed === 0 || !onStroke) {
@@ -383,7 +438,7 @@ export function RoomCanvas({
         return
       }
       // Keep the preview on screen while it saves; the saved version replaces it, or it is undone.
-      onStroke({ mode: tool!, radius: s.radius, points: s.points }).then((saved) => {
+      onStroke({ mode: tool!, shape: s.shape, radius: s.radius, points: s.points }).then((saved) => {
         if (stroke.current === s) stroke.current = null
         if (!saved && map) {
           rendererRef.current?.setLabels(map)
@@ -404,16 +459,16 @@ export function RoomCanvas({
         role="img"
         aria-label={
           marking
-            ? `Click or drag over the photo to ${tool === OUTLINE_BRUSH_MODE.Paint ? "mark" : "unmark"} the new object.`
+            ? gestureLabel(brushShape, `${tool === OUTLINE_BRUSH_MODE.Paint ? "mark" : "unmark"} the new object`)
             : brushing
-            ? `Click or drag over the photo to ${outlineTool === OUTLINE_BRUSH_MODE.Paint ? "add to" : "erase from"} the selected object.`
+            ? gestureLabel(brushShape, `${outlineTool === OUTLINE_BRUSH_MODE.Paint ? "add to" : "erase from"} the selected object`)
             : "Your room. Click an object in the photo, or choose it from the list, to restyle it."
         }
         data-photo-rect={JSON.stringify(rect)}
         data-label-map={map?.url}
         className={cn(
           "absolute inset-0 size-full touch-none",
-          brushing ? (saving ? "cursor-progress" : "cursor-none") : hovered ? "cursor-pointer" : view.zoom > 1 ? "cursor-grab" : "cursor-default"
+          brushing ? (saving ? "cursor-progress" : brushShape === STROKE_SHAPE.Brush ? "cursor-none" : "cursor-crosshair") : hovered ? "cursor-pointer" : view.zoom > 1 ? "cursor-grab" : "cursor-default"
         )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -466,12 +521,42 @@ export function RoomCanvas({
           {saving
             ? "Saving…"
             : marking
-              ? tool === OUTLINE_BRUSH_MODE.Paint ? "Marking: drag over the new object" : "Unmarking: drag over what isn't part of it"
-              : tool === OUTLINE_BRUSH_MODE.Paint ? "Adding: drag over what's missing" : "Erasing: drag over what's wrong"}
+              ? tool === OUTLINE_BRUSH_MODE.Paint ? `Marking: ${badgeGesture(brushShape)} the new object` : `Unmarking: ${badgeGesture(brushShape)} what isn't part of it`
+              : tool === OUTLINE_BRUSH_MODE.Paint ? `Adding: ${badgeGesture(brushShape)} what's missing` : `Erasing: ${badgeGesture(brushShape)} what's wrong`}
         </div>
       )}
 
-      {map && brushing && cursor && (
+      {map && area && (
+        <svg aria-hidden data-stroke-area={area.shape} className="pointer-events-none absolute inset-0 size-full">
+          {[{ className: "stroke-black/45", width: 3.5 }, { className: "stroke-white", width: 1.5 }].map((line) =>
+            area.shape === STROKE_SHAPE.Box && area.points.length === 2 ? (
+              <rect
+                key={line.width}
+                x={Math.min(area.points[0].x, area.points[1].x)}
+                y={Math.min(area.points[0].y, area.points[1].y)}
+                width={Math.abs(area.points[1].x - area.points[0].x)}
+                height={Math.abs(area.points[1].y - area.points[0].y)}
+                className={cn(line.className, line.width < 2 && "fill-white/15")}
+                fill="none"
+                strokeWidth={line.width}
+                strokeDasharray={tool === OUTLINE_BRUSH_MODE.Erase && line.width < 2 ? "5 4" : undefined}
+              />
+            ) : (
+              <polygon
+                key={line.width}
+                points={area.points.map((p) => `${p.x},${p.y}`).join(" ")}
+                className={cn(line.className, line.width < 2 && "fill-white/15")}
+                fill="none"
+                strokeWidth={line.width}
+                strokeLinejoin="round"
+                strokeDasharray={tool === OUTLINE_BRUSH_MODE.Erase && line.width < 2 ? "5 4" : undefined}
+              />
+            )
+          )}
+        </svg>
+      )}
+
+      {map && brushing && cursor && brushShape === STROKE_SHAPE.Brush && (
         <div
           aria-hidden
           data-brush-cursor
