@@ -160,8 +160,11 @@ try {
       await page.type('#new-object-name', 'test lamp')
       await page.select('#new-object-type', 'Lighting')
       await shot(`${name}-marking`)
+      const mapBefore = await page.evaluate(() => document.querySelector('canvas[data-photo-rect]').dataset.labelMap)
       await page.click('form[aria-label="New object"] button[type=submit]')
       await until(page, () => document.querySelector('aside h2.truncate')?.textContent?.trim() === 'test lamp', { label: 'new object selected' })
+      // Clicks are matched against the outlines on screen: wait for the new version before clicking the mark.
+      await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap !== ${JSON.stringify(mapBefore)}`), { label: 'new outlines loaded' })
       const inList = (await listed()).some((t) => t.includes('test lamp'))
       step(`${file}: a hand-marked object is saved, selected and listed`, saveDisabled && inList, `Save waited for a name: ${saveDisabled}`)
 
@@ -174,6 +177,36 @@ try {
       await page.click('[aria-label="Redo"]')
       await until(page, () => [...document.querySelectorAll('ul [data-index]')].some((b) => b.textContent.toLowerCase().includes('test lamp')), { label: 'redo shows it' })
       step(`${file}: undo hides the new object, redo brings it back`, true)
+
+      // Remove an object from the photo (the fake eraser): it leaves the list and the photo changes there; undo
+      // brings both back.
+      const surfaces = ['Wall', 'Floor', 'Ceiling']
+      const victim = room.objects.find((o) => !surfaces.includes(o.category) && room.points[o.index] && o.index !== target.index && o.index !== other.index)
+      const vp = room.points[victim.index]
+      await page.keyboard.press('Escape'); await frame()
+      await page.mouse.click(...Object.values(await toPage(vp.u, vp.v))); await frame()
+      const picked = await heading()
+      const photoBefore = await page.evaluate(() => document.querySelector('canvas[data-photo-rect]').toDataURL())
+      const listedLabel = (l) => `[...document.querySelectorAll('ul [data-index]')].some((b) => b.textContent.toLowerCase().startsWith(${JSON.stringify(l.toLowerCase())}))`
+      // The button names how many objects go (the selected one plus anything ticked as lying on it).
+      const removing = await page.evaluate(() => {
+        const button = [...document.querySelectorAll('aside button')].find((b) => /^Remove (object|\d+ objects)$/.test(b.textContent.trim()))
+        button.click()
+        return button.textContent.trim()
+      })
+      const overlay = await until(page, () => document.querySelector('[data-removing]')?.textContent?.trim(), { label: 'loading overlay on the photo', timeout: 5000 })
+      const undoWhileRemoving = await page.evaluate(() => document.querySelector('[aria-label=Undo]').disabled)
+      step(`${file}: the photo shows the removal is running, and undo waits`, !!overlay && undoWhileRemoving, overlay)
+      await until(page, new Function(`return !${listedLabel(victim.label)}`), { label: 'removed object leaves the list', timeout: 30000 })
+      await sleep(500)
+      await page.mouse.move(5, 5); await frame()
+      const photoAfter = await page.evaluate(() => document.querySelector('canvas[data-photo-rect]').toDataURL())
+      await shot(`${name}-removed`)
+      step(`${file}: removing "${victim.label}" takes it out of the list and the photo`,
+        picked?.toLowerCase() === victim.label.toLowerCase() && photoBefore !== photoAfter, `selected ${picked}; "${removing}"`)
+      await page.click('[aria-label="Undo"]')
+      await until(page, new Function(`return ${listedLabel(victim.label)}`), { label: 'undo brings it back' })
+      step(`${file}: undo brings the removed object back`, true)
     }
 
     await page.mouse.move(5, 5); await frame()

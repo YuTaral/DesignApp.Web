@@ -19,6 +19,9 @@ export const API = {
   room: (id: string) => `/api/rooms/${id}`,
   roomOutline: (id: string) => `/api/rooms/${id}/outline`,
   roomObjects: (id: string) => `/api/rooms/${id}/objects`,
+  roomRemovals: (id: string) => `/api/rooms/${id}/removals`,
+  roomPhoto: (id: string) => `/api/rooms/${id}/photo`,
+  roomPhotoVersion: (id: string, version: number) => `/api/rooms/${id}/photo/${version}`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
   roomLabelMap: (id: string, revision: number) => `/api/rooms/${id}/labels/${revision}`,
 } as const
@@ -91,6 +94,8 @@ export const LIMITS = {
   maxStrokePoints: 10_000,
   /** A hand-marked object: Application Constants.Marks. */
   mark: { maxStrokes: 100, nameLength: 60 },
+  /** Removing objects together: Application Constants.Removals; the share of a box inside another's that counts as "on it". */
+  removal: { maxObjects: 20, onItShare: 0.6 },
   /** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
   brushSizes: { min: 2, max: 120, default: 24 },
   zoom: { min: 1, max: 8 },
@@ -142,6 +147,9 @@ export const OBJECT_CATEGORY = {
   Opening: "Opening",
 } as const
 export type ObjectCategory = (typeof OBJECT_CATEGORY)[keyof typeof OBJECT_CATEGORY]
+
+/** The surfaces: they can be recolored but not removed from the photo (Domain ObjectCategories.IsSurface). */
+export const SURFACE_CATEGORIES: readonly ObjectCategory[] = [OBJECT_CATEGORY.Wall, OBJECT_CATEGORY.Floor, OBJECT_CATEGORY.Ceiling]
 
 /** How each category is shown to the user. */
 export const CATEGORY_NAMES: Record<ObjectCategory, string> = {
@@ -219,6 +227,8 @@ export const MESSAGES = {
   designSaved: "Design saved",
   addedTo: (name: string) => `Added to ${name}`,
   colorsSaved: "Colors saved",
+  objectRemoved: (label: string, more: number) =>
+    `Removed the ${label}${more === 0 ? "" : more === 1 ? " and 1 more object" : ` and ${more} more objects`}. Undo brings it back.`,
   designUpdated: "Design updated",
   designDeleted: "Design deleted",
   roomRemoved: "Room removed",

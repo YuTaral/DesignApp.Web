@@ -58,6 +58,11 @@ export type Room = {
   scope: AnalysisScope
   /** Which AI analyzed the photo. */
   aiMode: AiMode
+  /**
+   * For each label map version (by its number), which photo version goes with it: 0 is the uploaded photo,
+   * higher ones were made by removing objects.
+   */
+  photoVersions: number[]
 }
 
 /**
@@ -68,4 +73,15 @@ export type Room = {
  */
 export function labelMapUrl(roomId: string, revision: number) {
   return API.roomLabelMap(roomId, revision)
+}
+
+/**
+ * Where the photo of a label map version is (relative, like photoUrl): the uploaded photo, or the one made by
+ * removing objects. Every photo version stays the same forever, so the browser can cache each one.
+ * @param room - The room.
+ * @param revision - The label map version.
+ */
+export function photoUrlFor(room: Room, revision: number) {
+  const version = room.photoVersions?.[revision] ?? 0
+  return version === 0 ? API.roomPhoto(room.id) : API.roomPhotoVersion(room.id, version)
 }

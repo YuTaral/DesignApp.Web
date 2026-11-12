@@ -3,7 +3,7 @@ import { LoaderCircleIcon, MaximizeIcon, ZoomInIcon, ZoomOutIcon } from "lucide-
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
-import { labelMapUrl, type Room } from "@/features/rooms/types"
+import { labelMapUrl, photoUrlFor, type Room } from "@/features/rooms/types"
 import { apiUrl } from "@/lib/api"
 import { stampMark, stampStroke, type StrokePoint } from "./brush"
 import { useEditorStore } from "./editor-store"
@@ -64,20 +64,23 @@ export function RoomCanvas({
 
   const {
     edits, selected, hovered, comparing, select, hover, revision, outlineTool, brushSize,
-    marking, markTool, markStrokes, addMarkStroke, presentObjects, setPresentObjects,
+    marking, markTool, markStrokes, addMarkStroke, presentObjects, setPresentObjects, removing,
   } = useEditorStore()
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const [previewTick, setPreviewTick] = useState(0)
-  // The outlines shown: the version the editor is on (it changes with fixes, undo and redo).
+  // The outlines and the photo shown: the version the editor is on (it changes with fixes, removals, undo and redo).
   const labelsUrl = labelMapUrl(room.id, revision ?? room.labelMapRevision)
+  const photoSrc = photoUrlFor(room, revision ?? room.labelMapRevision)
   const firstLabelsUrl = useRef(labelsUrl)
+  const firstPhotoSrc = useRef(photoSrc)
+  const [shownPhoto, setShownPhoto] = useState(photoSrc)
 
   // Load the photo and the first label map, then hand both to a renderer on the canvas.
   useEffect(() => {
     const abort = new AbortController()
     const photo = new Image()
     photo.crossOrigin = "anonymous" // same mode as the <img> before it, so the cached copy is reused
-    photo.src = apiUrl(room.photoUrl)
+    photo.src = apiUrl(firstPhotoSrc.current)
 
     Promise.all([photo.decode(), loadLabelMap(firstLabelsUrl.current, abort.signal)])
       .then(([, labelMap]) => {
@@ -97,7 +100,27 @@ export function RoomCanvas({
       rendererRef.current = null
       setMap(null)
     }
-  }, [room.photoUrl])
+  }, [room.id])
+
+  // Swap in another photo version (after a removal, undo or redo) without restarting the editor.
+  useEffect(() => {
+    if (!map || shownPhoto === photoSrc) return
+    const abort = new AbortController()
+    const photo = new Image()
+    photo.crossOrigin = "anonymous"
+    photo.src = apiUrl(photoSrc)
+    photo
+      .decode()
+      .then(() => {
+        if (abort.signal.aborted || !rendererRef.current) return
+        rendererRef.current.setPhoto(photo)
+        setShownPhoto(photoSrc)
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setError(MESSAGES.editorFailed)
+      })
+    return () => abort.abort()
+  }, [map, photoSrc, shownPhoto])
 
   // Swap in another label map version (after a fix, undo or redo) without reloading the photo.
   // Until it arrives the previous outlines stay on screen.
@@ -185,7 +208,7 @@ export function RoomCanvas({
       })
     })
     return () => cancelAnimationFrame(frame)
-  }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick, marking, markIndex])
+  }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick, marking, markIndex, shownPhoto])
 
   const zoomAround = useCallback(
     (factor: number, cx: number, cy: number) => {
@@ -419,6 +442,21 @@ export function RoomCanvas({
           height={Math.min(size.height, rect.y + rect.height) - Math.max(0, rect.y)}
           onMove={(x) => setSplit(clamp((x - rect.x) / rect.width, 0, 1))}
         />
+      )}
+
+      {map && removing.length > 0 && (
+        <div
+          role="status"
+          data-removing
+          className="absolute inset-0 z-20 grid cursor-progress place-items-center bg-background/45 backdrop-blur-[2px]"
+        >
+          <div className="flex max-w-[80%] items-center gap-2.5 rounded-xl bg-background/90 px-4 py-2.5 text-sm font-medium shadow-float">
+            <LoaderCircleIcon className="size-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden />
+            <span className="first-letter:uppercase">
+              {removing.length === 1 ? `Removing the ${removing[0]}…` : `Removing the ${removing[0]} and ${removing.length - 1} more…`}
+            </span>
+          </div>
+        </div>
       )}
 
       {map && brushing && (

@@ -133,6 +133,19 @@ export function addRoomObject(roomId: string, object: NewObject): Promise<Room> 
 }
 
 /**
+ * Removes objects from the photo together (a sofa and the cushions on it): the room's AI fills them with what is
+ * behind them in one call, as a new photo and label map version.
+ * @param roomId - The room.
+ * @param objectIndexes - The objects.
+ * @param baseRevision - The label map version the editor shows.
+ * @returns The room, with its new labelMapRevision and photo.
+ * @throws ApiError with a message for the user when they can't be removed (such as a wall).
+ */
+export function removeRoomObjects(roomId: string, objectIndexes: number[], baseRevision: number): Promise<Room> {
+  return sendJson<Room>("POST", API.roomRemovals(roomId), { baseRevision, objectIndexes })
+}
+
+/**
  * Makes a stored label map version current again, after undo or redo of an outline fix.
  * @param roomId - The room.
  * @param revision - The version the editor now shows.

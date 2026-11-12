@@ -180,6 +180,17 @@ export class RoomRenderer {
    * @param map - The room's label map.
    */
   setRoom(photo: TexImageSource, map: LabelMap) {
+    this.setPhoto(photo)
+    this.setLabels(map)
+    this.setEdits(new Map())
+    this.ready = true
+  }
+
+  /**
+   * Replaces the photo, such as after an object was removed from it (or undo of that); the label map stays.
+   * @param photo - The decoded photo (loaded with CORS, so WebGL may read it).
+   */
+  setPhoto(photo: TexImageSource) {
     const gl = this.gl
     gl.bindTexture(gl.TEXTURE_2D, this.photo)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
@@ -188,10 +199,6 @@ export class RoomRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     clampToEdge(gl)
-
-    this.setLabels(map)
-    this.setEdits(new Map())
-    this.ready = true
   }
 
   /**

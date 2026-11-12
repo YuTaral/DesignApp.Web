@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useId, useState, type CSSProperties, type FormEvent, type ReactNode } from "react"
 import { Link, useNavigate, useParams, useRouterState, useSearch } from "@tanstack/react-router"
 import {
   ArrowLeftIcon,
@@ -40,6 +40,7 @@ import { ColorPanel } from "@/features/editor/color-panel"
 import { sameEdits, useEditorStore, type Edits } from "@/features/editor/editor-store"
 import { NewObjectPanel } from "@/features/editor/new-object-panel"
 import { OutlinePanel } from "@/features/editor/outline-panel"
+import { RemoveObjectPanel } from "@/features/editor/remove-object-panel"
 import { useOutlineFixes } from "@/features/editor/use-outline-fixes"
 import { RoomCanvas } from "@/features/editor/room-canvas"
 import { useEditorShortcuts } from "@/features/editor/use-editor-shortcuts"
@@ -108,8 +109,10 @@ function Editor({ room }: { room: Room }) {
   useEffect(() => open(room.id), [open, room.id])
   const openDesign = useOpenDesign(room)
 
+  // On a PC the editor fills the window under the header: the photo keeps its place and only the tools scroll,
+  // with Save pinned under them. On a phone the photo sits above the tools and the page scrolls as usual.
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row">
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:h-[calc(100dvh-3.5rem-1px)] lg:flex-none lg:flex-row lg:overflow-hidden">
       <section className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
@@ -145,8 +148,8 @@ function Editor({ room }: { room: Room }) {
         </div>
         {editable ? (
           <div
-            className="relative w-full overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft"
-            style={{ aspectRatio: `${room.width} / ${room.height}`, maxHeight: "min(72dvh, 52rem)", minHeight: "18rem" }}
+            className="relative aspect-(--photo-ratio) max-h-[min(72dvh,52rem)] min-h-72 w-full overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft lg:aspect-auto lg:max-h-none lg:min-h-0 lg:flex-1"
+            style={{ "--photo-ratio": `${room.width} / ${room.height}` } as CSSProperties}
           >
             <ReadyCanvas room={room} />
           </div>
@@ -159,27 +162,32 @@ function Editor({ room }: { room: Room }) {
 
       <aside
         aria-label="Inspector"
-        className="flex w-full shrink-0 flex-col gap-5 rounded-2xl border bg-card p-5 shadow-soft lg:w-80"
+        className="flex w-full shrink-0 flex-col rounded-2xl border bg-card shadow-soft lg:min-h-0 lg:w-80"
       >
-        <AnalysisPanel room={room} />
+        <div className="flex flex-col gap-5 p-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto [&>*]:shrink-0" data-inspector-scroll>
+          <AnalysisPanel room={room} />
 
-        <Separator />
+          <Separator />
 
-        {editable && marking ? (
-          <NewObjectPanel room={room} />
-        ) : editable ? (
-          <>
-            <ColorPanel room={room} />
-            <OutlinePanel room={room} />
-          </>
-        ) : (
-          <div aria-disabled="true" className="space-y-2 opacity-60">
-            <h2 className="font-medium">Color</h2>
-            <p className="text-sm text-muted-foreground">Available once the AI has mapped your room.</p>
-          </div>
-        )}
+          {editable && marking ? (
+            <NewObjectPanel room={room} />
+          ) : editable ? (
+            <>
+              <ColorPanel room={room} />
+              <OutlinePanel room={room} />
+              <RemoveObjectPanel room={room} />
+            </>
+          ) : (
+            <div aria-disabled="true" className="space-y-2 opacity-60">
+              <h2 className="font-medium">Color</h2>
+              <p className="text-sm text-muted-foreground">Available once the AI has mapped your room.</p>
+            </div>
+          )}
+        </div>
 
-        <SaveDesign room={room} editable={editable} design={openDesign} />
+        <div className="border-t p-5 pt-4">
+          <SaveDesign room={room} editable={editable} design={openDesign} />
+        </div>
       </aside>
     </div>
   )
@@ -251,7 +259,8 @@ function ReadyCanvas({ room }: { room: Room }) {
 
 /** Undo, redo, before/after and reset-all, above the canvas. Also turns on the keyboard shortcuts. */
 function EditorToolbar() {
-  const { history, position, comparing, edits, marking, undo, redo, toggleCompare, resetAll } = useEditorStore()
+  const { history, position, comparing, edits, marking, removing, undo, redo, toggleCompare, resetAll } = useEditorStore()
+  const busy = marking || removing.length > 0
   useEditorShortcuts()
   const edited = Object.keys(edits).length > 0
 
@@ -259,7 +268,7 @@ function EditorToolbar() {
     <div className="flex items-center gap-1">
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Undo" disabled={marking || position === 0} onClick={undo}>
+          <Button variant="ghost" size="icon" aria-label="Undo" disabled={busy || position === 0} onClick={undo}>
             <Undo2Icon />
           </Button>
         </TooltipTrigger>
@@ -267,7 +276,7 @@ function EditorToolbar() {
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Redo" disabled={marking || position >= history.length - 1} onClick={redo}>
+          <Button variant="ghost" size="icon" aria-label="Redo" disabled={busy || position >= history.length - 1} onClick={redo}>
             <Redo2Icon />
           </Button>
         </TooltipTrigger>
@@ -334,7 +343,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
 
   if (marking) {
     return (
-      <div className="mt-auto space-y-2">
+      <div className="space-y-2">
         <Button size="lg" className="w-full" disabled>
           <SaveIcon data-icon="inline-start" />
           {!account?.signedIn ? "Sign in to save" : design ? "Save changes" : "Save design"}
@@ -346,7 +355,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
 
   if (!account?.signedIn) {
     return (
-      <div className="mt-auto space-y-2">
+      <div className="space-y-2">
         <Button size="lg" className="w-full" variant={recolored ? "default" : "outline"} disabled={!account} asChild>
           <Link to={ROUTES.signIn} search={{ redirect: here }}>
             <LogInIcon data-icon="inline-start" />
@@ -375,7 +384,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
       )
     }
     return (
-      <div className="mt-auto space-y-2">
+      <div className="space-y-2">
         <Button size="lg" className="w-full" disabled={!editable || !dirty || saveColors.isPending} onClick={save}>
           {saveColors.isPending ? (
             <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
@@ -392,7 +401,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
   }
 
   return (
-    <div className="mt-auto space-y-2">
+    <div className="space-y-2">
       <Button size="lg" className="w-full" disabled={!editable} onClick={() => setChoosing(true)}>
         <SaveIcon data-icon="inline-start" />
         Save design

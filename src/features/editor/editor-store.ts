@@ -64,6 +64,11 @@ type EditorState = {
    * one is loaded. Only meaningful while `revision` is that version.
    */
   presentObjects: { revision: number; indexes: ReadonlySet<number> } | null
+  /**
+   * The objects being removed from the photo, while the AI works (empty otherwise): the photo shows it, and undo,
+   * redo and the brushes wait, so the version the removal builds on stays the one shown.
+   */
+  removing: readonly string[]
   /** The saved design being edited, or null for recolors not saved yet. */
   designId: string | null
   /** The recolors as last saved or opened, to tell whether there are unsaved changes; null before the first save. */
@@ -108,6 +113,8 @@ type EditorState = {
   setMarkTool: (tool: OutlineBrushMode) => void
   /** Records a finished marking stroke and the mask's new pixel count. */
   addMarkStroke: (stroke: MarkStroke, pixels: number) => void
+  /** Records the objects being removed by name (empty when the removal is over). */
+  setRemoving: (labels: readonly string[]) => void
   /** Records which objects have pixels in a loaded label map version. */
   setPresentObjects: (revision: number, indexes: ReadonlySet<number>) => void
   /** Goes one step back. */
@@ -134,6 +141,7 @@ const initial = (roomId: string | null) => ({
   markStrokes: [],
   markPixels: 0,
   presentObjects: null,
+  removing: [],
   designId: null,
   savedEdits: null,
 })
@@ -236,14 +244,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setMarkTool: (tool) => set({ markTool: tool }),
     addMarkStroke: (stroke, pixels) => set({ markStrokes: [...get().markStrokes, stroke], markPixels: pixels }),
     setPresentObjects: (revision, indexes) => set({ presentObjects: { revision, indexes } }),
+    setRemoving: (labels) => set({ removing: labels, outlineTool: labels.length > 0 ? null : get().outlineTool }),
     undo: () => {
-      if (get().marking) return
+      if (get().marking || get().removing.length > 0) return
       flush()
       const { position } = get()
       if (position > 0) go(position - 1)
     },
     redo: () => {
-      if (get().marking) return
+      if (get().marking || get().removing.length > 0) return
       flush()
       const { history, position } = get()
       if (position < history.length - 1) go(position + 1)
