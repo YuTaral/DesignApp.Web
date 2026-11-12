@@ -101,6 +101,8 @@ function DesignCard({ design }: { design: Design }) {
   // Set when a menu item opens a dialog: the closing menu then mustn't move focus back to its
   // button, or the first keys typed into the dialog would land there.
   const openingDialog = useRef(false)
+  // Where the focus goes back to when a dialog closes: the menu item that opened it is gone by then.
+  const menuButton = useRef<HTMLButtonElement>(null)
   const open = (which: "edit" | "delete") => {
     openingDialog.current = true
     setDialog(which)
@@ -126,7 +128,7 @@ function DesignCard({ design }: { design: Design }) {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label={`More for ${design.name}`}>
+            <Button ref={menuButton} variant="ghost" size="icon-sm" aria-label={`More for ${design.name}`}>
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -149,8 +151,18 @@ function DesignCard({ design }: { design: Design }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <DesignDetailsDialog design={design} open={dialog === "edit"} onOpenChange={(next) => setDialog(next ? "edit" : null)} />
-      <DeleteDesignDialog design={design} open={dialog === "delete"} onOpenChange={(next) => setDialog(next ? "delete" : null)} />
+      <DesignDetailsDialog
+        design={design}
+        open={dialog === "edit"}
+        onOpenChange={(next) => setDialog(next ? "edit" : null)}
+        returnFocusTo={menuButton}
+      />
+      <DeleteDesignDialog
+        design={design}
+        open={dialog === "delete"}
+        onOpenChange={(next) => setDialog(next ? "delete" : null)}
+        returnFocusTo={menuButton}
+      />
     </li>
   )
 }

@@ -143,6 +143,7 @@ function Editor({ room }: { room: Room }) {
             {!finished && <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />}
             {statusLabels[room.status]}
           </Badge>
+          {room.libraryRoom && <Badge variant="outline">Sample room</Badge>}
           <AiBadge room={room} />
           {editable && <EditorToolbar />}
         </div>

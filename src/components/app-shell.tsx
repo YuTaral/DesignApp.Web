@@ -34,6 +34,9 @@ export function AppShell() {
             <Link to={ROUTES.home} className={navLinkClass} activeOptions={{ exact: true }}>
               New design
             </Link>
+            <Link to={ROUTES.library} search={{}} className={navLinkClass}>
+              Sample houses
+            </Link>
             <Link to={ROUTES.designs} className={navLinkClass}>
               My designs
             </Link>

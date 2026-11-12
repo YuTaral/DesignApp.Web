@@ -6,6 +6,7 @@ import { DesignsPage } from "@/pages/designs-page"
 import { EditorPage } from "@/pages/editor-page"
 import { HomePage } from "@/pages/home-page"
 import { DesignPage } from "@/pages/design-page"
+import { LibraryPage } from "@/pages/library-page"
 import { ROUTES } from "@/lib/constants"
 
 /** The root route: every page renders inside the app shell (header + main). */
@@ -27,7 +28,8 @@ const signUpRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTES.
 /**
  * The pages: `/` home (upload; `?design=` adds the photo to that design), `/rooms/$roomId` the
  * editor (`?design=` when the room is in a design), `/designs` the account's designs,
- * `/designs/$designId` one design, and sign in / sign up.
+ * `/designs/$designId` one design, `/library` the sample houses (`?design=` adds a room to that design), and sign
+ * in / sign up.
  */
 const routeTree = rootRoute.addChildren([
   createRoute({
@@ -45,6 +47,12 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: ROUTES.designs, component: DesignsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: ROUTES.design, component: DesignPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: ROUTES.library,
+    validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design) }),
+    component: LibraryPage,
+  }),
   signInRoute,
   signUpRoute,
 ])

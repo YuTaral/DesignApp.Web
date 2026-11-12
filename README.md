@@ -27,7 +27,7 @@ npm run dev
 | `npm run build` | Type-check and build for production |
 | `npm run lint` | Lint with oxlint |
 | `npm run preview` | Serve the production build locally |
-| `npm run e2e` | Run the four Firefox passes in `e2e/` against the running app (start it with F5 on DesignApp.AppHost) and print a summary |
+| `npm run e2e` | Run the six Firefox passes in `e2e/` against the running app (start it with F5 on DesignApp.AppHost) and print a summary |
 
 ## Project layout
 
@@ -35,10 +35,11 @@ npm run dev
 src/
   components/      App shell, theme provider and toggle, logo
   components/ui/   shadcn/ui primitives (generated, styled by the design tokens)
-  features/        Feature modules: upload, rooms, editor, account, designs
+  features/        Feature modules: upload, rooms, editor, account, designs, library
   pages/           Route screens: home/upload (?design= adds the photo to that design), editor
                    (/rooms/$roomId, ?design= when the room is in a design), my designs (/designs),
-                   one design (/designs/$designId), sign in and sign up
+                   one design (/designs/$designId), the sample houses (/library, ?design= adds the
+                   room to that design), sign in and sign up
   lib/api.ts       API base URL, fetch helper and readable error messages
   lib/constants.ts API paths, routes, cache and storage keys, limits, timings and messages
   stores/          Zustand stores

@@ -24,6 +24,9 @@ export const API = {
   roomPhotoVersion: (id: string, version: number) => `/api/rooms/${id}/photo/${version}`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
   roomLabelMap: (id: string, revision: number) => `/api/rooms/${id}/labels/${revision}`,
+  library: "/api/library",
+  libraryLayoutCopy: (designId: string, roomId: string, layoutId: string) => `/api/library/${designId}/${roomId}/${layoutId}/copy`,
+  libraryDesignCopy: (designId: string) => `/api/library/${designId}/copy`,
 } as const
 
 /** The SignalR hub that reports room changes. Mirrors the API's Constants.Hub. */
@@ -56,6 +59,7 @@ export const ROUTES = {
   room: "/rooms/$roomId",
   designs: "/designs",
   design: "/designs/$designId",
+  library: "/library",
   signIn: "/sign-in",
   signUp: "/sign-up",
 } as const
@@ -72,6 +76,7 @@ export const QUERY_KEYS = {
   designs: ["designs"] as const,
   design: (id: string) => ["designs", id] as const,
   room: (id: string) => ["rooms", id] as const,
+  library: ["library"] as const,
 } as const
 
 /** Browser storage keys. The theme key is also read by the pre-paint script in index.html. */
@@ -269,4 +274,7 @@ export const MESSAGES = {
   roomNotFound: "We couldn't find that room",
   roomLoadFailed: "We couldn't load this room",
   roomMaybeRemoved: "It may have been removed. Upload a photo to start a new design.",
+  libraryLoadFailed: "We couldn't load the sample houses",
+  libraryHouseSaved: (name: string) => `${name} saved to your designs`,
+  librarySignIn: "Sign in to save the whole house",
 } as const

@@ -63,6 +63,8 @@ export type Room = {
    * higher ones were made by removing objects.
    */
   photoVersions: number[]
+  /** The built-in library layout it was copied from, such as "minimalist/kitchen/2"; null for an uploaded photo. */
+  libraryRoom: string | null
 }
 
 /**

@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useAccount } from "@/features/account/api"
 import { useAddDesignRoom, useDesign } from "@/features/designs/api"
+import { SampleStrip } from "@/features/library/sample-strip"
 import { uploadRoom, useAiAvailability } from "@/features/rooms/api"
 import { AiSwitch } from "@/features/upload/ai-switch"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
@@ -131,6 +132,7 @@ export function HomePage() {
           progress={progress}
           onCancel={() => abort.current?.abort()}
         />
+        {progress === null && <SampleStrip designId={target?.id} />}
       </motion.div>
 
       <section aria-label="How it works" className="mx-auto mt-16 grid max-w-4xl gap-4 sm:grid-cols-3">

@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactNode } from "react"
+import { useId, useState, type FormEvent, type ReactNode, type RefObject } from "react"
 import { LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -65,11 +65,22 @@ export function DesignCover({ design }: { design: Design }) {
  * @param props.design - The design.
  * @param props.open - Whether the dialog is shown.
  * @param props.onOpenChange - Shows or hides it.
+ * @param props.returnFocusTo - Where the focus goes when it closes, if not to what opened it (a menu's button).
  */
-export function DesignDetailsDialog({ design, open, onOpenChange }: { design: Design; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function DesignDetailsDialog({
+  design,
+  open,
+  onOpenChange,
+  returnFocusTo,
+}: {
+  design: Design
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  returnFocusTo?: RefObject<HTMLElement | null>
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent returnFocusTo={returnFocusTo}>
         {/* The dialog drops its content once closed, so the fields start from the design on every open. */}
         <DesignDetailsForm design={design} onDone={() => onOpenChange(false)} />
       </DialogContent>
@@ -156,23 +167,27 @@ function DesignDetailsForm({ design, onDone }: { design: Design; onDone: () => v
  * @param props.open - Whether the dialog is shown.
  * @param props.onOpenChange - Shows or hides it.
  * @param props.onDeleted - Called once it is deleted (to leave its page, say).
+ * @param props.returnFocusTo - Where the focus goes when it closes, if not to what opened it (a menu's button).
  */
 export function DeleteDesignDialog({
   design,
   open,
   onOpenChange,
   onDeleted,
+  returnFocusTo,
 }: {
   design: Design
   open: boolean
   onOpenChange: (open: boolean) => void
   onDeleted?: () => void
+  returnFocusTo?: RefObject<HTMLElement | null>
 }) {
   const remove = useDeleteDesign()
   return (
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
+      returnFocusTo={returnFocusTo}
       title={MESSAGES.deleteDesignTitle(design.name)}
       text={MESSAGES.deleteDesignText(roomCount(design.rooms.length))}
       action="Delete design"
@@ -200,6 +215,7 @@ export function DeleteDesignDialog({
  * @param props.action - The confirming button's label.
  * @param props.pending - Whether the action is running.
  * @param props.onConfirm - Runs the action.
+ * @param props.returnFocusTo - Where the focus goes when it closes, if not to what opened it (a menu's button).
  */
 export function ConfirmDialog({
   open,
@@ -209,6 +225,7 @@ export function ConfirmDialog({
   action,
   pending,
   onConfirm,
+  returnFocusTo,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -217,10 +234,11 @@ export function ConfirmDialog({
   action: string
   pending: boolean
   onConfirm: () => void
+  returnFocusTo?: RefObject<HTMLElement | null>
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent returnFocusTo={returnFocusTo}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{text}</DialogDescription>

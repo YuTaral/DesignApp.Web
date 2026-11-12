@@ -5,6 +5,20 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
 
+// The last element focused outside any dialog: where a closing dialog gives the focus back. A modal dialog traps the
+// focus, so this is still what opened it when it closes. Noted as focus moves, because a dialog with an autofocused
+// field has moved the focus inside before Radix would tell it what had it.
+let lastFocusOutside: HTMLElement | null = null
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      if (event.target instanceof HTMLElement && !event.target.closest('[data-slot="dialog-content"]')) lastFocusOutside = event.target
+    },
+    true
+  )
+}
+
 /** A modal dialog (Radix Dialog). Takes the props of the underlying element. */
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -21,7 +35,16 @@ function DialogClose({ ...props }: React.ComponentProps<typeof DialogPrimitive.C
 }
 
 /** The centered panel, over a dimmed backdrop, with an X to close. Takes the props of the underlying element. */
-function DialogContent({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+function DialogContent({
+  className,
+  children,
+  onCloseAutoFocus,
+  returnFocusTo,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /** Where the focus goes when the dialog closes, when that isn't what had it on opening (a menu's button, say). */
+  returnFocusTo?: React.RefObject<HTMLElement | null>
+}) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay
@@ -34,6 +57,16 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
           "fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border bg-popover p-6 text-sm text-popover-foreground shadow-lg duration-150 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
+        // Radix only gives the focus back to a DialogTrigger, and these dialogs are opened by state, without one.
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          if (event.defaultPrevented) return
+          const target = returnFocusTo?.current ?? lastFocusOutside
+          if (target?.isConnected && target !== document.body) {
+            event.preventDefault()
+            target.focus()
+          }
+        }}
         {...props}
       >
         {children}
