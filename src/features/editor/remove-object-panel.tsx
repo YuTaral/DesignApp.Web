@@ -2,15 +2,15 @@ import { useMemo, useState } from "react"
 import { LoaderCircleIcon, Trash2Icon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import type { BoundingBox, DetectedObject, Room } from "@/features/rooms/types"
+import type { DetectedObject, Room } from "@/features/rooms/types"
 import { useEditorStore } from "./editor-store"
 import { useRemoveObject } from "./use-remove-object"
-import { AI_MODE, LIMITS, SURFACE_CATEGORIES } from "@/lib/constants"
+import { AI_MODE, LIMITS, RESTING_CATEGORIES, SURFACE_CATEGORIES } from "@/lib/constants"
 
 /**
  * The inspector's "Remove from photo" section for the selected object: the room's AI fills the object with what is
- * behind it, as one undo step. Objects that lie on it (the cushions and throw on a sofa, the bedding on a bed) are
- * offered too, ticked, so they go in the same call instead of being left floating. Walls, floors and ceilings can
+ * behind it, as one undo step. Objects that rest on it (the cushions and throw on a sofa, the vase on a table, and
+ * anything resting on those) are offered too, ticked, so they go in the same call instead of being left floating. Walls, floors and ceilings can
  * only be recolored, so they don't get it.
  * @param props.room - The room being edited.
  */
@@ -30,13 +30,24 @@ export function RemoveObjectPanel({ room }: { room: Room }) {
 function RemoveObjectSection({ room, object }: { room: Room; object: DetectedObject }) {
   const presentObjects = useEditorStore((state) => state.presentObjects)
   const { remove, removing } = useRemoveObject(room)
-  const onIt = useMemo(
-    () => room.objects.filter((o) => o.index !== object.index
-      && !SURFACE_CATEGORIES.includes(o.category)
-      && (presentObjects?.indexes.has(o.index) ?? true)
-      && lies(o.box, object.box)),
-    [room.objects, object, presentObjects]
-  )
+  const onIt = useMemo(() => {
+    const restsOn = presentObjects?.restsOn
+    if (!restsOn) return []
+    // Everything resting on the object, and on what rests on it (a bowl on a tray on a table).
+    const found = new Set<number>()
+    const queue = [object.index]
+    while (queue.length > 0) {
+      const below = queue.shift()!
+      for (const [index, support] of restsOn) {
+        if (support !== below || index === object.index || found.has(index)) continue
+        found.add(index)
+        queue.push(index)
+      }
+    }
+    // Only things that sit on furniture (textiles, decor, lamps); the search above still passes through the others,
+    // so the vase on an island's countertop is found when the island is picked.
+    return room.objects.filter((o) => found.has(o.index) && RESTING_CATEGORIES.includes(o.category) && presentObjects.indexes.has(o.index))
+  }, [room.objects, object, presentObjects])
   const [unticked, setUnticked] = useState<ReadonlySet<number>>(new Set())
   const together = [object, ...onIt.filter((o) => !unticked.has(o.index))].slice(0, LIMITS.removal.maxObjects)
 
@@ -86,15 +97,3 @@ function RemoveObjectSection({ room, object }: { room: Room; object: DetectedObj
   )
 }
 
-/**
- * Whether an object lies on another: most of its box is inside the other's box, and it is the smaller of the two.
- * @param inner - The box of the object that may lie on the other.
- * @param outer - The box of the selected object.
- */
-function lies(inner: BoundingBox, outer: BoundingBox) {
-  const width = Math.min(inner.x + inner.width, outer.x + outer.width) - Math.max(inner.x, outer.x)
-  const height = Math.min(inner.y + inner.height, outer.y + outer.height) - Math.max(inner.y, outer.y)
-  const area = inner.width * inner.height
-  if (width <= 0 || height <= 0 || area <= 0 || area >= outer.width * outer.height) return false
-  return (width * height) / area >= LIMITS.removal.onItShare
-}

@@ -7,7 +7,7 @@ import { labelMapUrl, photoUrlFor, type Room } from "@/features/rooms/types"
 import { apiUrl } from "@/lib/api"
 import { stampMark, stampStroke, type StrokePoint } from "./brush"
 import { useEditorStore } from "./editor-store"
-import { labelAt, loadLabelMap, type LabelMap } from "./label-map"
+import { labelAt, loadLabelMap, restingOn, type LabelMap } from "./label-map"
 import { hexToOklab } from "./oklab"
 import { RoomRenderer, type PhotoRect, type RenderEdit } from "./renderer"
 import { LIMITS, MARK_PREVIEW, MESSAGES, OUTLINE_BRUSH_MODE, type OutlineBrushMode } from "@/lib/constants"
@@ -139,7 +139,8 @@ export function RoomCanvas({
     return () => abort.abort()
   }, [labelsUrl, map])
 
-  // Which objects have pixels in the outlines shown: the object list hides the others (an undone new object).
+  // Which objects have pixels in the outlines shown (the object list hides the others, such as an undone new object),
+  // and what each rests on (removing a table offers the vase on it).
   const shownRevision = revision ?? room.labelMapRevision
   const presentKnown = presentObjects?.revision === shownRevision
   useEffect(() => {
@@ -147,7 +148,7 @@ export function RoomCanvas({
     const present = new Set<number>()
     for (const label of map.labels) present.add(label)
     present.delete(0)
-    setPresentObjects(shownRevision, present)
+    setPresentObjects(shownRevision, present, restingOn(map))
   }, [map, labelsUrl, shownRevision, presentKnown, setPresentObjects])
 
   // The mask of a new object being marked, one byte per label map pixel; dropped when marking ends.

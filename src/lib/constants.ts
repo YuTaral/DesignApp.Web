@@ -94,8 +94,11 @@ export const LIMITS = {
   maxStrokePoints: 10_000,
   /** A hand-marked object: Application Constants.Marks. */
   mark: { maxStrokes: 100, nameLength: 60 },
-  /** Removing objects together: Application Constants.Removals; the share of a box inside another's that counts as "on it". */
-  removal: { maxObjects: 20, onItShare: 0.6 },
+  /**
+   * Removing objects together: Application Constants.Removals. An object rests on another when that one is directly
+   * below (within restingGap label-map pixels) at least restingShare of its bottom edge.
+   */
+  removal: { maxObjects: 20, restingGap: 3, restingShare: 0.5 },
   /** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
   brushSizes: { min: 2, max: 120, default: 24 },
   zoom: { min: 1, max: 8 },
@@ -147,6 +150,12 @@ export const OBJECT_CATEGORY = {
   Opening: "Opening",
 } as const
 export type ObjectCategory = (typeof OBJECT_CATEGORY)[keyof typeof OBJECT_CATEGORY]
+
+/**
+ * The kinds of objects offered for removal along with what they rest on (cushions, a vase, a lamp). Furniture, fixtures,
+ * doors and windows stand on their own: one seen behind a table looks like it rests on it, but isn't on it.
+ */
+export const RESTING_CATEGORIES: readonly ObjectCategory[] = [OBJECT_CATEGORY.Textile, OBJECT_CATEGORY.Decor, OBJECT_CATEGORY.Lighting, OBJECT_CATEGORY.Other]
 
 /** The surfaces: they can be recolored but not removed from the photo (Domain ObjectCategories.IsSurface). */
 export const SURFACE_CATEGORIES: readonly ObjectCategory[] = [OBJECT_CATEGORY.Wall, OBJECT_CATEGORY.Floor, OBJECT_CATEGORY.Ceiling]

@@ -60,10 +60,10 @@ type EditorState = {
   /** How many pixels the object being marked has. */
   markPixels: number
   /**
-   * The objects that have pixels in a loaded label map version (an undone new object has none), or null until
-   * one is loaded. Only meaningful while `revision` is that version.
+   * The objects that have pixels in a loaded label map version (an undone new object has none), and what each rests
+   * on there (a vase on a table), or null until one is loaded. Only meaningful while `revision` is that version.
    */
-  presentObjects: { revision: number; indexes: ReadonlySet<number> } | null
+  presentObjects: { revision: number; indexes: ReadonlySet<number>; restsOn: ReadonlyMap<number, number> } | null
   /**
    * The objects being removed from the photo, while the AI works (empty otherwise): the photo shows it, and undo,
    * redo and the brushes wait, so the version the removal builds on stays the one shown.
@@ -115,8 +115,8 @@ type EditorState = {
   addMarkStroke: (stroke: MarkStroke, pixels: number) => void
   /** Records the objects being removed by name (empty when the removal is over). */
   setRemoving: (labels: readonly string[]) => void
-  /** Records which objects have pixels in a loaded label map version. */
-  setPresentObjects: (revision: number, indexes: ReadonlySet<number>) => void
+  /** Records which objects have pixels in a loaded label map version, and what each rests on. */
+  setPresentObjects: (revision: number, indexes: ReadonlySet<number>, restsOn: ReadonlyMap<number, number>) => void
   /** Goes one step back. */
   undo: () => void
   /** Goes one step forward again. */
@@ -126,25 +126,29 @@ type EditorState = {
 }
 
 /** The fresh state for a room. */
-const initial = (roomId: string | null) => ({
-  roomId,
-  edits: {},
-  revision: null,
-  history: [{ edits: {}, revision: null }],
-  position: 0,
-  selected: 0,
-  hovered: 0,
-  comparing: false,
-  outlineTool: null,
-  marking: false,
-  markTool: OUTLINE_BRUSH_MODE.Paint,
-  markStrokes: [],
-  markPixels: 0,
-  presentObjects: null,
-  removing: [],
-  designId: null,
-  savedEdits: null,
-})
+const initial = (roomId: string | null) => {
+  // One object for both, so flush() sees nothing pending before the first change.
+  const edits: Edits = {}
+  return {
+    roomId,
+    edits,
+    revision: null,
+    history: [{ edits, revision: null }],
+    position: 0,
+    selected: 0,
+    hovered: 0,
+    comparing: false,
+    outlineTool: null,
+    marking: false,
+    markTool: OUTLINE_BRUSH_MODE.Paint,
+    markStrokes: [],
+    markPixels: 0,
+    presentObjects: null,
+    removing: [],
+    designId: null,
+    savedEdits: null,
+  }
+}
 
 /**
  * The editor's state for the open room. Recolors live in memory until they're saved as a design
@@ -210,6 +214,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (get().hovered !== index) set({ hovered: index })
     },
     setColor: (index, color) => {
+      // A strength still being changed becomes its own step first, so undo can come back to it.
+      flush()
       const { edits } = get()
       commitEdits({ ...edits, [index]: { color, strength: edits[index]?.strength ?? DEFAULT_STRENGTH } })
     },
@@ -220,6 +226,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     commitStrength: flush,
     resetObject: (index) => {
+      flush()
       const { edits } = get()
       if (!edits[index]) return
       const rest = { ...edits }
@@ -227,6 +234,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       commitEdits(rest)
     },
     resetAll: () => {
+      flush()
       if (Object.keys(get().edits).length > 0) commitEdits({})
     },
     setOutlineTool: (tool) => set({ outlineTool: get().selected ? tool : null, comparing: false }),
@@ -243,7 +251,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     stopMarking: () => set({ marking: false, markStrokes: [], markPixels: 0 }),
     setMarkTool: (tool) => set({ markTool: tool }),
     addMarkStroke: (stroke, pixels) => set({ markStrokes: [...get().markStrokes, stroke], markPixels: pixels }),
-    setPresentObjects: (revision, indexes) => set({ presentObjects: { revision, indexes } }),
+    setPresentObjects: (revision, indexes, restsOn) => set({ presentObjects: { revision, indexes, restsOn } }),
     setRemoving: (labels) => set({ removing: labels, outlineTool: labels.length > 0 ? null : get().outlineTool }),
     undo: () => {
       if (get().marking || get().removing.length > 0) return
