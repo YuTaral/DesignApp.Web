@@ -10,6 +10,7 @@ import { useEditorStore } from "./editor-store"
 import { labelAt, loadLabelMap, restingOn, type LabelMap } from "./label-map"
 import { hexToOklab } from "./oklab"
 import { RoomRenderer, type PhotoRect, type RenderEdit } from "./renderer"
+import type { BoundingBox } from "@/features/rooms/types"
 import { LIMITS, MARK_PREVIEW, MESSAGES, OUTLINE_BRUSH_MODE, STROKE_SHAPE, type OutlineBrushMode, type StrokeShape } from "@/lib/constants"
 
 /**
@@ -67,15 +68,27 @@ function badgeGesture(shape: StrokeShape) {
  * @param props.room - A room whose analysis is Ready.
  * @param props.onStroke - Saves a finished stroke; resolves to whether it was saved (if not, the preview is undone).
  * @param props.saving - Whether a stroke is being saved (new strokes wait until it's done).
+ * @param props.focus - Starts zoomed in on this part of the photo (an object's box), such as in the Parts dialog.
+ * @param props.only - The objects that can be pointed at and selected; others are ignored. All when missing.
+ * @param props.active - False pauses drawing, while another view of the room (the Parts dialog) is in front.
+ * @param props.fallbackSelect - What a click outside the objects that can be selected selects (instead of nothing).
  */
 export function RoomCanvas({
   room,
   onStroke,
   saving = false,
+  focus,
+  only,
+  active = true,
+  fallbackSelect = 0,
 }: {
   room: Room
   onStroke?: (stroke: CanvasStroke) => Promise<boolean>
   saving?: boolean
+  focus?: BoundingBox
+  only?: ReadonlySet<number>
+  active?: boolean
+  fallbackSelect?: number
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -88,7 +101,7 @@ export function RoomCanvas({
 
   const {
     edits, selected, hovered, comparing, select, hover, revision, outlineTool, brushSize, brushShape,
-    marking, markTool, markStrokes, addMarkStroke, presentObjects, setPresentObjects, removing,
+    marking, markTool, markStrokes, addMarkStroke, presentObjects, setPresentObjects, removing, highlightedTone,
   } = useEditorStore()
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   // The box or lasso being drawn, in CSS px of the canvas, for its outline.
@@ -204,6 +217,27 @@ export function RoomCanvas({
 
   const rect = useMemo(() => photoRect(size, room, view), [size, room, view])
 
+  // Zoom in on the focused box once the canvas has a size: the box with a margin fills the canvas.
+  const focused = useRef(false)
+  useEffect(() => {
+    if (!focus || focused.current || size.width === 0 || size.height === 0) return
+    focused.current = true
+    const fitted = photoRect(size, room, { zoom: 1, x: 0, y: 0 })
+    const zoom = clamp(
+      Math.min(size.width / (fitted.width * focus.width * LIMITS.focusMargin), size.height / (fitted.height * focus.height * LIMITS.focusMargin)),
+      1, LIMITS.zoom.max
+    )
+    const [cx, cy] = [focus.x + focus.width / 2, focus.y + focus.height / 2]
+    setView(clampView(size, room, { zoom, x: fitted.width * zoom * (0.5 - cx), y: fitted.height * zoom * (0.5 - cy) }))
+  }, [focus, size, room])
+
+  // Which objects are parts of others: a part follows its object's color until it has its own, and a selected
+  // object is outlined with its parts.
+  const parents = useMemo(
+    () => new Map(room.objects.flatMap((o) => (o.parentIndex ? [[o.index, o.parentIndex] as const] : []))),
+    [room.objects]
+  )
+
   // The index the marked object will get, so the preview can show it as the selected object.
   const markIndex = Math.min(255, Math.max(0, ...room.objects.map((o) => o.index)) + 1)
 
@@ -214,28 +248,39 @@ export function RoomCanvas({
     const result = new Map<number, RenderEdit>()
     for (const [index, edit] of Object.entries(edits)) {
       const object = byIndex.get(Number(index))
-      if (object) result.set(object.index, { target: hexToOklab(edit.color), source: hexToOklab(object.dominantColor), strength: edit.strength })
+      if (!object) continue
+      result.set(object.index, {
+        target: hexToOklab(edit.color),
+        source: hexToOklab(object.dominantColor),
+        strength: edit.strength,
+        tones: edit.tones?.map((t) => ({ center: hexToOklab(t.center), target: t.color ? hexToOklab(t.color) : null, strength: t.strength })),
+      })
+    }
+    // A part without a color of its own looks like the rest of its object.
+    for (const [part, parent] of parents) {
+      const inherited = result.get(parent)
+      if (!result.has(part) && inherited) result.set(part, inherited)
     }
     if (marking) result.set(markIndex, { target: hexToOklab(MARK_PREVIEW.color), source: hexToOklab(MARK_PREVIEW.source), strength: MARK_PREVIEW.strength })
     return result
-  }, [edits, room.objects, marking, markIndex])
+  }, [edits, room.objects, marking, markIndex, parents])
 
   useEffect(() => {
-    rendererRef.current?.setEdits(renderEdits)
-  }, [renderEdits, map])
+    rendererRef.current?.setEdits(renderEdits, parents)
+  }, [renderEdits, parents, map])
 
   // Draw on the next frame whenever anything visible changes.
   useEffect(() => {
     const renderer = rendererRef.current
-    if (!renderer || !map) return
+    if (!renderer || !map || !active) return
     const frame = requestAnimationFrame(() => {
       renderer.render({
         rect, edits: renderEdits, hovered: marking ? 0 : hovered, selected: marking ? markIndex : selected,
-        split: comparing ? rect.x + rect.width * split : null,
+        split: comparing ? rect.x + rect.width * split : null, highlight: marking ? null : highlightedTone,
       })
     })
     return () => cancelAnimationFrame(frame)
-  }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick, marking, markIndex, shownPhoto])
+  }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick, marking, markIndex, shownPhoto, active, highlightedTone])
 
   const zoomAround = useCallback(
     (factor: number, cx: number, cy: number) => {
@@ -274,7 +319,12 @@ export function RoomCanvas({
     const bounds = canvasRef.current!.getBoundingClientRect()
     return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
   }
-  const objectAt = (x: number, y: number) => (map ? labelAt(map, (x - rect.x) / rect.width, (y - rect.y) / rect.height) : 0)
+  const objectAt = (x: number, y: number) => {
+    const index = map ? labelAt(map, (x - rect.x) / rect.width, (y - rect.y) / rect.height) : 0
+    return only && !only.has(index) ? 0 : index
+  }
+  // A part's strokes only take its object's pixels, and erasing gives them back to it (as the API does).
+  const selectedParent = room.objects.find((o) => o.index === selected)?.parentIndex ?? undefined
   const toPhoto = (x: number, y: number): StrokePoint => ({ x: (x - rect.x) / rect.width, y: (y - rect.y) / rect.height })
   const brushing = marking || (!!outlineTool && !!onStroke && selected > 0)
   const tool = marking ? markTool : outlineTool
@@ -343,7 +393,7 @@ export function RoomCanvas({
         stroke.current = { ...start, working: map.labels, maskBefore, changed }
       } else {
         const working = map.labels.slice()
-        const changed = brush ? stampStroke(working, map.width, map.height, [first], radius, tool!, selected, shape) : 0
+        const changed = brush ? stampStroke(working, map.width, map.height, [first], radius, tool!, selected, shape, undefined, selectedParent) : 0
         stroke.current = { ...start, working, maskBefore: null, changed }
       }
       if (brush) showPreview()
@@ -380,7 +430,7 @@ export function RoomCanvas({
       const last = s.points[s.points.length - 1]
       s.changed += s.maskBefore && markMask.current
         ? stampMark(markMask.current, map.width, map.height, [next], s.radius, tool!, s.shape, last)
-        : stampStroke(s.working, map.width, map.height, [next], s.radius, tool!, selected, s.shape, last)
+        : stampStroke(s.working, map.width, map.height, [next], s.radius, tool!, selected, s.shape, last, selectedParent)
       s.points.push(next)
       showPreview()
       return
@@ -414,7 +464,7 @@ export function RoomCanvas({
         if (event.type !== "pointercancel" && big && map) {
           s.changed = s.maskBefore && markMask.current
             ? stampMark(markMask.current, map.width, map.height, s.points, s.radius, tool!, s.shape)
-            : stampStroke(s.working, map.width, map.height, s.points, s.radius, tool!, selected, s.shape)
+            : stampStroke(s.working, map.width, map.height, s.points, s.radius, tool!, selected, s.shape, undefined, selectedParent)
           if (!s.maskBefore) showPreview()
         }
       }
@@ -447,7 +497,7 @@ export function RoomCanvas({
       })
       return
     }
-    if (wasTap && !brushing) select(objectAt(point.x, point.y))
+    if (wasTap && !brushing) select(objectAt(point.x, point.y) || fallbackSelect)
   }
 
   const hoveredLabel = marking ? undefined : room.objects.find((o) => o.index === hovered)?.label

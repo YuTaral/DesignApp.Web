@@ -11,7 +11,17 @@ export type Oklab = { l: number; a: number; b: number }
  */
 export function hexToOklab(hex: string): Oklab {
   const n = Number.parseInt(hex.slice(1), 16)
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => toLinear(c / 255))
+  return rgbToOklab((n >> 16) & 255, (n >> 8) & 255, n & 255)
+}
+
+/**
+ * Converts an sRGB color given as 0..255 channels (a photo pixel) to OKLab.
+ * @param red - Red, 0..255.
+ * @param green - Green, 0..255.
+ * @param blue - Blue, 0..255.
+ */
+export function rgbToOklab(red: number, green: number, blue: number): Oklab {
+  const [r, g, b] = [red, green, blue].map((c) => toLinear(c / 255))
 
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)

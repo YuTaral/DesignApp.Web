@@ -11,8 +11,11 @@ import { MESSAGES, OBJECT_CATEGORY, PAINT } from "@/lib/constants"
 import { paintsByRef, usePalettes, type Paint } from "./api"
 import { closestPaint, formatNumber, formatTins, isPaintable, litresFor, tinsFor, type PaintSettings } from "./paint-math"
 
-/** One recolored wall or ceiling of the list, with its paint (if it names one) and its area (once it has a size). */
-type Row = { object: DetectedObject; color: string; paint: Paint | undefined; area: number | null }
+/** One color to paint on a surface: the whole surface, or one tone of a surface split by color (bricks, mortar). */
+type Line = { color: string; paint: Paint | undefined; share: number; tone: number | null }
+
+/** One recolored wall or ceiling of the list, with its area (once it has a size) and the colors on it. */
+type Row = { object: DetectedObject; area: number | null; lines: Line[] }
 
 /** One paint to buy for the room's surfaces, with the area it covers. */
 type Total = { key: string; color: string; title: string; area: number }
@@ -110,21 +113,23 @@ function PaintList({
     .map((object) => {
       const edit = edits[object.index]
       const size = sizes[object.index]
-      return {
-        object,
-        color: edit.color,
-        paint: edit.paint ? paints.get(edit.paint) : undefined,
-        area: size ? size.width * size.height : null,
-      }
+      // A surface split by color needs a paint per recolored tone, for its share of the area.
+      const lines: Line[] = edit.tones
+        ? edit.tones.flatMap((t, i) => (t.color ? [{ color: t.color, paint: t.paint ? paints.get(t.paint) : undefined, share: t.share, tone: i }] : []))
+        : [{ color: edit.color, paint: edit.paint ? paints.get(edit.paint) : undefined, share: 1, tone: null }]
+      return { object, area: size ? size.width * size.height : null, lines }
     })
+    .filter((row) => row.lines.length > 0)
 
   // The same paint (or the same free color) on several surfaces is bought once.
   const totals = new Map<string, Total>()
   for (const row of rows) {
     if (row.area === null) continue
-    const key = row.paint?.ref ?? row.color.toUpperCase()
-    const total = totals.get(key) ?? { key, color: row.color, title: paintTitle(row), area: 0 }
-    totals.set(key, { ...total, area: total.area + row.area })
+    for (const line of row.lines) {
+      const key = line.paint?.ref ?? line.color.toUpperCase()
+      const total = totals.get(key) ?? { key, color: line.color, title: paintTitle(line), area: 0 }
+      totals.set(key, { ...total, area: total.area + row.area * line.share })
+    }
   }
 
   const text = listText(rows, [...totals.values()], settings)
@@ -149,13 +154,15 @@ function PaintList({
         {rows.map((row) => (
           <li key={row.object.index} data-paint-row={row.object.index} className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-xl border p-3">
             <div className="flex items-center gap-3">
-              <span className="size-8 shrink-0 rounded-lg border shadow-soft" style={{ backgroundColor: row.color }} aria-hidden />
+              <span className="size-8 shrink-0 rounded-lg border shadow-soft" style={{ backgroundColor: row.lines[0].color }} aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium first-letter:uppercase">{row.object.label}</p>
-                <p className="truncate text-sm text-muted-foreground" data-paint-name>
-                  {paintTitle(row)}
-                  {!row.paint && allPaints.length > 0 && ` · closest ${closestPaint(row.color, allPaints)?.code}`}
-                </p>
+                {row.lines[0].tone === null && (
+                  <p className="truncate text-sm text-muted-foreground" data-paint-name>
+                    {paintTitle(row.lines[0])}
+                    {!row.lines[0].paint && allPaints.length > 0 && ` · closest ${closestPaint(row.lines[0].color, allPaints)?.code}`}
+                  </p>
+                )}
               </div>
               {row.area !== null && (
                 <p className="shrink-0 text-right text-sm tabular-nums" data-area>
@@ -163,6 +170,22 @@ function PaintList({
                 </p>
               )}
             </div>
+            {row.lines[0].tone !== null && (
+              <ul className="grid grid-cols-[minmax(0,1fr)] gap-1 text-sm" aria-label={`Colors of the ${row.object.label}`}>
+                {row.lines.map((line) => (
+                  <li key={line.tone} className="flex items-center gap-2" data-tone-line={line.tone}>
+                    <span className="size-4 shrink-0 rounded border" style={{ backgroundColor: line.color }} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">
+                      Color {(line.tone ?? 0) + 1} · {paintTitle(line)}
+                      {!line.paint && allPaints.length > 0 && <span className="text-muted-foreground"> · closest {closestPaint(line.color, allPaints)?.code}</span>}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
+                      {Math.round(line.share * 100)}%{row.area !== null && ` · ${formatNumber(row.area * line.share)} m²`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <SizeInputs object={row.object} size={sizes[row.object.index]} onSize={onSize} />
           </li>
         ))}
@@ -300,11 +323,11 @@ function SizeInputs({ object, size, onSize }: { object: DetectedObject; size: Su
 }
 
 /**
- * What a row's paint is called: "RAL 9010 Pure white", or the color for a free one.
- * @param row - The row.
+ * What a line's paint is called: "RAL 9010 Pure white", or the color for a free one.
+ * @param line - The line.
  */
-function paintTitle(row: Pick<Row, "paint" | "color">) {
-  return row.paint ? `${row.paint.code} ${row.paint.name}` : `Custom color ${row.color.toUpperCase()}`
+function paintTitle(line: Pick<Line, "paint" | "color">) {
+  return line.paint ? `${line.paint.code} ${line.paint.name}` : `Custom color ${line.color.toUpperCase()}`
 }
 
 /**
@@ -322,7 +345,11 @@ function listText(rows: Row[], totals: Total[], settings: PaintSettings) {
   const unsized = rows.filter((row) => row.area === null)
   if (unsized.length > 0) {
     if (totals.length > 0) lines.push("")
-    for (const row of unsized) lines.push(`${row.object.label}: ${paintTitle(row)}`)
+    for (const row of unsized) {
+      for (const line of row.lines) {
+        lines.push(`${row.object.label}${line.tone === null ? "" : ` (color ${line.tone + 1}, ${Math.round(line.share * 100)}%)`}: ${paintTitle(line)}`)
+      }
+    }
   }
   lines.push("", MESSAGES.paintApproximate)
   return lines.join("\n")

@@ -15,17 +15,24 @@ import { DEFAULT_STRENGTH, MESSAGES, RAL_FAMILIES, SWATCHES } from "@/lib/consta
 type ColorTab = "quick" | "paints"
 
 /**
- * The inspector's Color section: recolors the selected object with a quick swatch, a real paint (RAL) or any color,
- * sets how strongly, and resets it. A color that isn't a paint shows the closest paint, one click away. Without a
- * selection it explains how to pick an object.
+ * The Color section: recolors the selected object with a quick swatch, a real paint (RAL) or any color, sets how
+ * strongly, and resets it. A color that isn't a paint shows the closest paint, one click away. Without a selection it
+ * explains how to pick an object. For an object split by color, the Parts dialog's copy changes the chosen tone, and
+ * the inspector's copy lists the tones and points to the dialog.
  * @param props.room - The room being edited.
+ * @param props.inDialog - Whether it is the Parts dialog's copy.
  */
-export function ColorPanel({ room }: { room: Room }) {
-  const { selected, edits, setColor, previewStrength, commitStrength, resetObject } = useEditorStore()
+export function ColorPanel({ room, inDialog = false }: { room: Room; inDialog?: boolean }) {
+  const { selected, selectedTone, edits, setColor, previewStrength, commitStrength, resetObject } = useEditorStore()
   const palettes = usePalettes()
   const [tab, setTab] = useState<ColorTab>("quick")
   const object = room.objects.find((o) => o.index === selected)
-  const edit = selected ? edits[selected] : undefined
+  const objectEdit = selected ? edits[selected] : undefined
+  const tones = objectEdit?.tones
+  const toneIndex = tones && selectedTone !== null && selectedTone < tones.length ? selectedTone : null
+  const tone = toneIndex !== null ? tones?.[toneIndex] : undefined
+  // What the controls show and change: the chosen tone of a split object, or the object.
+  const edit = tones ? (tone?.color ? { color: tone.color, strength: tone.strength, paint: tone.paint } : undefined) : objectEdit
 
   if (!object) {
     return (
@@ -39,7 +46,28 @@ export function ColorPanel({ room }: { room: Room }) {
     )
   }
 
-  const current = edit?.color ?? object.dominantColor
+  if (tones && !inDialog) {
+    return (
+      <div className="space-y-2">
+        <h2 className="min-w-0 truncate font-medium first-letter:uppercase">{object.label}</h2>
+        <div className="flex items-center gap-2" data-tone-summary>
+          {tones.map((t, i) => (
+            <span
+              key={t.center}
+              className="size-6 rounded-md border shadow-soft"
+              style={{ backgroundColor: t.color ?? t.center }}
+              title={`Tone ${i + 1}`}
+              aria-hidden
+            />
+          ))}
+          <span className="text-sm text-muted-foreground">Split into {tones.length} colors</span>
+        </div>
+        <p className="text-xs text-muted-foreground">Change them in Parts.</p>
+      </div>
+    )
+  }
+
+  const current = edit?.color ?? tone?.center ?? object.dominantColor
   const strength = edit?.strength ?? DEFAULT_STRENGTH
   const paint = edit?.paint ? paintsByRef(palettes.data).get(edit.paint) : undefined
   const allPaints = palettes.data?.flatMap((p) => p.paints) ?? []
@@ -48,7 +76,10 @@ export function ColorPanel({ room }: { room: Room }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="min-w-0 truncate font-medium first-letter:uppercase">{object.label}</h2>
+        <h2 className="min-w-0 truncate font-medium first-letter:uppercase">
+          {object.label}
+          {toneIndex !== null && <span className="text-muted-foreground"> · color {toneIndex + 1}</span>}
+        </h2>
         <Button variant="ghost" size="sm" disabled={!edit} onClick={() => resetObject(object.index)}>
           <RotateCcwIcon data-icon="inline-start" />
           Reset

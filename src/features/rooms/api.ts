@@ -148,6 +148,32 @@ export function removeRoomObjects(roomId: string, objectIndexes: number[], baseR
 }
 
 /**
+ * Asks the room's AI for the parts of an object (a chair's seat, backrest and legs): each becomes a part of it, with
+ * its own color, in a new label map version. With the real AI this is a paid call.
+ * @param roomId - The room.
+ * @param objectIndex - The object.
+ * @param baseRevision - The label map version the editor shows.
+ * @param instructions - The user's own words for the AI on which parts to find, such as "the cushions on their own".
+ * @returns The room, with the new parts and its new labelMapRevision.
+ * @throws ApiError with a message for the user when no parts can be found.
+ */
+export function findRoomParts(roomId: string, objectIndex: number, baseRevision: number, instructions?: string): Promise<Room> {
+  return sendJson<Room>("POST", API.roomParts(roomId), { baseRevision, objectIndex, instructions: instructions?.trim() || undefined })
+}
+
+/**
+ * Merges a part (a chair's seat) back into the object it is a part of, as a new label map version.
+ * @param roomId - The room.
+ * @param objectIndex - The part.
+ * @param baseRevision - The label map version the editor shows.
+ * @returns The room, with its new labelMapRevision.
+ * @throws ApiError with a message for the user when it can't be merged.
+ */
+export function mergeRoomPart(roomId: string, objectIndex: number, baseRevision: number): Promise<Room> {
+  return sendJson<Room>("POST", API.roomMerges(roomId), { baseRevision, objectIndex })
+}
+
+/**
  * Makes a stored label map version current again, after undo or redo of an outline fix.
  * @param roomId - The room.
  * @param revision - The version the editor now shows.

@@ -12,10 +12,11 @@ import { OUTLINE_BRUSH_MODE, STROKE_SHAPE } from "@/lib/constants"
  * The "Fix outline" bar under the photo for the selected object: Add and Erase turn on the tool, then a drag on
  * the photo marks exactly the pixels it covers: under a round brush, inside a box, or inside a lasso drawn around
  * an area. The size sets the brush on screen, so zooming in gives finer control. On a wide screen the tools sit
- * side by side across the photo's width; on a narrow one they stack.
+ * side by side across the photo's width; on a narrow one they stack. In the Parts dialog's column they always stack.
  * @param props.room - The room being edited.
+ * @param props.stacked - Stacks the tools, for a narrow column (the Parts dialog).
  */
-export function OutlinePanel({ room }: { room: Room }) {
+export function OutlinePanel({ room, stacked = false }: { room: Room; stacked?: boolean }) {
   const { selected, outlineTool, setOutlineTool, brushShape } = useEditorStore()
   const object = room.objects.find((o) => o.index === selected)
   if (!object) return null
@@ -24,7 +25,7 @@ export function OutlinePanel({ room }: { room: Room }) {
   return (
     <section
       aria-label="Fix outline"
-      className="shrink-0 space-y-3 rounded-2xl border bg-card px-4 py-3 shadow-soft"
+      className={stacked ? "space-y-3" : "shrink-0 space-y-3 rounded-2xl border bg-card px-4 py-3 shadow-soft"}
       data-outline-panel
     >
       <p className="text-sm text-muted-foreground">
@@ -36,7 +37,7 @@ export function OutlinePanel({ room }: { room: Room }) {
             : "If the color misses part of it or spills over, brush the outline here."}
         {brush && " Zoom in for fine edges."}
       </p>
-      <div className="grid gap-3 sm:grid-cols-[13rem_16rem] md:grid-cols-[13rem_16rem_minmax(12rem,1fr)] md:items-center">
+      <div className={stacked ? "grid gap-3" : "grid gap-3 sm:grid-cols-[13rem_16rem] md:grid-cols-[13rem_16rem_minmax(12rem,1fr)] md:items-center"}>
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant={outlineTool === OUTLINE_BRUSH_MODE.Paint ? "default" : "outline"}
@@ -57,7 +58,7 @@ export function OutlinePanel({ room }: { room: Room }) {
         </div>
         <BrushShapeControl />
         {brush && (
-          <div className="sm:col-span-2 md:col-span-1">
+          <div className={stacked ? undefined : "sm:col-span-2 md:col-span-1"}>
             <BrushSizeControl inline />
           </div>
         )}

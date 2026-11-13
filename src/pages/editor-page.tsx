@@ -43,6 +43,7 @@ import { sameEdits, sameSizes, useEditorStore, type Edits, type SurfaceSizes } f
 import { PaintListButton } from "@/features/paints/paint-list"
 import { NewObjectPanel } from "@/features/editor/new-object-panel"
 import { OutlinePanel } from "@/features/editor/outline-panel"
+import { PartsButton, PartsDialog } from "@/features/editor/parts-dialog"
 import { RemoveObjectPanel } from "@/features/editor/remove-object-panel"
 import { useOutlineFixes } from "@/features/editor/use-outline-fixes"
 import { RoomCanvas } from "@/features/editor/room-canvas"
@@ -164,6 +165,7 @@ function Editor({ room }: { room: Room }) {
           </div>
         )}
         {editable && !marking && <OutlinePanel room={room} />}
+        {editable && <PartsDialog room={room} />}
       </section>
 
       <aside
@@ -180,6 +182,7 @@ function Editor({ room }: { room: Room }) {
           ) : editable ? (
             <>
               <ColorPanel room={room} />
+              <PartsButton room={room} />
               <PaintListButton room={room} />
               <RemoveObjectPanel room={room} />
             </>
@@ -260,7 +263,8 @@ function AiBadge({ room }: { room: Room }) {
  */
 function ReadyCanvas({ room }: { room: Room }) {
   const { save, saving } = useOutlineFixes(room)
-  return <RoomCanvas room={room} onStroke={save} saving={saving} />
+  const partsObject = useEditorStore((state) => state.partsObject)
+  return <RoomCanvas room={room} onStroke={save} saving={saving} active={partsObject === null} />
 }
 
 /** Undo, redo, before/after and reset-all, above the canvas. Also turns on the keyboard shortcuts. */

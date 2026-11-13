@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import type { Edits, SurfaceSizes } from "@/features/editor/editor-store"
+import type { Edits, ObjectEdit, SurfaceSizes, ToneEdit } from "@/features/editor/editor-store"
 import { getJson, sendJson } from "@/lib/api"
 import { API, QUERY_KEYS } from "@/lib/constants"
 
@@ -13,6 +13,22 @@ export type DesignEdit = {
   /** How strongly it is applied, 0..1. */
   strength: number
   /** The real paint the color is, such as "ral-classic/9010"; null or missing for a free color. */
+  paint?: string | null
+  /** The tones of an object split by color (bricks and mortar); null or missing for one color. */
+  tones?: DesignTone[] | null
+}
+
+/** One tone of a split object in a saved room (mirrors the API's ToneRequest). */
+export type DesignTone = {
+  /** The tone's original color as #RRGGBB. */
+  center: string
+  /** How much of the object it covers, 0..1. */
+  share: number
+  /** Its new color as #RRGGBB; null or missing to keep it. */
+  color?: string | null
+  /** How strongly it is applied, 0..1. */
+  strength: number
+  /** The real paint the color is; null or missing for a free color or none. */
   paint?: string | null
 }
 
@@ -54,7 +70,7 @@ export type Design = {
  */
 export function toDesignEdits(edits: Edits): DesignEdit[] {
   return Object.entries(edits)
-    .map(([index, edit]) => ({ objectIndex: Number(index), color: edit.color, strength: edit.strength, paint: edit.paint }))
+    .map(([index, edit]) => ({ objectIndex: Number(index), color: edit.color, strength: edit.strength, paint: edit.paint, tones: edit.tones?.map((t) => ({ ...t })) }))
     .sort((a, b) => a.objectIndex - b.objectIndex)
 }
 
@@ -81,9 +97,23 @@ export function toEditorSizes(sizes: DesignSize[] | undefined): SurfaceSizes {
  * @param edits - The room's recolors.
  */
 export function toEditorEdits(edits: DesignEdit[]): Edits {
-  return Object.fromEntries(
-    edits.map((e) => [e.objectIndex, e.paint ? { color: e.color, strength: e.strength, paint: e.paint } : { color: e.color, strength: e.strength }]),
-  )
+  return Object.fromEntries(edits.map((e) => [e.objectIndex, toEditorEdit(e)]))
+}
+
+/**
+ * One saved recolor as the editor's, leaving out the fields a saved one doesn't have (so comparisons see no change).
+ * @param e - The saved recolor.
+ */
+function toEditorEdit(e: DesignEdit): ObjectEdit {
+  const edit: ObjectEdit = e.paint ? { color: e.color, strength: e.strength, paint: e.paint } : { color: e.color, strength: e.strength }
+  if (!e.tones?.length) return edit
+  const tones = e.tones.map((t): ToneEdit => {
+    const tone: ToneEdit = { center: t.center, share: t.share, strength: t.strength }
+    if (t.color) tone.color = t.color
+    if (t.paint) tone.paint = t.paint
+    return tone
+  })
+  return { ...edit, tones }
 }
 
 /**

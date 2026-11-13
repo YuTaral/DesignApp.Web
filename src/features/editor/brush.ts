@@ -116,8 +116,8 @@ function walkStroke(
 
 /**
  * Applies a stroke to a label map, in place, with the API's OutlineBrush rules: painting gives covered pixels to
- * the object; erasing clears only the object's own pixels. A brush is stamped along the path; a box or lasso fills
- * its area.
+ * the object; erasing clears only the object's own pixels. For a part of an object, painting only takes that object's
+ * pixels and erasing gives them back to it. A brush is stamped along the path; a box or lasso fills its area.
  * @param labels - One object index per pixel; changed in place.
  * @param width - The label map's width.
  * @param height - The label map's height.
@@ -127,6 +127,7 @@ function walkStroke(
  * @param target - The object's index.
  * @param shape - Brush, Box or Lasso.
  * @param from - The brush's point before `points[0]`, when continuing a stroke: the gap to it is filled.
+ * @param parent - When the object is a part, the object it is a part of.
  * @returns How many pixels changed.
  */
 export function stampStroke(
@@ -138,15 +139,16 @@ export function stampStroke(
   mode: OutlineBrushMode,
   target: number,
   shape: StrokeShape,
-  from?: StrokePoint
+  from?: StrokePoint,
+  parent?: number
 ): number {
   let changed = 0
   walkStroke(width, height, shape, points, radius, (p) => {
-    if (mode === OUTLINE_BRUSH_MODE.Paint && labels[p] !== target) {
+    if (mode === OUTLINE_BRUSH_MODE.Paint && labels[p] !== target && (parent === undefined || labels[p] === parent)) {
       labels[p] = target
       changed++
     } else if (mode === OUTLINE_BRUSH_MODE.Erase && labels[p] === target) {
-      labels[p] = 0
+      labels[p] = parent ?? 0
       changed++
     }
   }, from)

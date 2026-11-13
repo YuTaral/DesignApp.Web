@@ -69,8 +69,9 @@ function AnalysisProgress({ status }: { status: RoomStatus }) {
 
 /**
  * The detected objects, surfaces first, each with its current color. Choosing one selects it in
- * the editor; pointing at one highlights it in the photo. Objects without pixels in the outlines shown (a new
- * object after undo) are left out. "New object" starts marking one the AI missed.
+ * the editor; pointing at one highlights it in the photo. Parts (a chair's seat) sit indented under their object.
+ * Objects without pixels in the outlines shown (a new object after undo) are left out. "New object" starts marking
+ * one the AI missed.
  * @param props.room - The analyzed room.
  */
 function ObjectList({ room }: { room: Room }) {
@@ -78,9 +79,16 @@ function ObjectList({ room }: { room: Room }) {
   const listRef = useRef<HTMLUListElement>(null)
   // Until the outlines of the version shown are loaded, every object is listed (a new one must not blink out).
   const present = presentObjects?.revision === (revision ?? room.labelMapRevision) ? presentObjects.indexes : null
-  const objects = room.objects.filter((o) => present?.has(o.index) ?? true).sort(
+  const shown = room.objects.filter((o) => present?.has(o.index) ?? true)
+  // An object whose parts cover all of it has no pixels of its own, but is still listed with them.
+  const wholes = room.objects.filter((o) => !o.parentIndex && (shown.includes(o) || shown.some((p) => p.parentIndex === o.index))).sort(
     (a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category) || a.index - b.index
   )
+  // Each object followed by its parts; a part whose object isn't shown is listed on its own.
+  const objects = [
+    ...wholes.flatMap((whole) => [whole, ...shown.filter((o) => o.parentIndex === whole.index)]),
+    ...shown.filter((o) => o.parentIndex && !wholes.some((w) => w.index === o.parentIndex)),
+  ]
 
   // An object selected in the photo scrolls into view here.
   useEffect(() => {
@@ -91,7 +99,7 @@ function ObjectList({ room }: { room: Room }) {
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-medium">Objects</h2>
-        <Button variant="outline" size="sm" disabled={marking || comparing} onClick={startMarking}>
+        <Button variant="outline" size="sm" disabled={marking || comparing} onClick={() => startMarking()}>
           <PlusIcon data-icon="inline-start" />
           New object
         </Button>
@@ -99,7 +107,7 @@ function ObjectList({ room }: { room: Room }) {
       <p className="mt-1 text-sm text-muted-foreground">
         {marking
           ? "Mark the new object on the photo, then name it and save."
-          : `${objects.length === 1 ? "1 object" : `${objects.length} objects`} in your photo.`}
+          : `${wholes.length === 1 ? "1 object" : `${wholes.length} objects`} in your photo.`}
       </p>
       <ul ref={listRef} className="-mx-2 mt-3 max-h-[9.5rem] space-y-0.5 overflow-y-auto sm:max-h-72 lg:max-h-[min(24rem,38dvh)]" onMouseLeave={() => hover(0)}>
         {objects.map((object) => (
@@ -111,8 +119,10 @@ function ObjectList({ room }: { room: Room }) {
               disabled={marking}
               onClick={() => select(selected === object.index ? 0 : object.index)}
               onMouseEnter={() => hover(object.index)}
+              data-part-of={object.parentIndex ?? undefined}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+                object.parentIndex && "pl-7",
                 selected === object.index && "bg-accent text-accent-foreground hover:bg-accent"
               )}
             >
@@ -123,7 +133,7 @@ function ObjectList({ room }: { room: Room }) {
               />
               <span className="min-w-0 flex-1 truncate text-sm first-letter:uppercase">{object.label}</span>
               {edits[object.index] && <span className="size-1.5 rounded-full bg-primary" aria-label="recolored" />}
-              <span className="text-xs text-muted-foreground">{CATEGORY_NAMES[object.category] ?? object.category}</span>
+              <span className="text-xs text-muted-foreground">{object.parentIndex ? "Part" : (CATEGORY_NAMES[object.category] ?? object.category)}</span>
             </button>
           </li>
         ))}

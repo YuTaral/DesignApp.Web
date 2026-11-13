@@ -26,6 +26,8 @@ export type DetectedObject = {
   box: BoundingBox
   /** "#RRGGBB" */
   dominantColor: string
+  /** For a part of another object (a chair's seat), that object's index; null or missing for a whole object. */
+  parentIndex?: number | null
 }
 
 /** An uploaded room photo and what the AI found in it. */

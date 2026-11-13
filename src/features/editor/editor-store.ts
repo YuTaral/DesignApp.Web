@@ -3,14 +3,30 @@ import { create } from "zustand"
 import type { StrokePoint } from "./brush"
 import { DEFAULT_STRENGTH, LIMITS, OUTLINE_BRUSH_MODE, STROKE_SHAPE, type OutlineBrushMode, type StrokeShape } from "@/lib/constants"
 
+/** One tone of an object split by color (the bricks or the mortar of a wall), recolored on its own. */
+export type ToneEdit = {
+  /** The tone's original color, "#RRGGBB"; the object's pixels nearest it belong to it. */
+  center: string
+  /** How much of the object it covers, 0..1. */
+  share: number
+  /** Its new color, "#RRGGBB"; missing to keep it as in the photo. */
+  color?: string
+  /** How strongly the new color replaces the original, 0..1. */
+  strength: number
+  /** The real paint the color is; missing for a color picked freely or none. */
+  paint?: string
+}
+
 /** One object's recolor. */
 export type ObjectEdit = {
-  /** The new color, "#RRGGBB". */
+  /** The new color, "#RRGGBB". For an object split by color, its first recolored tone's (for summaries). */
   color: string
   /** How strongly it replaces the original, 0..1. */
   strength: number
   /** The real paint the color is, such as "ral-classic/9010"; missing for a color picked freely. */
   paint?: string
+  /** The tones of an object split by color (2 to 4); missing for one color. */
+  tones?: readonly ToneEdit[]
 }
 
 /** All recolors of a room, by object index. */
@@ -53,6 +69,10 @@ type EditorState = {
   position: number
   /** The selected object, or 0. */
   selected: number
+  /** For a selected object split by color, the tone its color controls change; null for the whole object. */
+  selectedTone: number | null
+  /** The tone highlighted on the photo (its chip is hovered or focused), or null. */
+  highlightedTone: { index: number; tone: number } | null
   /** The object under the pointer, or 0. */
   hovered: number
   /** Whether the before/after split is shown. */
@@ -89,6 +109,8 @@ type EditorState = {
   sizes: SurfaceSizes
   /** The sizes as last saved or opened; null before the first save. */
   savedSizes: SurfaceSizes | null
+  /** The object whose Parts dialog is open, or null (the editor's photo pauses drawing while it is). */
+  partsObject: number | null
 
   /** Starts editing a room, keeping its edits if it's the room already open. */
   open: (roomId: string) => void
@@ -120,6 +142,17 @@ type EditorState = {
   resetObject: (index: number) => void
   /** Removes all recolors, as one undo step. */
   resetAll: () => void
+  /**
+   * Splits an object by color into tones, as one undo step. A color the object had stays on every tone, so it looks
+   * the same until a tone is recolored. Selects the first tone.
+   */
+  splitObject: (index: number, tones: readonly { center: string; share: number }[]) => void
+  /** Makes a split object one color again (its first recolored tone's, if any), as one undo step. */
+  joinObject: (index: number) => void
+  /** Picks the tone the color controls change (null for the whole object). */
+  selectTone: (tone: number | null) => void
+  /** Highlights a tone on the photo, or none. */
+  highlightTone: (tone: { index: number; tone: number } | null) => void
   /** Turns an outline brush on, or off with null. */
   setOutlineTool: (tool: OutlineBrushMode | null) => void
   /** Sets the brush diameter (clamped to LIMITS.brushSizes). */
@@ -140,6 +173,8 @@ type EditorState = {
   setRemoving: (labels: readonly string[]) => void
   /** Records which objects have pixels in a loaded label map version, and what each rests on. */
   setPresentObjects: (revision: number, indexes: ReadonlySet<number>, restsOn: ReadonlyMap<number, number>) => void
+  /** Opens the Parts dialog of an object (the object or one of its parts stays selected), or closes it with null. */
+  openParts: (index: number | null) => void
   /** Goes one step back. */
   undo: () => void
   /** Goes one step forward again. */
@@ -159,6 +194,8 @@ const initial = (roomId: string | null) => {
     history: [{ edits, revision: null }],
     position: 0,
     selected: 0,
+    selectedTone: null,
+    highlightedTone: null,
     hovered: 0,
     comparing: false,
     outlineTool: null,
@@ -172,6 +209,7 @@ const initial = (roomId: string | null) => {
     savedEdits: null,
     sizes: {},
     savedSizes: null,
+    partsObject: null,
   }
 }
 
@@ -203,12 +241,30 @@ export const useEditorStore = create<EditorState>((set, get) => {
   }
 
   /**
+   * The tone of an object the color controls change now, or null when they change the whole object.
+   * @param index - The object.
+   */
+  const toneFor = (index: number) => {
+    const { edits, selected, selectedTone } = get()
+    const tones = edits[index]?.tones
+    return tones && selected === index && selectedTone !== null && selectedTone < tones.length ? selectedTone : null
+  }
+
+  /**
    * Shows a history entry.
    * @param position - Its index.
    */
   const go = (position: number) => {
     const snapshot = get().history[position]
     set({ edits: snapshot.edits, revision: snapshot.revision, position })
+  }
+
+  /** After undo or redo, points the tone controls at a tone the selected object has (or the whole object). */
+  const keepToneInRange = () => {
+    const { edits, selected, selectedTone } = get()
+    const tones = edits[selected]?.tones
+    const tone = tones ? Math.min(selectedTone ?? 0, tones.length - 1) : null
+    if (tone !== selectedTone) set({ selectedTone: tone })
   }
 
   return {
@@ -234,7 +290,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     select: (index) => {
       if (get().marking) return
-      set(index === 0 ? { selected: 0, outlineTool: null } : { selected: index })
+      const selectedTone = get().edits[index]?.tones ? 0 : null
+      set(index === 0 ? { selected: 0, selectedTone: null, outlineTool: null } : { selected: index, selectedTone })
     },
     hover: (index) => {
       if (get().hovered !== index) set({ hovered: index })
@@ -243,7 +300,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
       // A strength still being changed becomes its own step first, so undo can come back to it.
       flush()
       const { edits } = get()
-      const strength = edits[index]?.strength ?? DEFAULT_STRENGTH
+      const tone = toneFor(index)
+      const edit = edits[index]
+      if (tone !== null && edit?.tones) {
+        const tones = edit.tones.map((t, i) => (i === tone ? { center: t.center, share: t.share, color, strength: t.color ? t.strength : DEFAULT_STRENGTH, paint } : t))
+        commitEdits({ ...edits, [index]: summarize(tones) })
+        return
+      }
+      const strength = edit?.strength ?? DEFAULT_STRENGTH
       commitEdits({ ...edits, [index]: paint ? { color, strength, paint } : { color, strength } })
     },
     setSize: (index, size) => {
@@ -254,16 +318,54 @@ export const useEditorStore = create<EditorState>((set, get) => {
     previewStrength: (index, strength) => {
       const { edits } = get()
       const edit = edits[index]
-      if (edit) set({ edits: { ...edits, [index]: { ...edit, strength } } })
+      const tone = toneFor(index)
+      if (edit?.tones && tone !== null) {
+        if (edit.tones[tone].color) set({ edits: { ...edits, [index]: summarize(edit.tones.map((t, i) => (i === tone ? { ...t, strength } : t))) } })
+      } else if (edit) {
+        set({ edits: { ...edits, [index]: { ...edit, strength } } })
+      }
     },
     commitStrength: flush,
     resetObject: (index) => {
       flush()
       const { edits } = get()
-      if (!edits[index]) return
+      const edit = edits[index]
+      if (!edit) return
+      const tone = toneFor(index)
+      // A tone resets alone; the object stays split.
+      if (edit.tones && tone !== null) {
+        if (!edit.tones[tone].color) return
+        commitEdits({ ...edits, [index]: summarize(edit.tones.map((t, i) => (i === tone ? { center: t.center, share: t.share, strength: t.strength } : t))) })
+        return
+      }
       const rest = { ...edits }
       delete rest[index]
       commitEdits(rest)
+    },
+    splitObject: (index, found) => {
+      flush()
+      const { edits } = get()
+      const edit = edits[index]
+      const keep = edit && !edit.tones ? { color: edit.color, strength: edit.strength, paint: edit.paint } : {}
+      const tones = found.map((t) => ({ center: t.center, share: t.share, strength: DEFAULT_STRENGTH, ...keep }))
+      commitEdits({ ...edits, [index]: summarize(tones) })
+      set({ selectedTone: 0 })
+    },
+    joinObject: (index) => {
+      flush()
+      const { edits } = get()
+      const edit = edits[index]
+      if (!edit?.tones) return
+      const first = edit.tones.find((t) => t.color)
+      const rest = { ...edits }
+      delete rest[index]
+      commitEdits(first?.color ? { ...rest, [index]: first.paint ? { color: first.color, strength: first.strength, paint: first.paint } : { color: first.color, strength: first.strength } } : rest)
+      set({ selectedTone: null })
+    },
+    selectTone: (tone) => set({ selectedTone: tone }),
+    highlightTone: (tone) => {
+      const current = get().highlightedTone
+      if (current?.index !== tone?.index || current?.tone !== tone?.tone) set({ highlightedTone: tone })
     },
     resetAll: () => {
       flush()
@@ -285,24 +387,46 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setMarkTool: (tool) => set({ markTool: tool }),
     addMarkStroke: (stroke, pixels) => set({ markStrokes: [...get().markStrokes, stroke], markPixels: pixels }),
     setPresentObjects: (revision, indexes, restsOn) => set({ presentObjects: { revision, indexes, restsOn } }),
+    openParts: (index) => {
+      if (index === null) {
+        set({ partsObject: null, highlightedTone: null, outlineTool: null })
+        return
+      }
+      // The object (or one of its parts) stays selected; a split one's color controls start on its first color.
+      const { edits, selected } = get()
+      set({ partsObject: index, outlineTool: null, comparing: false, selectedTone: edits[selected]?.tones ? 0 : null })
+    },
     setRemoving: (labels) => set({ removing: labels, outlineTool: labels.length > 0 ? null : get().outlineTool }),
     undo: () => {
       if (get().marking || get().removing.length > 0) return
       flush()
       const { position } = get()
       if (position > 0) go(position - 1)
+      keepToneInRange()
     },
     redo: () => {
       if (get().marking || get().removing.length > 0) return
       flush()
       const { history, position } = get()
       if (position < history.length - 1) go(position + 1)
+      keepToneInRange()
     },
     toggleCompare: () => {
       if (!get().marking) set({ comparing: !get().comparing, outlineTool: null })
     },
   }
 })
+
+/**
+ * A split object's recolor from its tones: its color, strength and paint repeat the first recolored tone (or the
+ * first tone's own color at no strength when none is recolored yet), so summaries such as design cards can show it.
+ * @param tones - The tones.
+ */
+export function summarize(tones: readonly ToneEdit[]): ObjectEdit {
+  const first = tones.find((t) => t.color)
+  if (!first?.color) return { color: tones[0].center, strength: 0, tones }
+  return first.paint ? { color: first.color, strength: first.strength, paint: first.paint, tones } : { color: first.color, strength: first.strength, tones }
+}
 
 /**
  * Whether two sets of recolors are the same.
@@ -316,7 +440,15 @@ export function sameEdits(a: Edits, b: Edits) {
     keys.every((key) => {
       const x = a[Number(key)]
       const y = b[Number(key)]
-      return y !== undefined && x.color.toUpperCase() === y.color.toUpperCase() && x.strength === y.strength && x.paint === y.paint
+      return (
+        y !== undefined && x.color.toUpperCase() === y.color.toUpperCase() && x.strength === y.strength && x.paint === y.paint &&
+        (x.tones?.length ?? 0) === (y.tones?.length ?? 0) &&
+        (x.tones ?? []).every((t, i) => {
+          const u = y.tones![i]
+          return t.center.toUpperCase() === u.center.toUpperCase() && t.share === u.share && t.strength === u.strength && t.paint === u.paint &&
+            (t.color ?? "").toUpperCase() === (u.color ?? "").toUpperCase()
+        })
+      )
     })
   )
 }

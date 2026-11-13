@@ -20,6 +20,8 @@ export const API = {
   roomOutline: (id: string) => `/api/rooms/${id}/outline`,
   roomObjects: (id: string) => `/api/rooms/${id}/objects`,
   roomRemovals: (id: string) => `/api/rooms/${id}/removals`,
+  roomMerges: (id: string) => `/api/rooms/${id}/merges`,
+  roomParts: (id: string) => `/api/rooms/${id}/parts`,
   roomPhoto: (id: string) => `/api/rooms/${id}/photo`,
   roomPhotoVersion: (id: string, version: number) => `/api/rooms/${id}/photo/${version}`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
@@ -103,6 +105,8 @@ export const LIMITS = {
   minAreaPx: 2,
   /** A hand-marked object: Application Constants.Marks. */
   mark: { maxStrokes: 100, nameLength: 60 },
+  /** The longest instructions for the AI when it recognizes parts (Application Constants.Parts). */
+  partInstructions: 500,
   /**
    * Removing objects together: Application Constants.Removals. An object rests on another when that one is directly
    * below (within restingGap label-map pixels) at least restingShare of its bottom edge.
@@ -111,6 +115,8 @@ export const LIMITS = {
   /** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
   brushSizes: { min: 2, max: 120, default: 24 },
   zoom: { min: 1, max: 8 },
+  /** A view zoomed in on an object (the Parts dialog) shows its box this many times its size, for some margin. */
+  focusMargin: 1.3,
   /** A press that moves less than this (CSS px) is a tap, not a drag. */
   tapSlop: 5,
   /** Failed room loads tried again (a 404 never is). */
@@ -236,6 +242,13 @@ export const SWATCHES = [
 export const DEFAULT_STRENGTH = 0.8
 
 /**
+ * Splitting an object by color into tones (bricks and mortar), each recolored on its own (Domain Constants.Tones).
+ * The tones come from k-means in OKLab over up to `sample` of the object's pixels; tones closer than `mergeDistance`
+ * are one. On the photo a pixel belongs to the tones by its distance to their centers, blended over `softness`.
+ */
+export const TONES = { min: 2, max: 4, sample: 60000, iterations: 12, mergeDistance: 0.04, softness: 0.05 } as const
+
+/**
  * Paint amounts. Litres = area × coats × (1 + spare) ÷ coverage; tins are the common sizes. A wall's height starts
  * at a usual ceiling height. Sizes mirror the API's Domain Constants.Surfaces.
  */
@@ -290,6 +303,10 @@ export const MESSAGES = {
   designSaved: "Design saved",
   addedTo: (name: string) => `Added to ${name}`,
   colorsSaved: "Colors saved",
+  tonesFailed: "Couldn't read this object's colors. Try again.",
+  oneMainColor: (label: string) => `The ${label} has one main color, so there is nothing to split.`,
+  partsFound: (count: number, label: string) => `Found ${count === 1 ? "1 part" : `${count} parts`} of the ${label}.`,
+  partMerged: (label: string, parent: string) => `Merged the ${label} into the ${parent}. Undo brings it back.`,
   objectRemoved: (label: string, more: number) =>
     `Removed the ${label}${more === 0 ? "" : more === 1 ? " and 1 more object" : ` and ${more} more objects`}. Undo brings it back.`,
   designUpdated: "Design updated",

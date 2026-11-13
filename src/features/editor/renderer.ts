@@ -1,3 +1,4 @@
+import { TONES } from "@/lib/constants"
 import type { LabelMap } from "./label-map"
 import type { Oklab } from "./oklab"
 
@@ -10,6 +11,21 @@ export type RenderEdit = {
   target: Oklab
   /** The object's original main color; the difference to it is what gets applied. */
   source: Oklab
+  /** How strongly the new color replaces the original, 0..1. */
+  strength: number
+  /**
+   * For an object split by color, its tones (2 to 4): each recolors the pixels nearest its center from that center,
+   * and a tone without a target keeps them as in the photo. The object's own target is then unused.
+   */
+  tones?: readonly RenderTone[]
+}
+
+/** One tone of an object split by color, as the shader needs it. */
+export type RenderTone = {
+  /** The tone's original color. */
+  center: Oklab
+  /** Its new color, or null to keep it. */
+  target: Oklab | null
   /** How strongly the new color replaces the original, 0..1. */
   strength: number
 }
@@ -26,7 +42,12 @@ export type RenderState = {
   selected: number
   /** Before/after split, in CSS pixels from the canvas's left edge; left of it shows the original. Null for no split. */
   split: number | null
+  /** A tone of an object to point out: its pixels stay bright and the object's other pixels are dimmed. */
+  highlight?: { index: number; tone: number } | null
 }
+
+/** The rows of the edits texture, one column per object index. */
+const ROW = { target: 0, source: 1, group: 2, centers: 3, targets: 3 + TONES.max, count: 3 + 2 * TONES.max } as const
 
 const vertexShader = `#version 300 es
 in vec2 a_corner;
@@ -51,12 +72,19 @@ precision highp usampler2D;
 in vec2 v_uv;
 uniform sampler2D u_photo;
 uniform usampler2D u_labels;
-uniform sampler2D u_edits;    // 256 x 2: row 0 = target (L, a, b, strength), row 1 = source (L, a, b)
+// 256 x ${ROW.count}, one column per object: row ${ROW.target} = target (L, a, b, strength); row ${ROW.source} = source
+// (L, a, b, tone count); row ${ROW.group} = the object a part belongs to (x), else 0; rows ${ROW.centers}.. = tone centers
+// (L, a, b); rows ${ROW.targets}.. = tone targets (L, a, b, strength, 0 to keep the tone).
+uniform sampler2D u_edits;
 uniform ivec2 u_labelSize;
 uniform int u_hovered;
 uniform int u_selected;
 uniform float u_split;        // device pixels; < 0 for no split
+uniform int u_toneObject;     // the object whose tone is pointed out, or 0
+uniform int u_tone;           // that tone
 out vec4 color;
+
+const float SOFTNESS = ${TONES.softness.toFixed(4)};
 
 vec3 toLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 vec3 toGamma(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
@@ -87,14 +115,53 @@ vec3 fromOklab(vec3 lab) {
   return toGamma(clamp(rgb, 0.0, 1.0));
 }
 
-// The pixel recolored as if it belonged to object 'label' (unchanged when that object has no edit).
-vec3 recolor(vec3 rgb, vec3 lab, int label) {
-  if (label == 0) return rgb;
-  vec4 target = texelFetch(u_edits, ivec2(label, 0), 0);
+// One color shift: the pixel moved by (target - source) in OKLab, mixed in by the strength (target.w).
+vec3 shift(vec3 rgb, vec3 lab, vec4 target, vec3 source) {
   if (target.w <= 0.0) return rgb;
-  vec3 source = texelFetch(u_edits, ivec2(label, 1), 0).xyz;
   vec3 recolored = fromOklab(vec3(lab.x + target.x - source.x, lab.yz - source.yz + target.yz));
   return mix(rgb, recolored, target.w);
+}
+
+// How much a pixel belongs to each tone of an object: soft weights from its distance to the tone centers.
+vec4 toneWeights(vec3 lab, int label, int tones) {
+  float nearest = 1e9;
+  float d[${TONES.max}];
+  for (int i = 0; i < ${TONES.max}; i++) {
+    vec3 center = texelFetch(u_edits, ivec2(label, ${ROW.centers} + i), 0).xyz;
+    d[i] = i < tones ? dot(lab - center, lab - center) : 1e9;
+    nearest = min(nearest, d[i]);
+  }
+  vec4 w = vec4(0.0);
+  for (int i = 0; i < ${TONES.max}; i++) w[i] = i < tones ? exp(-(d[i] - nearest) / (SOFTNESS * SOFTNESS)) : 0.0;
+  return w / (w.x + w.y + w.z + w.w);
+}
+
+// The pixel recolored as if it belonged to object 'label' (unchanged when that object has no edit). An object split by
+// color recolors each tone from its own center, blended by how much the pixel belongs to each.
+vec3 recolor(vec3 rgb, vec3 lab, int label) {
+  if (label == 0) return rgb;
+  vec4 source = texelFetch(u_edits, ivec2(label, ${ROW.source}), 0);
+  int tones = int(source.w + 0.5);
+  if (tones == 0) return shift(rgb, lab, texelFetch(u_edits, ivec2(label, ${ROW.target}), 0), source.xyz);
+  vec4 w = toneWeights(lab, label, tones);
+  vec3 sum = vec3(0.0);
+  for (int i = 0; i < ${TONES.max}; i++) {
+    if (i >= tones) break;
+    vec3 center = texelFetch(u_edits, ivec2(label, ${ROW.centers} + i), 0).xyz;
+    sum += w[i] * shift(rgb, lab, texelFetch(u_edits, ivec2(label, ${ROW.targets} + i), 0), center);
+  }
+  return sum;
+}
+
+// The object a pixel's object belongs to: its parent for a part, else itself.
+int groupOf(int label) {
+  int parent = int(texelFetch(u_edits, ivec2(label, ${ROW.group}), 0).x + 0.5);
+  return parent > 0 ? parent : label;
+}
+
+// Whether a pixel's object is the focused one, or a part of it.
+bool inFocus(int label, int focus) {
+  return label == focus || (label > 0 && groupOf(label) == focus);
 }
 
 int labelAt(vec2 uv) {
@@ -106,26 +173,37 @@ void main() {
   vec3 rgb = texture(u_photo, v_uv).rgb;
   int label = labelAt(v_uv);
   bool before = u_split >= 0.0 && gl_FragCoord.x < u_split;
+  vec3 original = rgb;
 
   if (!before) {
     vec3 lab = toOklab(rgb);
     vec2 texel = 0.75 / vec2(u_labelSize);
+    // Inside an object every neighbor is the object itself, so its recolor is worked out once and reused.
+    vec3 own = recolor(rgb, lab, label);
     vec3 sum = vec3(0.0);
     for (int dy = -1; dy <= 1; dy++)
-      for (int dx = -1; dx <= 1; dx++)
-        sum += recolor(rgb, lab, labelAt(v_uv + vec2(float(dx), float(dy)) * texel));
+      for (int dx = -1; dx <= 1; dx++) {
+        int near = labelAt(v_uv + vec2(float(dx), float(dy)) * texel);
+        sum += near == label ? own : recolor(rgb, lab, near);
+      }
     rgb = sum / 9.0;
   }
 
   // One label texel per screen pixel step, so outlines stay about 2 px wide at any zoom.
   vec2 px = fwidth(v_uv) * 1.5;
   bool edge = false;
-  int focus = label == u_selected ? u_selected : (label == u_hovered ? u_hovered : 0);
+  // A part is outlined with its object when the object is selected.
+  int focus = inFocus(label, u_selected) ? u_selected : (label == u_hovered ? u_hovered : 0);
   if (focus > 0) {
-    edge = labelAt(v_uv + vec2(px.x, 0.0)) != focus || labelAt(v_uv - vec2(px.x, 0.0)) != focus
-        || labelAt(v_uv + vec2(0.0, px.y)) != focus || labelAt(v_uv - vec2(0.0, px.y)) != focus;
+    edge = !inFocus(labelAt(v_uv + vec2(px.x, 0.0)), focus) || !inFocus(labelAt(v_uv - vec2(px.x, 0.0)), focus)
+        || !inFocus(labelAt(v_uv + vec2(0.0, px.y)), focus) || !inFocus(labelAt(v_uv - vec2(0.0, px.y)), focus);
   }
   if (label == u_hovered && label != u_selected) rgb = mix(rgb, vec3(1.0), 0.12);
+  // A tone pointed out: the object's pixels of other tones are dimmed.
+  if (u_toneObject > 0 && label == u_toneObject) {
+    int tones = int(texelFetch(u_edits, ivec2(label, ${ROW.source}), 0).w + 0.5);
+    if (tones > 0) rgb = mix(rgb * 0.3, rgb, toneWeights(toOklab(original), label, tones)[u_tone]);
+  }
   if (edge) rgb = focus == u_selected ? vec3(1.0) : mix(rgb, vec3(1.0), 0.7);
 
   color = vec4(rgb, 1.0);
@@ -157,7 +235,7 @@ export class RoomRenderer {
     this.gl = gl
     this.program = link(gl, vertexShader, fragmentShader)
     this.uniforms = Object.fromEntries(
-      ["u_rect", "u_canvas", "u_photo", "u_labels", "u_edits", "u_labelSize", "u_hovered", "u_selected", "u_split"].map(
+      ["u_rect", "u_canvas", "u_photo", "u_labels", "u_edits", "u_labelSize", "u_hovered", "u_selected", "u_split", "u_toneObject", "u_tone"].map(
         (name) => [name, gl.getUniformLocation(this.program, name)]
       )
     )
@@ -215,19 +293,27 @@ export class RoomRenderer {
   }
 
   /**
-   * Uploads the recolors.
+   * Uploads the recolors, and which objects are parts of others (so a selected object is outlined with its parts).
    * @param edits - Recolors by object index (1..255).
+   * @param parents - For each part, the object it is a part of.
    */
-  setEdits(edits: ReadonlyMap<number, RenderEdit>) {
-    const data = new Float32Array(256 * 2 * 4)
+  setEdits(edits: ReadonlyMap<number, RenderEdit>, parents: ReadonlyMap<number, number> = new Map()) {
+    const data = new Float32Array(256 * ROW.count * 4)
+    const at = (row: number, index: number) => (row * 256 + index) * 4
     for (const [index, edit] of edits) {
-      data.set([edit.target.l, edit.target.a, edit.target.b, edit.strength], index * 4)
-      data.set([edit.source.l, edit.source.a, edit.source.b, 0], (256 + index) * 4)
+      const tones = edit.tones ?? []
+      data.set([edit.target.l, edit.target.a, edit.target.b, edit.strength], at(ROW.target, index))
+      data.set([edit.source.l, edit.source.a, edit.source.b, tones.length], at(ROW.source, index))
+      tones.forEach((tone, i) => {
+        data.set([tone.center.l, tone.center.a, tone.center.b, 0], at(ROW.centers + i, index))
+        if (tone.target) data.set([tone.target.l, tone.target.a, tone.target.b, tone.strength], at(ROW.targets + i, index))
+      })
     }
+    for (const [index, parent] of parents) data[at(ROW.group, index)] = parent
     const gl = this.gl
     gl.bindTexture(gl.TEXTURE_2D, this.edits)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 256, 2, 0, gl.RGBA, gl.FLOAT, data)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 256, ROW.count, 0, gl.RGBA, gl.FLOAT, data)
     nearest(gl)
   }
 
@@ -257,6 +343,8 @@ export class RoomRenderer {
     gl.uniform1i(u.u_hovered, state.hovered)
     gl.uniform1i(u.u_selected, state.selected)
     gl.uniform1f(u.u_split, state.split === null ? -1 : state.split * ratio)
+    gl.uniform1i(u.u_toneObject, state.highlight?.index ?? 0)
+    gl.uniform1i(u.u_tone, state.highlight?.tone ?? 0)
 
     bind(gl, 0, this.photo, u.u_photo)
     bind(gl, 1, this.labels, u.u_labels)

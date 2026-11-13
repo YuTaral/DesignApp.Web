@@ -23,22 +23,26 @@ export type FinishedStroke = {
  * Saves brush strokes to the API and keeps the API's current label map version in step with the
  * editor's undo and redo.
  * @param room - The room being edited (Ready).
+ * @param options.sync - False for a second view of the room (the Parts dialog): it only saves strokes, and leaves
+ *   keeping the API's version in step to the editor.
  * @returns `save` for the canvas's strokes (resolves to whether it was saved), and whether one is saving.
  */
-export function useOutlineFixes(room: Room) {
+export function useOutlineFixes(room: Room, { sync = true }: { sync?: boolean } = {}) {
   const queryClient = useQueryClient()
   const { revision, selected, setBaseRevision, applyOutlineFix } = useEditorStore()
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => setBaseRevision(room.labelMapRevision), [room.labelMapRevision, setBaseRevision])
+  useEffect(() => {
+    if (sync) setBaseRevision(room.labelMapRevision)
+  }, [sync, room.labelMapRevision, setBaseRevision])
 
   // Undo or redo across a stroke shows another version; tell the API, so a reload shows the same outlines.
   useEffect(() => {
-    if (revision === null || revision === room.labelMapRevision) return
+    if (!sync || revision === null || revision === room.labelMapRevision) return
     selectLabelMapRevision(room.id, revision)
       .then((updated) => queryClient.setQueryData(QUERY_KEYS.room(room.id), updated))
       .catch((error: unknown) => toast.error(errorMessage(error)))
-  }, [revision, room.id, room.labelMapRevision, queryClient])
+  }, [sync, revision, room.id, room.labelMapRevision, queryClient])
 
   /**
    * Saves a stroke on the selected object as a new label map version.

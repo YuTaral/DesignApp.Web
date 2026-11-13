@@ -17,7 +17,8 @@ import { AI_MODE, LIMITS, RESTING_CATEGORIES, SURFACE_CATEGORIES } from "@/lib/c
 export function RemoveObjectPanel({ room }: { room: Room }) {
   const selected = useEditorStore((state) => state.selected)
   const object = room.objects.find((o) => o.index === selected)
-  if (!object || SURFACE_CATEGORIES.includes(object.category)) return null
+  // A part is merged back into its object instead (in the Parts dialog).
+  if (!object || SURFACE_CATEGORIES.includes(object.category) || object.parentIndex) return null
   // A new selection starts with all of its suggestions ticked.
   return <RemoveObjectSection key={object.index} room={room} object={object} />
 }
