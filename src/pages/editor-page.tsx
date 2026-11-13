@@ -28,7 +28,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAccount } from "@/features/account/api"
 import {
   toDesignEdits,
+  toDesignSizes,
   toEditorEdits,
+  toEditorSizes,
   useAddDesignRoom,
   useCreateDesign,
   useDesign,
@@ -37,7 +39,8 @@ import {
   type Design,
 } from "@/features/designs/api"
 import { ColorPanel } from "@/features/editor/color-panel"
-import { sameEdits, useEditorStore, type Edits } from "@/features/editor/editor-store"
+import { sameEdits, sameSizes, useEditorStore, type Edits, type SurfaceSizes } from "@/features/editor/editor-store"
+import { PaintListButton } from "@/features/paints/paint-list"
 import { NewObjectPanel } from "@/features/editor/new-object-panel"
 import { OutlinePanel } from "@/features/editor/outline-panel"
 import { RemoveObjectPanel } from "@/features/editor/remove-object-panel"
@@ -109,8 +112,9 @@ function Editor({ room }: { room: Room }) {
   useEffect(() => open(room.id), [open, room.id])
   const openDesign = useOpenDesign(room)
 
-  // On a PC the editor fills the window under the header: the photo keeps its place and only the tools scroll,
-  // with Save pinned under them. On a phone the photo sits above the tools and the page scrolls as usual.
+  // On a PC the editor fills the window under the header: the photo keeps its place, with the outline tools in a bar
+  // across its width, and only the inspector scrolls, with Save pinned under it. On a phone the photo and the outline
+  // bar sit above the inspector and the page scrolls as usual.
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:h-[calc(100dvh-3.5rem-1px)] lg:flex-none lg:flex-row lg:overflow-hidden">
       <section className="flex min-h-0 flex-1 flex-col gap-3">
@@ -159,6 +163,7 @@ function Editor({ room }: { room: Room }) {
             <RoomPhoto room={room} />
           </div>
         )}
+        {editable && !marking && <OutlinePanel room={room} />}
       </section>
 
       <aside
@@ -175,7 +180,7 @@ function Editor({ room }: { room: Room }) {
           ) : editable ? (
             <>
               <ColorPanel room={room} />
-              <OutlinePanel room={room} />
+              <PaintListButton room={room} />
               <RemoveObjectPanel room={room} />
             </>
           ) : (
@@ -311,7 +316,7 @@ function useOpenDesign(room: Room): Design | null {
   const ready = room.status === ROOM_STATUS.Ready
 
   useEffect(() => {
-    if (ready && design.data && entry) loadDesign(room.id, design.data.id, toEditorEdits(entry.edits))
+    if (ready && design.data && entry) loadDesign(room.id, design.data.id, toEditorEdits(entry.edits), toEditorSizes(entry.sizes))
   }, [ready, design.data, entry, room.id, loadDesign])
 
   const failed = requested !== undefined && (design.isError || (design.data !== undefined && !entry))
@@ -336,11 +341,11 @@ function useOpenDesign(room: Room): Design | null {
 function SaveDesign({ room, editable, design }: { room: Room; editable: boolean; design: Design | null }) {
   const account = useAccount().data
   const here = useRouterState({ select: (state) => state.location.href })
-  const { edits, savedEdits, markSaved, marking } = useEditorStore()
+  const { edits, savedEdits, sizes, savedSizes, markSaved, marking } = useEditorStore()
   const saveColors = useSaveRoomColors()
   const [choosing, setChoosing] = useState(false)
   const recolored = Object.keys(edits).length > 0
-  const dirty = savedEdits ? !sameEdits(edits, savedEdits) : recolored
+  const dirty = savedEdits ? !sameEdits(edits, savedEdits) || !sameSizes(sizes, savedSizes ?? {}) : recolored
 
   if (marking) {
     return (
@@ -372,12 +377,12 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
 
   if (design) {
     const save = () => {
-      const snapshot = edits
+      const [snapshot, sizesSnapshot] = [edits, sizes]
       saveColors.mutate(
-        { designId: design.id, roomId: room.id, edits: toDesignEdits(snapshot) },
+        { designId: design.id, roomId: room.id, edits: toDesignEdits(snapshot), sizes: toDesignSizes(sizesSnapshot) },
         {
           onSuccess: (saved) => {
-            markSaved(saved.id, snapshot)
+            markSaved(saved.id, snapshot, sizesSnapshot)
             toast.success(MESSAGES.colorsSaved)
           },
           onError: (error) => toast.error(errorMessage(error)),
@@ -411,7 +416,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
       <Dialog open={choosing} onOpenChange={setChoosing}>
         <DialogContent>
           {/* The dialog drops its content once closed, so the form starts fresh on every open. */}
-          <SaveToDesignForm room={room} edits={edits} onDone={() => setChoosing(false)} />
+          <SaveToDesignForm room={room} edits={edits} sizes={sizes} onDone={() => setChoosing(false)} />
         </DialogContent>
       </Dialog>
     </div>
@@ -423,9 +428,10 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
  * one of the account's designs, then puts that design in the address so a reload opens it again.
  * @param props.room - The room.
  * @param props.edits - Its colors.
+ * @param props.sizes - The sizes of its surfaces.
  * @param props.onDone - Closes the dialog (after saving, or on Cancel).
  */
-function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; onDone: () => void }) {
+function SaveToDesignForm({ room, edits, sizes, onDone }: { room: Room; edits: Edits; sizes: SurfaceSizes; onDone: () => void }) {
   const designs = useDesigns(true)
   const create = useCreateDesign()
   const addRoom = useAddDesignRoom()
@@ -441,8 +447,8 @@ function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; o
   const error = create.error ?? addRoom.error
   const canSave = mode === "new" ? name.trim().length > 0 : target !== null
 
-  const saved = (design: Design, snapshot: Edits) => {
-    markSaved(design.id, snapshot)
+  const saved = (design: Design, snapshot: Edits, sizesSnapshot: SurfaceSizes) => {
+    markSaved(design.id, snapshot, sizesSnapshot)
     onDone()
     toast.success(mode === "new" ? MESSAGES.designSaved : MESSAGES.addedTo(design.name))
     void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: { design: design.id }, replace: true })
@@ -450,16 +456,16 @@ function SaveToDesignForm({ room, edits, onDone }: { room: Room; edits: Edits; o
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault()
-    const snapshot = edits
+    const [snapshot, sizesSnapshot] = [edits, sizes]
     if (mode === "new") {
       create.mutate(
-        { roomId: room.id, name: name.trim(), description: description.trim(), edits: toDesignEdits(snapshot) },
-        { onSuccess: (design) => saved(design, snapshot) },
+        { roomId: room.id, name: name.trim(), description: description.trim(), edits: toDesignEdits(snapshot), sizes: toDesignSizes(sizesSnapshot) },
+        { onSuccess: (design) => saved(design, snapshot, sizesSnapshot) },
       )
     } else if (target) {
       addRoom.mutate(
-        { designId: target, roomId: room.id, edits: toDesignEdits(snapshot) },
-        { onSuccess: (design) => saved(design, snapshot) },
+        { designId: target, roomId: room.id, edits: toDesignEdits(snapshot), sizes: toDesignSizes(sizesSnapshot) },
+        { onSuccess: (design) => saved(design, snapshot, sizesSnapshot) },
       )
     }
   }

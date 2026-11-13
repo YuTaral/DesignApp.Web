@@ -1,15 +1,28 @@
 import { useState } from "react"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { ArrowLeftIcon, CheckIcon, ImageOffIcon, LoaderCircleIcon, PencilIcon, PlusIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  ImageOffIcon,
+  ListChecksIcon,
+  LoaderCircleIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+  XIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccount } from "@/features/account/api"
-import { useDesign, useRemoveDesignRoom, type Design, type DesignRoom } from "@/features/designs/api"
+import { toEditorEdits, toEditorSizes, useDesign, useRemoveDesignRoom, type Design, type DesignRoom } from "@/features/designs/api"
 import { ConfirmDialog, DeleteDesignDialog, DesignDetailsDialog, EmptyState, Swatches } from "@/features/designs/components"
 import { dateFormat, roomCount } from "@/features/designs/format"
+import { PaintListDialog } from "@/features/paints/paint-list"
+import { isPaintable } from "@/features/paints/paint-math"
 import { useRoom } from "@/features/rooms/api"
 import { isAnalysisFinished } from "@/features/rooms/types"
 import { ApiError, apiUrl, errorMessage } from "@/lib/api"
@@ -169,6 +182,7 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
   const details = useRoom(room.roomId).data
   const remove = useRemoveDesignRoom()
   const [confirming, setConfirming] = useState(false)
+  const [listing, setListing] = useState(false)
   const only = design.rooms.length === 1
   const status = details?.status
   const label = `Room ${number}`
@@ -220,6 +234,27 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
       >
         <XIcon />
       </Button>
+      {details && details.objects.some((o) => isPaintable(o.category) && room.edits.some((e) => e.objectIndex === o.index)) && (
+        <>
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            className="absolute top-2 right-11 opacity-90 shadow-soft"
+            aria-label={`Paint list for ${label}`}
+            title="Paint list"
+            onClick={() => setListing(true)}
+          >
+            <ListChecksIcon />
+          </Button>
+          <PaintListDialog
+            open={listing}
+            onOpenChange={setListing}
+            objects={details.objects}
+            edits={toEditorEdits(room.edits)}
+            sizes={toEditorSizes(room.sizes)}
+          />
+        </>
+      )}
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}

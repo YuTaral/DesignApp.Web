@@ -114,7 +114,7 @@ try {
     step(`${file}: object list marks it recolored`, listDot)
 
     // Strength 0 brings the original back; the slider is keyboard-operable.
-    await page.focus('[role=slider]')
+    await page.focus('aside [role=slider]')
     await page.keyboard.press('Home')
     await frame()
     const zero = await pixel(tp.u, tp.v)
@@ -161,7 +161,7 @@ try {
     // clears it again; undo goes back.
     if (file === files[0]) {
       const mapNow = () => page.evaluate(() => document.querySelector('canvas[data-photo-rect]').dataset.labelMap)
-      const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll('aside button')].find((b) => b.textContent.trim() === t).click(), text)
+      const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll('aside button, [data-outline-panel] button')].find((b) => b.textContent.trim() === t).click(), text)
       const drag = async (points) => {
         const [first, ...rest] = await Promise.all(points.map(([u, v]) => toPage(u, v)))
         await page.mouse.move(first.x, first.y)

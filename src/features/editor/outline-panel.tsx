@@ -9,48 +9,59 @@ import { shapeGesture } from "./shape-gesture"
 import { OUTLINE_BRUSH_MODE, STROKE_SHAPE } from "@/lib/constants"
 
 /**
- * The inspector's "Fix outline" section for the selected object: Add and Erase turn on the tool, then a drag on
+ * The "Fix outline" bar under the photo for the selected object: Add and Erase turn on the tool, then a drag on
  * the photo marks exactly the pixels it covers: under a round brush, inside a box, or inside a lasso drawn around
- * an area. The size sets the brush on screen, so zooming in gives finer control.
+ * an area. The size sets the brush on screen, so zooming in gives finer control. On a wide screen the tools sit
+ * side by side across the photo's width; on a narrow one they stack.
  * @param props.room - The room being edited.
  */
 export function OutlinePanel({ room }: { room: Room }) {
   const { selected, outlineTool, setOutlineTool, brushShape } = useEditorStore()
   const object = room.objects.find((o) => o.index === selected)
   if (!object) return null
+  const brush = brushShape === STROKE_SHAPE.Brush
 
   return (
-    <div className="space-y-3">
-      <div>
-        <h2 className="font-medium">Fix outline</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {outlineTool === OUTLINE_BRUSH_MODE.Paint
-            ? `${shapeGesture(brushShape)} the photo where the ${object.label} is missing.`
-            : outlineTool === OUTLINE_BRUSH_MODE.Erase
-              ? `${shapeGesture(brushShape)} the photo where the ${object.label} is marked by mistake.`
-              : "If the color misses part of it or spills over, brush the outline here."}
-        </p>
+    <section
+      aria-label="Fix outline"
+      className="shrink-0 space-y-3 rounded-2xl border bg-card px-4 py-3 shadow-soft"
+      data-outline-panel
+    >
+      <p className="text-sm text-muted-foreground">
+        <span className="mr-2 text-base font-medium text-foreground">Fix outline</span>
+        {outlineTool === OUTLINE_BRUSH_MODE.Paint
+          ? `${shapeGesture(brushShape)} the photo where the ${object.label} is missing.`
+          : outlineTool === OUTLINE_BRUSH_MODE.Erase
+            ? `${shapeGesture(brushShape)} the photo where the ${object.label} is marked by mistake.`
+            : "If the color misses part of it or spills over, brush the outline here."}
+        {brush && " Zoom in for fine edges."}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-[13rem_16rem] md:grid-cols-[13rem_16rem_minmax(12rem,1fr)] md:items-center">
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant={outlineTool === OUTLINE_BRUSH_MODE.Paint ? "default" : "outline"}
+            aria-pressed={outlineTool === OUTLINE_BRUSH_MODE.Paint}
+            onClick={() => setOutlineTool(outlineTool === OUTLINE_BRUSH_MODE.Paint ? null : OUTLINE_BRUSH_MODE.Paint)}
+          >
+            <BrushIcon data-icon="inline-start" />
+            Add
+          </Button>
+          <Button
+            variant={outlineTool === OUTLINE_BRUSH_MODE.Erase ? "default" : "outline"}
+            aria-pressed={outlineTool === OUTLINE_BRUSH_MODE.Erase}
+            onClick={() => setOutlineTool(outlineTool === OUTLINE_BRUSH_MODE.Erase ? null : OUTLINE_BRUSH_MODE.Erase)}
+          >
+            <EraserIcon data-icon="inline-start" />
+            Erase
+          </Button>
+        </div>
+        <BrushShapeControl />
+        {brush && (
+          <div className="sm:col-span-2 md:col-span-1">
+            <BrushSizeControl inline />
+          </div>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant={outlineTool === OUTLINE_BRUSH_MODE.Paint ? "default" : "outline"}
-          aria-pressed={outlineTool === OUTLINE_BRUSH_MODE.Paint}
-          onClick={() => setOutlineTool(outlineTool === OUTLINE_BRUSH_MODE.Paint ? null : OUTLINE_BRUSH_MODE.Paint)}
-        >
-          <BrushIcon data-icon="inline-start" />
-          Add
-        </Button>
-        <Button
-          variant={outlineTool === OUTLINE_BRUSH_MODE.Erase ? "default" : "outline"}
-          aria-pressed={outlineTool === OUTLINE_BRUSH_MODE.Erase}
-          onClick={() => setOutlineTool(outlineTool === OUTLINE_BRUSH_MODE.Erase ? null : OUTLINE_BRUSH_MODE.Erase)}
-        >
-          <EraserIcon data-icon="inline-start" />
-          Erase
-        </Button>
-      </div>
-      <BrushShapeControl />
-      {brushShape === STROKE_SHAPE.Brush && <BrushSizeControl />}
-    </div>
+    </section>
   )
 }

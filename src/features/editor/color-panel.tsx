@@ -1,19 +1,29 @@
-import { MousePointerClickIcon, PipetteIcon, RotateCcwIcon } from "lucide-react"
+import { useState } from "react"
+import { MousePointerClickIcon, PipetteIcon, RotateCcwIcon, SearchIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
+import { paintsByRef, usePalettes, type Paint, type Palette } from "@/features/paints/api"
+import { closestPaint, matchesPaint } from "@/features/paints/paint-math"
 import type { Room } from "@/features/rooms/types"
 import { useEditorStore } from "./editor-store"
-import { DEFAULT_STRENGTH, SWATCHES } from "@/lib/constants"
+import { DEFAULT_STRENGTH, MESSAGES, RAL_FAMILIES, SWATCHES } from "@/lib/constants"
+
+/** The panel's two ways to pick a color. */
+type ColorTab = "quick" | "paints"
 
 /**
- * The inspector's Color section: recolors the selected object with a swatch or any color, sets how
- * strongly, and resets it. Without a selection it explains how to pick an object.
+ * The inspector's Color section: recolors the selected object with a quick swatch, a real paint (RAL) or any color,
+ * sets how strongly, and resets it. A color that isn't a paint shows the closest paint, one click away. Without a
+ * selection it explains how to pick an object.
  * @param props.room - The room being edited.
  */
 export function ColorPanel({ room }: { room: Room }) {
   const { selected, edits, setColor, previewStrength, commitStrength, resetObject } = useEditorStore()
+  const palettes = usePalettes()
+  const [tab, setTab] = useState<ColorTab>("quick")
   const object = room.objects.find((o) => o.index === selected)
   const edit = selected ? edits[selected] : undefined
 
@@ -31,6 +41,9 @@ export function ColorPanel({ room }: { room: Room }) {
 
   const current = edit?.color ?? object.dominantColor
   const strength = edit?.strength ?? DEFAULT_STRENGTH
+  const paint = edit?.paint ? paintsByRef(palettes.data).get(edit.paint) : undefined
+  const allPaints = palettes.data?.flatMap((p) => p.paints) ?? []
+  const closest = edit && !edit.paint ? closestPaint(edit.color, allPaints) : undefined
 
   return (
     <div className="space-y-4">
@@ -42,23 +55,84 @@ export function ColorPanel({ room }: { room: Room }) {
         </Button>
       </div>
 
-      <div role="radiogroup" aria-label={`Color for ${object.label}`} className="grid grid-cols-[repeat(8,1.75rem)] justify-between gap-y-2">
-        {SWATCHES.map((color) => (
+      <div role="tablist" aria-label="Colors" className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1 text-sm">
+        {(
+          [
+            ["quick", "Quick colors"],
+            ["paints", "RAL colors"],
+          ] as const
+        ).map(([value, label]) => (
           <button
-            key={color}
+            key={value}
             type="button"
-            role="radio"
-            aria-checked={edit?.color === color}
-            aria-label={`Color ${color}`}
-            onClick={() => setColor(object.index, color)}
+            role="tab"
+            id={`color-tab-${value}`}
+            aria-selected={tab === value}
+            aria-controls={`color-tabpanel-${value}`}
+            onClick={() => setTab(value)}
             className={cn(
-              "aspect-square rounded-lg border shadow-soft outline-none transition-transform hover:scale-110 focus-visible:ring-3 focus-visible:ring-ring/50",
-              edit?.color === color && "ring-2 ring-primary ring-offset-2 ring-offset-card"
+              "rounded-lg px-2 py-1.5 font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+              tab === value ? "bg-card shadow-soft" : "text-muted-foreground hover:text-foreground"
             )}
-            style={{ backgroundColor: color }}
-          />
+          >
+            {label}
+          </button>
         ))}
       </div>
+
+      {tab === "quick" ? (
+        <div role="tabpanel" id="color-tabpanel-quick" aria-labelledby="color-tab-quick">
+          <div role="radiogroup" aria-label={`Color for ${object.label}`} className="grid grid-cols-[repeat(8,1.75rem)] justify-between gap-y-2">
+            {SWATCHES.map((color) => (
+              <button
+                key={color}
+                type="button"
+                role="radio"
+                aria-checked={edit?.color === color && !edit.paint}
+                aria-label={`Color ${color}`}
+                onClick={() => setColor(object.index, color)}
+                className={cn(
+                  "aspect-square rounded-lg border shadow-soft outline-none transition-transform hover:scale-110 focus-visible:ring-3 focus-visible:ring-ring/50",
+                  edit?.color === color && !edit.paint && "ring-2 ring-primary ring-offset-2 ring-offset-card"
+                )}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div role="tabpanel" id="color-tabpanel-paints" aria-labelledby="color-tab-paints">
+          {palettes.isError ? (
+            <p className="text-sm text-destructive">{MESSAGES.palettesLoadFailed}</p>
+          ) : (
+            <PaintPicker
+              palettes={palettes.data ?? []}
+              label={object.label}
+              selected={edit?.paint}
+              onPick={(picked) => setColor(object.index, picked.color, picked.ref)}
+            />
+          )}
+        </div>
+      )}
+
+      {paint && (
+        <p className="flex items-center gap-2 text-sm" data-paint-label>
+          <span className="size-4 shrink-0 rounded border" style={{ backgroundColor: paint.color }} aria-hidden />
+          <span className="font-medium">{paint.code}</span>
+          <span className="text-muted-foreground">· {paint.name}</span>
+        </p>
+      )}
+      {closest && (
+        <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-2 text-sm" data-closest-paint>
+          <span className="size-6 shrink-0 rounded-md border" style={{ backgroundColor: closest.color }} aria-hidden />
+          <span className="min-w-0 flex-1 truncate">
+            Closest paint: <span className="font-medium">{closest.code}</span> <span className="text-muted-foreground">{closest.name}</span>
+          </span>
+          <Button size="xs" variant="outline" onClick={() => setColor(object.index, closest.color, closest.ref)}>
+            Use it
+          </Button>
+        </div>
+      )}
 
       <label className="flex items-center gap-3 text-sm">
         <span className="relative size-9 shrink-0 overflow-hidden rounded-lg border shadow-soft" style={{ backgroundColor: current }}>
@@ -91,6 +165,76 @@ export function ColorPanel({ room }: { room: Room }) {
           onValueChange={([value]) => previewStrength(object.index, value / 100)}
           onValueCommit={commitStrength}
         />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The real paints, searchable by code or name and grouped by RAL family (the code's first digit).
+ * @param props.palettes - The palettes.
+ * @param props.label - The selected object's name, for the radio group.
+ * @param props.selected - The paint the object has, if any.
+ * @param props.onPick - Paints the object with a paint.
+ */
+function PaintPicker({
+  palettes,
+  label,
+  selected,
+  onPick,
+}: {
+  palettes: readonly Palette[]
+  label: string
+  selected: string | undefined
+  onPick: (paint: Paint) => void
+}) {
+  const [query, setQuery] = useState("")
+  const paints = palettes.flatMap((p) => p.paints).filter((paint) => matchesPaint(paint, query))
+  const families = new Map<string, Paint[]>()
+  for (const paint of paints) {
+    const family = paint.code.replace(/\D/g, "").charAt(0)
+    families.set(family, [...(families.get(family) ?? []), paint])
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Code or name, such as 9010 or white"
+          aria-label="Search RAL colors"
+          className="pl-8"
+        />
+      </div>
+      <div role="radiogroup" aria-label={`Paint for ${label}`} className="max-h-64 space-y-3 overflow-y-auto pr-1" data-paint-grid>
+        {paints.length === 0 && <p className="text-sm text-muted-foreground">No RAL color matches “{query.trim()}”.</p>}
+        {[...families].map(([family, members]) => (
+          <div key={family} className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">{RAL_FAMILIES[family] ?? "Other"}</p>
+            <div className="grid grid-cols-[repeat(8,1.75rem)] justify-between gap-y-2">
+              {members.map((paint) => (
+                <button
+                  key={paint.ref}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected === paint.ref}
+                  aria-label={`${paint.code} ${paint.name}`}
+                  title={`${paint.code} ${paint.name}`}
+                  data-paint={paint.ref}
+                  onClick={() => onPick(paint)}
+                  className={cn(
+                    "aspect-square rounded-lg border shadow-soft outline-none transition-transform hover:scale-110 focus-visible:ring-3 focus-visible:ring-ring/50",
+                    selected === paint.ref && "ring-2 ring-primary ring-offset-2 ring-offset-card"
+                  )}
+                  style={{ backgroundColor: paint.color }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

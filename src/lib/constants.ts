@@ -24,6 +24,7 @@ export const API = {
   roomPhotoVersion: (id: string, version: number) => `/api/rooms/${id}/photo/${version}`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
   roomLabelMap: (id: string, revision: number) => `/api/rooms/${id}/labels/${revision}`,
+  palettes: "/api/palettes",
   library: "/api/library",
   libraryLayoutCopy: (designId: string, roomId: string, layoutId: string) => `/api/library/${designId}/${roomId}/${layoutId}/copy`,
   libraryDesignCopy: (designId: string) => `/api/library/${designId}/copy`,
@@ -77,6 +78,7 @@ export const QUERY_KEYS = {
   design: (id: string) => ["designs", id] as const,
   room: (id: string) => ["rooms", id] as const,
   library: ["library"] as const,
+  palettes: ["palettes"] as const,
 } as const
 
 /** Browser storage keys. The theme key is also read by the pre-paint script in index.html. */
@@ -167,6 +169,9 @@ export const RESTING_CATEGORIES: readonly ObjectCategory[] = [OBJECT_CATEGORY.Te
 /** The surfaces: they can be recolored but not removed from the photo (Domain ObjectCategories.IsSurface). */
 export const SURFACE_CATEGORIES: readonly ObjectCategory[] = [OBJECT_CATEGORY.Wall, OBJECT_CATEGORY.Floor, OBJECT_CATEGORY.Ceiling]
 
+/** The categories the paint list covers: walls and ceilings, which are painted (floors and furniture are not). */
+export const PAINTABLE_CATEGORIES: readonly ObjectCategory[] = [OBJECT_CATEGORY.Wall, OBJECT_CATEGORY.Ceiling]
+
 /** How each category is shown to the user. */
 export const CATEGORY_NAMES: Record<ObjectCategory, string> = {
   Wall: "Wall",
@@ -230,6 +235,41 @@ export const SWATCHES = [
 /** Strength a newly recolored object starts with. */
 export const DEFAULT_STRENGTH = 0.8
 
+/**
+ * Paint amounts. Litres = area × coats × (1 + spare) ÷ coverage; tins are the common sizes. A wall's height starts
+ * at a usual ceiling height. Sizes mirror the API's Domain Constants.Surfaces.
+ */
+export const PAINT = {
+  coats: 2,
+  maxCoats: 4,
+  /** Square metres one litre covers, for one coat. */
+  coverage: 10,
+  minCoverage: 4,
+  maxCoverage: 20,
+  /** Extra paint for touch-ups and losses. */
+  spare: 0.1,
+  /** Tin sizes in litres, all multiples of half a litre. */
+  tins: [1, 2.5, 5, 10],
+  wallHeight: 2.5,
+  minMetres: 0.1,
+  maxMetres: 50,
+  /** Separates a paint reference's palette from the paint (mirrors Domain Constants.Colors.PaintSeparator). */
+  separator: "/",
+} as const
+
+/** The names of the RAL Classic families, by the first digit of the code. */
+export const RAL_FAMILIES: Record<string, string> = {
+  "1": "Yellows and beiges",
+  "2": "Oranges",
+  "3": "Reds",
+  "4": "Violets",
+  "5": "Blues",
+  "6": "Greens",
+  "7": "Greys",
+  "8": "Browns",
+  "9": "Whites and blacks",
+}
+
 /** Messages shown to people: toasts, errors, empty states and confirm dialogs. */
 export const MESSAGES = {
   network: "Can't reach DesignApp right now. Check your connection and try again.",
@@ -277,4 +317,8 @@ export const MESSAGES = {
   libraryLoadFailed: "We couldn't load the sample houses",
   libraryHouseSaved: (name: string) => `${name} saved to your designs`,
   librarySignIn: "Sign in to save the whole house",
+  palettesLoadFailed: "The paint colors couldn't be loaded.",
+  paintListCopied: "Paint list copied",
+  paintListCopyFailed: "The list couldn't be copied. Select the text and copy it instead.",
+  paintApproximate: "Screen colors are approximate. Check a physical sample before you buy.",
 } as const

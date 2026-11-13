@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import type { Edits } from "@/features/editor/editor-store"
+import type { Edits, SurfaceSizes } from "@/features/editor/editor-store"
 import { getJson, sendJson } from "@/lib/api"
 import { API, QUERY_KEYS } from "@/lib/constants"
 
@@ -12,6 +12,16 @@ export type DesignEdit = {
   color: string
   /** How strongly it is applied, 0..1. */
   strength: number
+  /** The real paint the color is, such as "ral-classic/9010"; null or missing for a free color. */
+  paint?: string | null
+}
+
+/** The size of a wall, floor or ceiling in a saved room, in metres (mirrors the API's SizeRequest). */
+export type DesignSize = {
+  objectIndex: number
+  width: number
+  /** A wall's height, or a floor's or ceiling's length. */
+  height: number
 }
 
 /** One room of a design, with its colors (mirrors the API's DesignRoomResponse). */
@@ -20,6 +30,8 @@ export type DesignRoom = {
   /** The room's photo, for a thumbnail. */
   photoUrl: string
   edits: DesignEdit[]
+  /** The sizes the user gave its surfaces, for paint amounts. */
+  sizes: DesignSize[]
 }
 
 /** A saved design: a name, a description and one or more rooms (mirrors the API's DesignResponse). */
@@ -42,8 +54,26 @@ export type Design = {
  */
 export function toDesignEdits(edits: Edits): DesignEdit[] {
   return Object.entries(edits)
-    .map(([index, edit]) => ({ objectIndex: Number(index), color: edit.color, strength: edit.strength }))
+    .map(([index, edit]) => ({ objectIndex: Number(index), color: edit.color, strength: edit.strength, paint: edit.paint }))
     .sort((a, b) => a.objectIndex - b.objectIndex)
+}
+
+/**
+ * The editor's surface sizes as the API's list, in object order.
+ * @param sizes - The sizes by object index.
+ */
+export function toDesignSizes(sizes: SurfaceSizes): DesignSize[] {
+  return Object.entries(sizes)
+    .map(([index, size]) => ({ objectIndex: Number(index), width: size.width, height: size.height }))
+    .sort((a, b) => a.objectIndex - b.objectIndex)
+}
+
+/**
+ * A saved room's surface sizes as the editor's map.
+ * @param sizes - The room's sizes (missing from designs saved before sizes).
+ */
+export function toEditorSizes(sizes: DesignSize[] | undefined): SurfaceSizes {
+  return Object.fromEntries((sizes ?? []).map((s) => [s.objectIndex, { width: s.width, height: s.height }]))
 }
 
 /**
@@ -51,7 +81,9 @@ export function toDesignEdits(edits: Edits): DesignEdit[] {
  * @param edits - The room's recolors.
  */
 export function toEditorEdits(edits: DesignEdit[]): Edits {
-  return Object.fromEntries(edits.map((e) => [e.objectIndex, { color: e.color, strength: e.strength }]))
+  return Object.fromEntries(
+    edits.map((e) => [e.objectIndex, e.paint ? { color: e.color, strength: e.strength, paint: e.paint } : { color: e.color, strength: e.strength }]),
+  )
 }
 
 /**
@@ -92,7 +124,7 @@ function useDesignChanged() {
 export function useCreateDesign() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: (design: { roomId: string; name: string; description: string; edits: DesignEdit[] }) => {
+    mutationFn: (design: { roomId: string; name: string; description: string; edits: DesignEdit[]; sizes: DesignSize[] }) => {
       return sendJson<Design>("POST", API.designs, design)
     },
     onSuccess: changed,
@@ -110,23 +142,23 @@ export function useEditDesign() {
   })
 }
 
-/** Adds a room to a design, with its colors (none for a room that is still being analyzed). */
+/** Adds a room to a design, with its colors and sizes (none for a room that is still being analyzed). */
 export function useAddDesignRoom() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) => {
-      return sendJson<Design>("POST", API.designRooms(designId), { roomId, edits })
+    mutationFn: ({ designId, roomId, edits, sizes }: { designId: string; roomId: string; edits: DesignEdit[]; sizes?: DesignSize[] }) => {
+      return sendJson<Design>("POST", API.designRooms(designId), { roomId, edits, sizes: sizes ?? [] })
     },
     onSuccess: changed,
   })
 }
 
-/** Saves the colors of one room of a design. */
+/** Saves the colors and surface sizes of one room of a design. */
 export function useSaveRoomColors() {
   const changed = useDesignChanged()
   return useMutation({
-    mutationFn: ({ designId, roomId, edits }: { designId: string; roomId: string; edits: DesignEdit[] }) => {
-      return sendJson<Design>("PUT", API.designRoom(designId, roomId), { edits })
+    mutationFn: ({ designId, roomId, edits, sizes }: { designId: string; roomId: string; edits: DesignEdit[]; sizes: DesignSize[] }) => {
+      return sendJson<Design>("PUT", API.designRoom(designId, roomId), { edits, sizes })
     },
     onSuccess: changed,
   })

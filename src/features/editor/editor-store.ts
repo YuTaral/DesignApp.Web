@@ -9,10 +9,18 @@ export type ObjectEdit = {
   color: string
   /** How strongly it replaces the original, 0..1. */
   strength: number
+  /** The real paint the color is, such as "ral-classic/9010"; missing for a color picked freely. */
+  paint?: string
 }
 
 /** All recolors of a room, by object index. */
 export type Edits = Readonly<Record<number, ObjectEdit>>
+
+/** The size of a wall, floor or ceiling, in metres: a wall's width × height, a floor's width × length. */
+export type SurfaceSize = { width: number; height: number }
+
+/** The sizes the user gave a room's surfaces, by object index. */
+export type SurfaceSizes = Readonly<Record<number, SurfaceSize>>
 
 /** One stroke of an object being marked by hand: Paint marks, Erase unmarks. */
 export type MarkStroke = {
@@ -77,6 +85,10 @@ type EditorState = {
   designId: string | null
   /** The recolors as last saved or opened, to tell whether there are unsaved changes; null before the first save. */
   savedEdits: Edits | null
+  /** The sizes of the room's surfaces, for paint amounts. Saved with the colors, but not part of undo. */
+  sizes: SurfaceSizes
+  /** The sizes as last saved or opened; null before the first save. */
+  savedSizes: SurfaceSizes | null
 
   /** Starts editing a room, keeping its edits if it's the room already open. */
   open: (roomId: string) => void
@@ -84,17 +96,22 @@ type EditorState = {
    * Opens a saved design: its recolors become the starting point (one history entry). Does
    * nothing when that design is already open, so its unsaved changes stay.
    */
-  loadDesign: (roomId: string, designId: string, edits: Edits) => void
-  /** Records that the recolors shown were saved as a design. */
-  markSaved: (designId: string, edits: Edits) => void
+  loadDesign: (roomId: string, designId: string, edits: Edits, sizes: SurfaceSizes) => void
+  /** Records that the recolors and sizes shown were saved as a design. */
+  markSaved: (designId: string, edits: Edits, sizes: SurfaceSizes) => void
   /** Sets the label map version the room had when the editor opened (only the first time). */
   setBaseRevision: (revision: number) => void
   /** Selects an object (0 to deselect, which also ends the outline tool). */
   select: (index: number) => void
   /** Records the object under the pointer (0 for none). */
   hover: (index: number) => void
-  /** Recolors an object, as one undo step. Keeps its strength, or starts at the default. */
-  setColor: (index: number, color: string) => void
+  /**
+   * Recolors an object, as one undo step. Keeps its strength, or starts at the default. A color without a paint
+   * (a quick swatch or any color) drops the paint the object had.
+   */
+  setColor: (index: number, color: string, paint?: string) => void
+  /** Sets a surface's size, or clears it with null. */
+  setSize: (index: number, size: SurfaceSize | null) => void
   /** Changes an object's strength live (while dragging); `commitStrength` makes it one undo step. */
   previewStrength: (index: number, strength: number) => void
   /** Ends a strength drag as one undo step. */
@@ -153,6 +170,8 @@ const initial = (roomId: string | null) => {
     removing: [],
     designId: null,
     savedEdits: null,
+    sizes: {},
+    savedSizes: null,
   }
 }
 
@@ -200,14 +219,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
     open: (roomId) => {
       if (get().roomId !== roomId) set(initial(roomId))
     },
-    loadDesign: (roomId, designId, edits) => {
+    loadDesign: (roomId, designId, edits, sizes) => {
       const state = get()
       if (state.roomId === roomId && state.designId === designId) return
       // The outlines shown don't depend on the design; keep them when the room stays the same.
       const revision = state.roomId === roomId ? state.revision : null
-      set({ ...initial(roomId), edits, revision, history: [{ edits, revision }], designId, savedEdits: edits })
+      set({ ...initial(roomId), edits, revision, history: [{ edits, revision }], designId, savedEdits: edits, sizes, savedSizes: sizes })
     },
-    markSaved: (designId, edits) => set({ designId, savedEdits: edits }),
+    markSaved: (designId, edits, sizes) => set({ designId, savedEdits: edits, savedSizes: sizes }),
     setBaseRevision: (revision) => {
       const state = get()
       if (state.revision !== null) return
@@ -220,11 +239,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
     hover: (index) => {
       if (get().hovered !== index) set({ hovered: index })
     },
-    setColor: (index, color) => {
+    setColor: (index, color, paint) => {
       // A strength still being changed becomes its own step first, so undo can come back to it.
       flush()
       const { edits } = get()
-      commitEdits({ ...edits, [index]: { color, strength: edits[index]?.strength ?? DEFAULT_STRENGTH } })
+      const strength = edits[index]?.strength ?? DEFAULT_STRENGTH
+      commitEdits({ ...edits, [index]: paint ? { color, strength, paint } : { color, strength } })
+    },
+    setSize: (index, size) => {
+      const rest = { ...get().sizes }
+      delete rest[index]
+      set({ sizes: size ? { ...rest, [index]: size } : rest })
     },
     previewStrength: (index, strength) => {
       const { edits } = get()
@@ -291,7 +316,23 @@ export function sameEdits(a: Edits, b: Edits) {
     keys.every((key) => {
       const x = a[Number(key)]
       const y = b[Number(key)]
-      return y !== undefined && x.color.toUpperCase() === y.color.toUpperCase() && x.strength === y.strength
+      return y !== undefined && x.color.toUpperCase() === y.color.toUpperCase() && x.strength === y.strength && x.paint === y.paint
+    })
+  )
+}
+
+/**
+ * Whether two sets of surface sizes are the same.
+ * @param a - One set.
+ * @param b - The other.
+ */
+export function sameSizes(a: SurfaceSizes, b: SurfaceSizes) {
+  const keys = Object.keys(a)
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      const y = b[Number(key)]
+      return y !== undefined && a[Number(key)].width === y.width && a[Number(key)].height === y.height
     })
   )
 }

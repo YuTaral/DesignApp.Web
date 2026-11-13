@@ -16,7 +16,7 @@ page.on('request', (r) => { if (r.method() === 'POST') posts.push(new URL(r.url(
 const hasText = (needle) => page.evaluate((n) => document.body.innerText.includes(n), needle)
 const frame = () => sleep(250)
 const editorReady = () => until(page, () => !!document.querySelector('canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
-const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll('aside button')].find((b) => b.textContent.trim() === t).click(), text)
+const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll('aside button, [data-outline-panel] button')].find((b) => b.textContent.trim() === t).click(), text)
 const listed = () => page.evaluate(() => [...document.querySelectorAll('aside ul [data-index]')].map((b) => ({ index: Number(b.dataset.index), text: b.textContent.trim() })))
 const mapNow = () => page.evaluate(() => document.querySelector('canvas[data-photo-rect]').dataset.labelMap)
 const toPage = (u, v) => page.evaluate((u, v) => {
