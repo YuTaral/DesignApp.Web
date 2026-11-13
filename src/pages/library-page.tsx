@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useNavigate, useRouterState, useSearch } from "@tanstack/react-router"
-import { HouseIcon, LayoutGridIcon, LoaderCircleIcon, LogInIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, HouseIcon, LayoutGridIcon, LoaderCircleIcon, LogInIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -26,13 +26,14 @@ import { MESSAGES, ROUTES } from "@/lib/constants"
 type Choosing = { house: LibraryDesign; room: LibraryRoom }
 
 /**
- * Route `/library`: the sample houses. Every layout of every room is analyzed ahead of time, so trying one opens the
- * editor at once and costs no AI. A room with several layouts asks which one first. With `?design=` (Add room on a
- * design's page) the room goes into that design.
+ * Route `/library`: the sample houses, one card each with a cover of its rooms; `?house=` shows that house's rooms.
+ * Every layout of every room is analyzed ahead of time, so trying one opens the editor at once and costs no AI. A room
+ * with several layouts asks which one first. With `?design=` (Add room on a design's page) the room goes into that
+ * design.
  */
 export function LibraryPage() {
   const navigate = useNavigate()
-  const { design: designId } = useSearch({ from: "/library" })
+  const { design: designId, house: houseId } = useSearch({ from: "/library" })
   const signedIn = useAccount().data?.signedIn === true
   const target = useDesign(signedIn ? designId : undefined).data
   const library = useLibrary()
@@ -83,6 +84,8 @@ export function LibraryPage() {
   }
 
   const pendingLayout = copyRoom.isPending ? copyRoom.variables : undefined
+  // An unknown ?house= falls back to the list of houses.
+  const opened = library.data?.find((house) => house.id === houseId)
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
@@ -96,9 +99,9 @@ export function LibraryPage() {
       {target && <TargetBanner design={target} />}
 
       {library.isPending && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="aspect-[4/3] rounded-2xl" />
+        <div className="mt-8 grid gap-5 md:grid-cols-2">
+          {[0, 1].map((i) => (
+            <Skeleton key={i} className="aspect-[3/2] rounded-2xl" />
           ))}
         </div>
       )}
@@ -108,19 +111,36 @@ export function LibraryPage() {
         </p>
       )}
 
-      {library.data?.map((house) => (
-        <HouseSection
-          key={house.id}
-          house={house}
-          signedIn={signedIn}
-          addingToDesign={target !== undefined}
-          busy={busy}
-          pendingRoom={pendingLayout?.designId === house.id && !choosing ? pendingLayout.roomId : undefined}
-          savingHouse={copyDesign.isPending && copyDesign.variables?.designId === house.id}
-          onOpenRoom={(room) => openRoom(house, room)}
-          onUseHouse={() => saveHouse(house)}
-        />
-      ))}
+      {library.data && !opened && (
+        <ul className="mt-8 grid gap-5 md:grid-cols-2" aria-label="Sample houses">
+          {library.data.map((house) => (
+            <li key={house.id}>
+              <HouseCard house={house} designId={designId} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {opened && (
+        <>
+          <Button variant="ghost" size="sm" className="mt-6 -ml-2" asChild>
+            <Link to={ROUTES.library} search={{ design: designId }}>
+              <ArrowLeftIcon data-icon="inline-start" />
+              All houses
+            </Link>
+          </Button>
+          <HouseSection
+            house={opened}
+            signedIn={signedIn}
+            addingToDesign={target !== undefined}
+            busy={busy}
+            pendingRoom={pendingLayout?.designId === opened.id && !choosing ? pendingLayout.roomId : undefined}
+            savingHouse={copyDesign.isPending && copyDesign.variables?.designId === opened.id}
+            onOpenRoom={(room) => openRoom(opened, room)}
+            onUseHouse={() => saveHouse(opened)}
+          />
+        </>
+      )}
 
       <LayoutDialog
         choosing={choosing}
@@ -130,6 +150,42 @@ export function LibraryPage() {
         onClose={() => !busy && setChoosing(null)}
       />
     </div>
+  )
+}
+
+/**
+ * One sample house in the list: its cover (six of its rooms), name, style and description. Opens the house's rooms.
+ * @param props.house - The house.
+ * @param props.designId - The design a tried room goes into, if any (kept in the address).
+ */
+function HouseCard({ house, designId }: { house: LibraryDesign; designId: string | undefined }) {
+  const layouts = house.rooms.reduce((count, room) => count + room.layouts.length, 0)
+  return (
+    <Link
+      to={ROUTES.library}
+      search={{ design: designId, house: house.id }}
+      data-house={house.id}
+      className="group block overflow-hidden rounded-2xl border bg-card shadow-soft outline-none transition-shadow hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <div className="overflow-hidden bg-muted">
+        <img
+          src={apiUrl(house.coverUrl)}
+          alt=""
+          className="aspect-[2/1] w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none"
+        />
+      </div>
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">{house.name}</h2>
+          <Badge variant="secondary">{house.style}</Badge>
+        </div>
+        <p className="mt-1 text-sm text-pretty text-muted-foreground">{house.description}</p>
+        <p className="mt-3 flex items-center gap-1 text-sm font-medium text-primary">
+          {house.rooms.length} rooms · {layouts} layouts
+          <ArrowRightIcon className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />
+        </p>
+      </div>
+    </Link>
   )
 }
 
@@ -185,7 +241,7 @@ function HouseSection({
 }) {
   const here = useRouterState({ select: (state) => state.location.href })
   return (
-    <section className="mt-10" aria-labelledby={`house-${house.id}`}>
+    <section className="mt-4" aria-labelledby={`house-${house.id}`}>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-0 basis-full sm:basis-auto sm:flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -220,13 +276,13 @@ function HouseSection({
               type="button"
               onClick={() => onOpenRoom(room)}
               disabled={busy}
-              aria-label={`Try the ${room.title.toLowerCase()}`}
+              aria-label={`Try the ${room.title.toLowerCase()} of the ${house.name}`}
               data-room={room.id}
               className="group block w-full overflow-hidden rounded-2xl border bg-card text-left shadow-soft outline-none transition-shadow hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-progress"
             >
               <div className="relative aspect-[4/3] overflow-hidden bg-muted">
                 <img
-                  src={apiUrl(room.layouts[0].photoUrl)}
+                  src={apiUrl(room.layouts[0].thumbnailUrl)}
                   alt=""
                   loading="lazy"
                   className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none"
@@ -293,7 +349,7 @@ function LayoutDialog({
                     className="group block w-full overflow-hidden rounded-xl border bg-card text-left outline-none transition-shadow hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-progress"
                   >
                     <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-                      <img src={apiUrl(layout.photoUrl)} alt="" className="size-full object-cover" />
+                      <img src={apiUrl(layout.thumbnailUrl)} alt="" className="size-full object-cover" />
                       {pendingLayout === layout.id && (
                         <div className="absolute inset-0 flex items-center justify-center bg-background/50">
                           <LoaderCircleIcon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden />

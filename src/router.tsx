@@ -28,8 +28,8 @@ const signUpRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTES.
 /**
  * The pages: `/` home (upload; `?design=` adds the photo to that design), `/rooms/$roomId` the
  * editor (`?design=` when the room is in a design), `/designs` the account's designs,
- * `/designs/$designId` one design, `/library` the sample houses (`?design=` adds a room to that design), and sign
- * in / sign up.
+ * `/designs/$designId` one design, `/library` the sample houses (`?house=` one house's rooms, `?design=` adds a room
+ * to that design), and sign in / sign up.
  */
 const routeTree = rootRoute.addChildren([
   createRoute({
@@ -50,7 +50,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: ROUTES.library,
-    validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design) }),
+    validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design), house: optionalText(search.house) }),
     component: LibraryPage,
   }),
   signInRoute,

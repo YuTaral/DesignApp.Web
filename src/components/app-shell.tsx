@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
-import { LayoutGridIcon, LogInIcon, LogOutIcon, PlusIcon, UserRoundIcon } from "lucide-react"
+import { HouseIcon, LayoutGridIcon, LogInIcon, LogOutIcon, PlusIcon, UserRoundIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Logo } from "@/components/logo"
@@ -34,7 +34,7 @@ export function AppShell() {
             <Link to={ROUTES.home} className={navLinkClass} activeOptions={{ exact: true }}>
               New design
             </Link>
-            <Link to={ROUTES.library} search={{}} className={navLinkClass}>
+            <Link to={ROUTES.library} search={{}} className={navLinkClass} activeOptions={{ includeSearch: false }}>
               Sample houses
             </Link>
             <Link to={ROUTES.designs} className={navLinkClass}>
@@ -42,6 +42,11 @@ export function AppShell() {
             </Link>
           </nav>
           <div className="ml-auto flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="md:hidden" asChild>
+              <Link to={ROUTES.library} search={{}} aria-label="Sample houses">
+                <HouseIcon />
+              </Link>
+            </Button>
             <Button variant="ghost" size="icon" className="md:hidden" asChild>
               <Link to={ROUTES.designs} aria-label="My designs">
                 <LayoutGridIcon />

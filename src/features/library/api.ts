@@ -11,6 +11,8 @@ export type LibraryLayout = {
   id: string
   /** Relative to the API base URL; pass it through apiUrl(). */
   photoUrl: string
+  /** A small copy of the photo (640 px wide) for tiles and lists; relative, like photoUrl. */
+  thumbnailUrl: string
   width: number
   height: number
   /** How many objects are outlined in it. */
@@ -33,6 +35,8 @@ export type LibraryDesign = {
   name: string
   style: string
   description: string
+  /** Its first six rooms in two rows of three, for the list of houses; relative, like photoUrl. */
+  coverUrl: string
   rooms: LibraryRoom[]
 }
 

@@ -1,4 +1,5 @@
-// The sample houses, in the browser: the home page's strip leads to the library; a guest tries a room, which opens
+// The sample houses, in the browser: the home page's strip leads to the library, one card per house with a cover of
+// its rooms; a house's card shows its rooms; a guest tries a room, which opens
 // Ready at once (no upload, no analysis) with its objects and a "Sample room" badge; recolors, fixes an outline with
 // a box and removes an object (the fake eraser); signs up and saves it; then, signed in, saves the whole house as a
 // design and opens one of its rooms; phone layout. Usage: node e2e/library-pass.mjs [web url]
@@ -30,12 +31,30 @@ try {
   step('Home shows the sample-house strip and the header link', await hasText('Sample houses'))
   await page.click('::-p-text(No photo? Try a sample house)')
   await until(page, () => location.pathname === '/library', { label: 'library page' })
-  await until(page, () => document.querySelectorAll('main ul li button[data-room] img').length > 0, { label: 'room tiles' })
-  await until(page, () => [...document.querySelectorAll('main ul li button[data-room] img')].every((i) => i.complete && i.naturalWidth > 0), { label: 'photos loaded' })
-  const house = (await page.evaluate(() => fetch('/api/library').then((r) => r.json())))[0]
-  const tiles = await page.evaluate(() => [...document.querySelectorAll('main ul li button[data-room]')].map((b) => b.dataset.room))
+  const houses = await page.evaluate(() => fetch('/api/library').then((r) => r.json()))
+  const house = houses[0]
+  // One card per house, each with its cover (a grid of its rooms), all on one screen on a desktop.
+  await until(page, () => {
+    const covers = [...document.querySelectorAll('main a[data-house] img')]
+    return covers.length > 0 && covers.every((i) => i.complete && i.naturalWidth > 0)
+  }, { label: 'house covers loaded' })
+  const houseCards = await page.evaluate(() => [...document.querySelectorAll('main a[data-house]')].map((a) => ({
+    id: a.dataset.house, cover: a.querySelector('img').src.endsWith('/cover'), name: a.querySelector('h2').textContent.trim(),
+  })))
+  const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight)
   await shot('library')
-  step('The library shows a tile for every room of the house', tiles.join() === house.rooms.map((r) => r.id).join(), `${tiles.length} rooms`)
+  step('Every sample house is a card with its cover', houseCards.map((c) => c.name).join('|') === houses.map((h) => h.name).join('|') && houseCards.every((c) => c.cover),
+    `${houseCards.map((c) => c.name).join(', ')}; page ${pageHeight} px tall`)
+  await page.click(`main a[data-house="${house.id}"]`)
+  await until(page, () => new URL(location.href).searchParams.has('house'), { label: 'house in the address' })
+  await until(page, () => {
+    const visible = [...document.querySelectorAll('main ul li button[data-room] img')].filter((i) => i.getBoundingClientRect().top < innerHeight)
+    return visible.length > 0 && visible.every((i) => i.complete && i.naturalWidth > 0)
+  }, { label: 'room photos on screen loaded' })
+  const thumbnails = await page.evaluate(() => [...document.querySelectorAll('main ul li button[data-room] img')].every((i) => i.src.endsWith('/thumbnail')))
+  const tiles = await page.evaluate((id) => [...document.querySelectorAll(`section[aria-labelledby="house-${id}"] button[data-room]`)].map((b) => b.dataset.room), house.id)
+  await shot('library-house-rooms')
+  step('A house\'s card opens its rooms, with thumbnails for the tiles', tiles.join() === house.rooms.map((r) => r.id).join() && thumbnails, `${tiles.length} rooms`)
   step('A guest is asked to sign in to save the whole house', await hasText('Sign in to save the whole house'))
 
   // 2. Try the first room (choosing its last layout when it has several): it opens Ready at once, without an upload
@@ -122,7 +141,7 @@ try {
   step('A sample room is saved as a design after signing up', new URL(page.url()).pathname.endsWith(roomId))
 
   // 7. Signed in, save the whole house.
-  await page.goto(`${WEB}/library`, { waitUntil: 'networkidle0' })
+  await page.goto(`${WEB}/library?house=${house.id}`, { waitUntil: 'networkidle0' })
   await until(page, () => [...document.querySelectorAll('main button')].some((b) => b.textContent.trim() === 'Use the whole house'), { label: 'whole house button' })
   await page.evaluate(() => [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Use the whole house').click())
   await until(page, () => /^\/designs\/[^/]+$/.test(location.pathname), { label: 'design page', timeout: 30000 })
@@ -141,10 +160,18 @@ try {
   // 8. Phone layout: no sideways scrolling.
   await page.setViewport({ width: 390, height: 844 })
   await page.goto(`${WEB}/library`, { waitUntil: 'networkidle0' })
+  await until(page, () => document.querySelectorAll('main a[data-house]').length > 0, { label: 'house cards on phone' })
+  const phoneCards = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+  await page.click(`main a[data-house="${house.id}"]`)
   await until(page, () => document.querySelectorAll('main ul li button[data-room]').length > 0, { label: 'tiles on phone' })
+  await page.click('::-p-text(All houses)')
+  await until(page, () => !new URL(location.href).searchParams.has('house') && document.querySelectorAll('main a[data-house]').length > 0, { label: 'back to all houses' })
+  step('"All houses" goes back to the list', true)
+  await page.click(`main a[data-house="${house.id}"]`)
+  await until(page, () => document.querySelectorAll('main ul li button[data-room]').length > 0, { label: 'tiles on phone again' })
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   await shot('library-phone')
-  step('The library fits a phone screen', overflow <= 0, `${overflow} px too wide`)
+  step('The library fits a phone screen (houses and rooms)', overflow <= 0 && phoneCards <= 0, `rooms ${overflow} px, houses ${phoneCards} px too wide`)
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('library-stopped').catch(() => {})

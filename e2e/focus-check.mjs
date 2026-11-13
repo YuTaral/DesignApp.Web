@@ -75,7 +75,7 @@ try {
   step('Editor › Save design, closed with Escape: focus goes back to the button', saveInside && saveAfter === saveOpener, `${saveOpener} → ${saveAfter}`)
 
   // The library's layout chooser, by mouse and by keyboard.
-  await page.goto(`${WEB}/library`, { waitUntil: 'networkidle0' })
+  await page.goto(`${WEB}/library?house=minimalist`, { waitUntil: 'networkidle0' })
   await until(page, () => document.querySelectorAll('main button[data-room]').length > 0, { label: 'tiles' })
   const chooserOpener = await pressOn('main button[data-room="bedroom"]')
   await closeWith('X')
