@@ -178,7 +178,7 @@ export function RoomCanvas({
     return () => abort.abort()
   }, [labelsUrl, map])
 
-  // Which objects have pixels in the outlines shown (the object list hides the others, such as an undone new object),
+  // Which objects have pixels in the outlines shown (the others, such as an undone new object, aren't counted),
   // and what each rests on (removing a table offers the vase on it).
   const shownRevision = revision ?? room.labelMapRevision
   const presentKnown = presentObjects?.revision === shownRevision
@@ -512,7 +512,7 @@ export function RoomCanvas({
             ? gestureLabel(brushShape, `${tool === OUTLINE_BRUSH_MODE.Paint ? "mark" : "unmark"} the new object`)
             : brushing
             ? gestureLabel(brushShape, `${outlineTool === OUTLINE_BRUSH_MODE.Paint ? "add to" : "erase from"} the selected object`)
-            : "Your room. Click an object in the photo, or choose it from the list, to restyle it."
+            : "Your room. Click an object in the photo to select it and restyle it."
         }
         data-photo-rect={JSON.stringify(rect)}
         data-label-map={map?.url}

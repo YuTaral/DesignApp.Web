@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react"
 import { Link } from "@tanstack/react-router"
 import { CheckIcon, CircleIcon, LoaderCircleIcon, PlusIcon, TriangleAlertIcon } from "lucide-react"
 import { cn } from "cn"
@@ -7,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEditorStore } from "@/features/editor/editor-store"
 import type { Room } from "./types"
-import { CATEGORY_NAMES, MESSAGES, type ObjectCategory, ROOM_STATUS, type RoomStatus, ROUTES } from "@/lib/constants"
+import { MESSAGES, ROOM_STATUS, type RoomStatus, ROUTES } from "@/lib/constants"
 
 /** The visible analysis steps and the statuses during which each one is running. */
 const steps: { label: string; runningFor: RoomStatus[] }[] = [
@@ -15,17 +14,14 @@ const steps: { label: string; runningFor: RoomStatus[] }[] = [
   { label: "Outlining objects", runningFor: ["Segmenting"] },
 ]
 
-/** Where each category sorts in the object list: surfaces first, then furniture, then the rest. */
-const categoryOrder: ObjectCategory[] = ["Wall", "Floor", "Ceiling", "Opening", "Furniture", "Textile", "Lighting", "Decor", "Fixture", "Other"]
-
 /**
- * The inspector's Objects section: analysis progress while the AI works, the detected objects once
+ * The inspector's Objects section: analysis progress while the AI works, a summary of the detected objects once
  * it's done, or the reason it failed.
  * @param props.room - The room being edited.
  */
 export function AnalysisPanel({ room }: { room: Room }) {
   if (room.status === ROOM_STATUS.Failed) return <AnalysisFailed reason={room.failureReason} />
-  if (room.status === ROOM_STATUS.Ready) return <ObjectList room={room} />
+  if (room.status === ROOM_STATUS.Ready) return <ObjectsSummary room={room} />
   return <AnalysisProgress status={room.status} />
 }
 
@@ -68,35 +64,22 @@ function AnalysisProgress({ status }: { status: RoomStatus }) {
 }
 
 /**
- * The detected objects, surfaces first, each with its current color. Choosing one selects it in
- * the editor; pointing at one highlights it in the photo. Parts (a chair's seat) sit indented under their object.
- * Objects without pixels in the outlines shown (a new object after undo) are left out. "New object" starts marking
- * one the AI missed.
+ * The Objects section once the AI is done: how many objects it found and how many are recolored, and "New object" to
+ * mark one it missed. Objects are chosen by clicking them in the photo; the inspector below then shows the one chosen.
+ * Objects without pixels in the outlines shown (a new object after undo) aren't counted.
  * @param props.room - The analyzed room.
  */
-function ObjectList({ room }: { room: Room }) {
-  const { selected, edits, select, hover, marking, comparing, revision, presentObjects, startMarking } = useEditorStore()
-  const listRef = useRef<HTMLUListElement>(null)
-  // Until the outlines of the version shown are loaded, every object is listed (a new one must not blink out).
+function ObjectsSummary({ room }: { room: Room }) {
+  const { edits, marking, comparing, revision, presentObjects, startMarking } = useEditorStore()
+  // Until the outlines of the version shown are loaded, every object counts (a new one must not blink out).
   const present = presentObjects?.revision === (revision ?? room.labelMapRevision) ? presentObjects.indexes : null
   const shown = room.objects.filter((o) => present?.has(o.index) ?? true)
-  // An object whose parts cover all of it has no pixels of its own, but is still listed with them.
-  const wholes = room.objects.filter((o) => !o.parentIndex && (shown.includes(o) || shown.some((p) => p.parentIndex === o.index))).sort(
-    (a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category) || a.index - b.index
-  )
-  // Each object followed by its parts; a part whose object isn't shown is listed on its own.
-  const objects = [
-    ...wholes.flatMap((whole) => [whole, ...shown.filter((o) => o.parentIndex === whole.index)]),
-    ...shown.filter((o) => o.parentIndex && !wholes.some((w) => w.index === o.parentIndex)),
-  ]
-
-  // An object selected in the photo scrolls into view here.
-  useEffect(() => {
-    listRef.current?.querySelector(`[data-index="${selected}"]`)?.scrollIntoView({ block: "nearest" })
-  }, [selected])
+  // An object whose parts cover all of it has no pixels of its own, but is still there; parts aren't counted.
+  const count = room.objects.filter((o) => !o.parentIndex && (shown.includes(o) || shown.some((p) => p.parentIndex === o.index))).length
+  const recolored = Object.keys(edits).length
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div>
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-medium">Objects</h2>
         <Button variant="outline" size="sm" disabled={marking || comparing} onClick={() => startMarking()}>
@@ -104,40 +87,11 @@ function ObjectList({ room }: { room: Room }) {
           New object
         </Button>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1 text-sm text-muted-foreground" data-recolored={recolored}>
         {marking
           ? "Mark the new object on the photo, then name it and save."
-          : `${wholes.length === 1 ? "1 object" : `${wholes.length} objects`} in your photo.`}
+          : `${count === 1 ? "1 object" : `${count} objects`} in your photo${recolored > 0 ? ` · ${recolored} recolored` : ""}.`}
       </p>
-      <ul ref={listRef} className="-mx-2 mt-3 max-h-[9.5rem] space-y-0.5 overflow-y-auto sm:max-h-72 lg:max-h-[min(24rem,38dvh)]" onMouseLeave={() => hover(0)}>
-        {objects.map((object) => (
-          <li key={object.index}>
-            <button
-              type="button"
-              data-index={object.index}
-              aria-pressed={selected === object.index}
-              disabled={marking}
-              onClick={() => select(selected === object.index ? 0 : object.index)}
-              onMouseEnter={() => hover(object.index)}
-              data-part-of={object.parentIndex ?? undefined}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
-                object.parentIndex && "pl-7",
-                selected === object.index && "bg-accent text-accent-foreground hover:bg-accent"
-              )}
-            >
-              <span
-                className="size-5 shrink-0 rounded-md border shadow-soft"
-                style={{ backgroundColor: edits[object.index]?.color ?? object.dominantColor }}
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1 truncate text-sm first-letter:uppercase">{object.label}</span>
-              {edits[object.index] && <span className="size-1.5 rounded-full bg-primary" aria-label="recolored" />}
-              <span className="text-xs text-muted-foreground">{object.parentIndex ? "Part" : (CATEGORY_NAMES[object.category] ?? object.category)}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }

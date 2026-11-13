@@ -36,12 +36,12 @@ export function ColorPanel({ room, inDialog = false }: { room: Room; inDialog?: 
 
   if (!object) {
     return (
-      <div className="space-y-2">
-        <h2 className="font-medium">Color</h2>
-        <p className="flex gap-2 text-sm text-muted-foreground">
-          <MousePointerClickIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-          Click an object in the photo, or pick one from the list, to change its color.
-        </p>
+      <div className="flex gap-3 rounded-xl border border-dashed p-4" data-select-hint>
+        <MousePointerClickIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden />
+        <div className="space-y-1">
+          <h2 className="font-medium">Select an object</h2>
+          <p className="text-sm text-muted-foreground">Click an object in the photo to select it. Its color, parts and outline tools then show here.</p>
+        </div>
       </div>
     )
   }

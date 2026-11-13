@@ -4,7 +4,7 @@
 // fake one here) finds; they follow the chair's color until one gets its own. Both are kept after saving and reopening;
 // a part merges back; Erase in the dialog gives a part's pixels back to the chair; phone layout.
 // Usage: node e2e/parts-pass.mjs [web url]
-import { launch, sleep, until, WEB } from './ff.mjs'
+import { launch, sleep, until, WEB, selectObject } from './ff.mjs'
 
 const email = `parts-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -18,8 +18,7 @@ const editorReady = () => until(page, () => !!document.querySelector('main canva
 const dialogReady = () => until(page, () => !!document.querySelector('[role=dialog] [data-parts-canvas] canvas[data-label-map]'), { timeout: 30000, label: 'dialog canvas' })
 const clickText = (scope, label) => page.evaluate((s, t) => [...document.querySelectorAll(`${s} button`)].find((b) => b.textContent.trim() === t).click(), scope, label)
 const select = async (index) => {
-  await page.waitForSelector(`aside button[data-index="${index}"]`, { timeout: 15000 })
-  await page.click(`aside button[data-index="${index}"]`)
+  if (!(await selectObject(page, index))) throw new Error(`Object ${index} can't be clicked on the photo`)
   await frame()
 }
 const openParts = async () => {
@@ -194,10 +193,9 @@ try {
   await frame()
   const parts = await partButtons()
   const body = JSON.parse(await page.evaluate(() => window.sentParts ?? '{}'))
-  const nested = await page.evaluate(() => [...document.querySelectorAll('aside [data-part-of]')].map((b) => b.innerText.replace(/\s+/g, ' ').trim()))
   await shot('parts-found')
-  step('Recognize parts sends the instructions and lists the armchair\'s parts under it', body.instructions === 'the seat cushion on its own' && parts.length >= 3 && /^Whole /.test(parts[0].text) && nested.length === parts.length - 1 && nested.every((t) => /Part$/.test(t)),
-    `${JSON.stringify(parts.map((p) => p.text))} | ${JSON.stringify(nested)}`)
+  step('Recognize parts sends the instructions and lists the armchair\'s parts', body.instructions === 'the seat cushion on its own' && parts.length >= 3 && /^Whole /.test(parts[0].text),
+    JSON.stringify(parts.map((p) => p.text)))
 
   // 6. Coloring the whole chair colors its parts; then one part gets its own color and the others keep the chair's.
   const [first, second] = [parts[1], parts[2]]

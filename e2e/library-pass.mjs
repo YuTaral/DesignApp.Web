@@ -3,7 +3,7 @@
 // Ready at once (no upload, no analysis) with its objects and a "Sample room" badge; recolors, fixes an outline with
 // a box and removes an object (the fake eraser); signs up and saves it; then, signed in, saves the whole house as a
 // design and opens one of its rooms; phone layout. Usage: node e2e/library-pass.mjs [web url]
-import { launch, sleep, until, WEB } from './ff.mjs'
+import { launch, sleep, until, WEB, selectObject, shownObjects, recoloredCount } from './ff.mjs'
 
 const email = `lib-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -17,7 +17,17 @@ const hasText = (needle) => page.evaluate((n) => document.body.innerText.include
 const frame = () => sleep(250)
 const editorReady = () => until(page, () => !!document.querySelector('canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
 const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll('aside button, [data-outline-panel] button')].find((b) => b.textContent.trim() === t).click(), text)
-const listed = () => page.evaluate(() => [...document.querySelectorAll('aside ul [data-index]')].map((b) => ({ index: Number(b.dataset.index), text: b.textContent.trim() })))
+/** The room's whole objects shown on the photo (with pixels in the outlines it shows), in index order. */
+const listed = async () => {
+  const room = await page.evaluate(() => fetch(`/api/rooms/${location.pathname.split('/').at(-1)}`).then((r) => r.json()))
+  const shown = await shownObjects(page)
+  return room.objects.filter((o) => !o.parentIndex && shown.has(o.index)).map((o) => ({ index: o.index, text: o.label, category: o.category }))
+}
+/** Selects the first of the objects that can be clicked on the photo, and returns it. */
+const selectFirst = async (objects) => {
+  for (const object of objects) if (await selectObject(page, object.index)) return object
+  throw new Error('No object could be clicked on the photo')
+}
 const mapNow = () => page.evaluate(() => document.querySelector('canvas[data-photo-rect]').dataset.labelMap)
 const toPage = (u, v) => page.evaluate((u, v) => {
   const c = document.querySelector('canvas[data-photo-rect]'); const r = JSON.parse(c.dataset.photoRect); const b = c.getBoundingClientRect()
@@ -97,10 +107,10 @@ try {
   step('No photo was uploaded for it', !posts.includes('/api/rooms') && posts.some((p) => p.startsWith('/api/library/')), posts.join(', '))
 
   // 3. Recolor an object.
-  await page.click(`aside button[data-index="${items[0].index}"]`)
+  await selectFirst(items)
   await page.click('[role=radiogroup][aria-label^="Color for"] button')
   await frame()
-  const recolored = await page.evaluate(() => document.querySelectorAll('aside [aria-label=recolored]').length)
+  const recolored = await recoloredCount(page)
   step('An object can be recolored', recolored === 1, `${recolored} recolored`)
 
   // 4. Fix the selected object's outline with a box.
@@ -115,10 +125,10 @@ try {
   await page.keyboard.press('Escape'); await frame()
 
   // 5. Remove the last listed object (the fake eraser in Development).
-  const victim = (await listed()).at(-1)
-  await page.click(`aside button[data-index="${victim.index}"]`); await frame()
+  const victim = await selectFirst((await listed()).filter((o) => !['Wall', 'Floor', 'Ceiling'].includes(o.category)).reverse())
   await page.evaluate(() => [...document.querySelectorAll('aside button')].find((b) => /^Remove (object|\d+ objects)$/.test(b.textContent.trim())).click())
-  await until(page, new Function(`return ![...document.querySelectorAll('aside ul [data-index]')].some((b) => b.dataset.index === '${victim.index}')`), { label: 'object removed', timeout: 30000 })
+  for (let i = 0; i < 300 && (await shownObjects(page)).has(victim.index); i++) await sleep(100)
+  if ((await shownObjects(page)).has(victim.index)) throw new Error('Timed out waiting for the object to be removed')
   step('An object can be removed from a sample room', true, victim.text)
   await page.keyboard.press('Escape'); await frame()
 

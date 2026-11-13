@@ -4,7 +4,7 @@
 // with its colors, finds the design in My designs, deletes it, signs out; no My rooms anywhere;
 // phone layouts. Usage: node e2e/designs-ui-pass.mjs [web url]
 import path from 'node:path'
-import { launch, sleep, until, WEB, ROOMS } from './ff.mjs'
+import { launch, sleep, until, WEB, ROOMS, selectObject, recoloredCount } from './ff.mjs'
 
 const email = `dz-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -13,7 +13,7 @@ const step = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  $
 
 const { browser, page, log, shot } = await launch()
 const hasText = (needle) => page.evaluate((n) => document.body.innerText.includes(n), needle)
-const recolored = () => page.evaluate(() => document.querySelectorAll('aside [aria-label=recolored]').length)
+const recolored = () => recoloredCount(page)
 const saveText = () => page.evaluate(() => [...document.querySelectorAll('aside button, aside a')].map((b) => b.textContent.trim()).find((t) => /^(save|sign in)/i.test(t)) ?? null)
 const noDialog = () => until(page, () => !document.querySelector('[role=dialog]'), { label: 'dialog closed' })
 const editorReady = () => until(page, () => !!document.querySelector('canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
@@ -33,13 +33,19 @@ const upload = async (file) => {
   await editorReady()
   await sleep(300)
 }
+// Recolors `count` objects, clicked on the photo in index order after skipping the first `offset` that can be clicked.
 const recolor = async (count, offset = 0) => {
-  const indexes = await page.evaluate(() => [...document.querySelectorAll('aside button[data-index]')].map((b) => b.dataset.index))
-  for (const i of indexes.slice(offset, offset + count)) {
-    await page.click(`aside button[data-index="${i}"]`)
+  const room = await page.evaluate(() => fetch(`/api/rooms/${location.pathname.split('/').at(-1)}`).then((r) => r.json()))
+  let [seen, done] = [0, 0]
+  for (const object of room.objects) {
+    if (done === count) break
+    if (!(await selectObject(page, object.index))) continue
+    if (seen++ < offset) continue
     await page.click('[role=radiogroup][aria-label^="Color for"] button')
     await sleep(120)
+    done++
   }
+  await page.keyboard.press('Escape')
 }
 const designId = () => new URL(page.url()).searchParams.get('design')
 const roomOf = () => new URL(page.url()).pathname.split('/').at(-1)
@@ -147,7 +153,7 @@ try {
   await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
   await page.click('[aria-label="Open Room 1"]')
   await editorReady()
-  await until(page, () => document.querySelectorAll('aside [aria-label=recolored]').length === 3, { timeout: 10000, label: '3 colors' }).catch(() => {})
+  await until(page, () => document.querySelector('aside [data-recolored]')?.dataset.recolored === '3', { timeout: 10000, label: '3 colors' }).catch(() => {})
   step('Room 1 opens with its 3 saved colors, counted as saved', (await recolored()) === 3 && (await saveText()) === 'Saved', `${await recolored()} colors, ${await saveText()}`)
 
   // 10. My designs: the card; phone layouts.

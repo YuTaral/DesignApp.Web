@@ -3,7 +3,17 @@
 // Usage: node e2e/editor-pass.mjs [web url] [photo name ...]
 import fs from 'node:fs'
 import path from 'node:path'
-import { launch, sleep, until, SHOTS, WEB, ROOMS, ARGS } from './ff.mjs'
+import { launch, sleep, until, SHOTS, WEB, ROOMS, ARGS, recoloredCount, shownObjects } from './ff.mjs'
+
+/** In-page code: whether an object has pixels in the outlines the photo shows (for `until`). */
+const shownCode = (index) => `return (async () => {
+  const c = document.querySelector('canvas[data-photo-rect]')
+  const bmp = await createImageBitmap(await (await fetch(c.dataset.labelMap)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
+  const ctx = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d'); ctx.drawImage(bmp, 0, 0)
+  const data = ctx.getImageData(0, 0, bmp.width, bmp.height).data
+  for (let p = 0; p < data.length; p += 4) if (data[p] === ${index}) return true
+  return false
+})()`
 
 const only = ARGS
 fs.mkdirSync(SHOTS, { recursive: true })
@@ -110,8 +120,8 @@ try {
     const bluer = after[2] - after[0] > before[2] - before[0] + 15
     step(`${file}: recoloring "${target.label}" changes its pixels`, bluer, `${before} → ${after}`)
     step(`${file}: ...and leaves "${other.label}" alone`, otherBefore.join() === otherAfter.join(), `${otherBefore} → ${otherAfter}`)
-    const listDot = await page.evaluate((i) => !!document.querySelector(`[data-index="${i}"] [aria-label=recolored]`), target.index)
-    step(`${file}: object list marks it recolored`, listDot)
+    const counted = await recoloredCount(page)
+    step(`${file}: the Objects section counts it as recolored`, counted === 1, `${counted} recolored`)
 
     // Strength 0 brings the original back; the slider is keyboard-operable.
     await page.focus('aside [role=slider]')
@@ -203,7 +213,6 @@ try {
 
     // New object (first photo): mark an area by hand, name it, save; it can be selected there, and undo hides it.
     if (file === files[0]) {
-      const listed = () => page.evaluate(() => [...document.querySelectorAll('ul [data-index]')].map((b) => b.textContent.toLowerCase()))
       await page.click('::-p-text(New object)'); await frame()
       const start = await toPage(op.u, op.v)
       await page.mouse.move(start.x, start.y)
@@ -227,12 +236,12 @@ try {
       await until(page, () => document.querySelector('aside h2.truncate')?.textContent?.trim() === 'test lamp', { label: 'new object selected' })
       // Clicks are matched against the outlines on screen: wait for the new version before clicking the mark.
       await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap !== ${JSON.stringify(mapBefore)}`), { label: 'new outlines loaded' })
-      const inList = (await listed()).some((t) => t.includes('test lamp'))
-      step(`${file}: a hand-marked object is saved, selected and listed`, saveDisabled && inList, `Save waited for a name: ${saveDisabled}`)
       const lamp = await page.evaluate(async () => {
         const id = location.pathname.split('/').at(-1)
         return (await (await fetch(`/api/rooms/${id}`)).json()).objects.find((o) => o.label === 'test lamp')?.index
       })
+      const onPhoto = (await shownObjects(page)).has(lamp)
+      step(`${file}: a hand-marked object is saved, selected and on the photo`, saveDisabled && onPhoto, `Save waited for a name: ${saveDisabled}`)
       const lassoed = await labelAt(0.33, 0.33)
       step(`${file}: the lasso marked the inside of the drawn square too`, lamp !== undefined && lassoed === lamp, `label ${lassoed}, lamp ${lamp}`)
 
@@ -241,9 +250,9 @@ try {
       step(`${file}: clicking the marked area selects the new object`, (await heading()) === 'test lamp', (await heading()) ?? 'none')
 
       await page.click('[aria-label="Undo"]')
-      await until(page, () => ![...document.querySelectorAll('ul [data-index]')].some((b) => b.textContent.toLowerCase().includes('test lamp')), { label: 'undo hides it' })
+      await until(page, new Function(`return ${shownCode(lamp).replace(/^return /, '')}.then((shown) => !shown)`), { label: 'undo hides it' })
       await page.click('[aria-label="Redo"]')
-      await until(page, () => [...document.querySelectorAll('ul [data-index]')].some((b) => b.textContent.toLowerCase().includes('test lamp')), { label: 'redo shows it' })
+      await until(page, new Function(shownCode(lamp)), { label: 'redo shows it' })
       step(`${file}: undo hides the new object, redo brings it back`, true)
 
       // Remove an object from the photo (the fake eraser): it leaves the list and the photo changes there; undo
@@ -255,7 +264,6 @@ try {
       await page.mouse.click(...Object.values(await toPage(vp.u, vp.v))); await frame()
       const picked = await heading()
       const photoBefore = await page.evaluate(() => document.querySelector('canvas[data-photo-rect]').toDataURL())
-      const listedLabel = (l) => `[...document.querySelectorAll('ul [data-index]')].some((b) => b.textContent.toLowerCase().startsWith(${JSON.stringify(l.toLowerCase())}))`
       // The button names how many objects go (the selected one plus anything ticked as lying on it).
       const removing = await page.evaluate(() => {
         const button = [...document.querySelectorAll('aside button')].find((b) => /^Remove (object|\d+ objects)$/.test(b.textContent.trim()))
@@ -265,15 +273,15 @@ try {
       const overlay = await until(page, () => document.querySelector('[data-removing]')?.textContent?.trim(), { label: 'loading overlay on the photo', timeout: 5000 })
       const undoWhileRemoving = await page.evaluate(() => document.querySelector('[aria-label=Undo]').disabled)
       step(`${file}: the photo shows the removal is running, and undo waits`, !!overlay && undoWhileRemoving, overlay)
-      await until(page, new Function(`return !${listedLabel(victim.label)}`), { label: 'removed object leaves the list', timeout: 30000 })
+      await until(page, new Function(`return ${shownCode(victim.index).replace(/^return /, '')}.then((shown) => !shown)`), { label: 'removed object leaves the photo', timeout: 30000 })
       await sleep(500)
       await page.mouse.move(5, 5); await frame()
       const photoAfter = await page.evaluate(() => document.querySelector('canvas[data-photo-rect]').toDataURL())
       await shot(`${name}-removed`)
-      step(`${file}: removing "${victim.label}" takes it out of the list and the photo`,
+      step(`${file}: removing "${victim.label}" takes it out of the outlines and the photo`,
         picked?.toLowerCase() === victim.label.toLowerCase() && photoBefore !== photoAfter, `selected ${picked}; "${removing}"`)
       await page.click('[aria-label="Undo"]')
-      await until(page, new Function(`return ${listedLabel(victim.label)}`), { label: 'undo brings it back' })
+      await until(page, new Function(shownCode(victim.index)), { label: 'undo brings it back' })
       step(`${file}: undo brings the removed object back`, true)
     }
 

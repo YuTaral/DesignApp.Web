@@ -3,7 +3,7 @@
 // 4 × 2.5 m wall (10 m², 2.2 L for 2 coats with 10% spare, one 2.5 L tin) and covers only walls and ceilings; signing up
 // and saving keeps the paint and the size after a reload, and the design page shows the list; phone layout.
 // Usage: node e2e/paint-pass.mjs [web url]
-import { launch, sleep, until, WEB } from './ff.mjs'
+import { launch, sleep, until, WEB, selectObject, recoloredCount } from './ff.mjs'
 
 const email = `paint-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -16,8 +16,7 @@ const editorReady = () => until(page, () => !!document.querySelector('canvas[dat
 const text = (selector) => page.evaluate((s) => document.querySelector(s)?.innerText.replace(/\s+/g, ' ').trim() ?? null, selector)
 const clickText = (scope, label) => page.evaluate((s, t) => [...document.querySelectorAll(`${s} button`)].find((b) => b.textContent.trim() === t).click(), scope, label)
 const select = async (index) => {
-  await page.waitForSelector(`aside button[data-index="${index}"]`, { timeout: 15000 })
-  await page.click(`aside button[data-index="${index}"]`)
+  if (!(await selectObject(page, index))) throw new Error(`Object ${index} can't be clicked on the photo`)
   await frame()
 }
 const pickRal = async (query, ref) => {
@@ -61,7 +60,7 @@ try {
   await select(wall.index)
   const found = await pickRal('9010', 'ral-classic/9010')
   const label = await text('aside [data-paint-label]')
-  const recolored = await page.evaluate(() => document.querySelectorAll('aside [aria-label=recolored]').length)
+  const recolored = await recoloredCount(page)
   await shot('paint-ral')
   step('Searching "9010" finds RAL 9010 and paints the wall with it', found === 1 && recolored === 1 && label === 'RAL 9010 · Pure white', `${found} found, label "${label}"`)
 
