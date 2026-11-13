@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type CSSProperties, type FormEvent, type Re
 import { Link, useNavigate, useParams, useRouterState, useSearch } from "@tanstack/react-router"
 import {
   ArrowLeftIcon,
+  BoxIcon,
   CheckIcon,
   LogInIcon,
   ColumnsIcon,
@@ -42,6 +43,7 @@ import { NewObjectPanel } from "@/features/editor/new-object-panel"
 import { OutlinePanel } from "@/features/editor/outline-panel"
 import { RemoveObjectPanel } from "@/features/editor/remove-object-panel"
 import { useOutlineFixes } from "@/features/editor/use-outline-fixes"
+import { Room3D } from "@/features/editor/room-3d"
 import { RoomCanvas } from "@/features/editor/room-canvas"
 import { useEditorShortcuts } from "@/features/editor/use-editor-shortcuts"
 import { AnalysisPanel } from "@/features/rooms/analysis-panel"
@@ -255,12 +257,13 @@ function AiBadge({ room }: { room: Room }) {
  */
 function ReadyCanvas({ room }: { room: Room }) {
   const { save, saving } = useOutlineFixes(room)
-  return <RoomCanvas room={room} onStroke={save} saving={saving} />
+  const viewing3d = useEditorStore((state) => state.viewing3d)
+  return viewing3d ? <Room3D room={room} /> : <RoomCanvas room={room} onStroke={save} saving={saving} />
 }
 
 /** Undo, redo, before/after and reset-all, above the canvas. Also turns on the keyboard shortcuts. */
 function EditorToolbar() {
-  const { history, position, comparing, edits, marking, removing, undo, redo, toggleCompare, resetAll } = useEditorStore()
+  const { history, position, comparing, viewing3d, edits, marking, removing, undo, redo, toggleCompare, toggle3d, resetAll } = useEditorStore()
   const busy = marking || removing.length > 0
   useEditorShortcuts()
   const edited = Object.keys(edits).length > 0
@@ -283,7 +286,17 @@ function EditorToolbar() {
         </TooltipTrigger>
         <TooltipContent>Redo (Ctrl+Shift+Z)</TooltipContent>
       </Tooltip>
-      <Button variant={comparing ? "secondary" : "ghost"} size="sm" aria-pressed={comparing} disabled={marking || !edited} onClick={toggleCompare}>
+      <Button variant={viewing3d ? "secondary" : "ghost"} size="sm" aria-pressed={viewing3d} disabled={marking} onClick={toggle3d}>
+        <BoxIcon data-icon="inline-start" />
+        3D
+      </Button>
+      <Button
+        variant={comparing ? "secondary" : "ghost"}
+        size="sm"
+        aria-pressed={comparing}
+        disabled={marking || viewing3d || !edited}
+        onClick={toggleCompare}
+      >
         <ColumnsIcon data-icon="inline-start" />
         Compare
       </Button>

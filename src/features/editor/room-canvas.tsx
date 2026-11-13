@@ -8,8 +8,9 @@ import { apiUrl } from "@/lib/api"
 import { stampMark, stampStroke, type StrokePoint } from "./brush"
 import { useEditorStore } from "./editor-store"
 import { labelAt, loadLabelMap, restingOn, type LabelMap } from "./label-map"
+import { toRenderEdits } from "./render-edits"
 import { hexToOklab } from "./oklab"
-import { RoomRenderer, type PhotoRect, type RenderEdit } from "./renderer"
+import { RoomRenderer, type PhotoRect } from "./renderer"
 import { LIMITS, MARK_PREVIEW, MESSAGES, OUTLINE_BRUSH_MODE, STROKE_SHAPE, type OutlineBrushMode, type StrokeShape } from "@/lib/constants"
 
 /**
@@ -210,12 +211,7 @@ export function RoomCanvas({
   // Recolors in the shader's terms: each object's target color and its original main color. While marking, the
   // mark is tinted too, so even a small one on a pale object is easy to see.
   const renderEdits = useMemo(() => {
-    const byIndex = new Map(room.objects.map((o) => [o.index, o]))
-    const result = new Map<number, RenderEdit>()
-    for (const [index, edit] of Object.entries(edits)) {
-      const object = byIndex.get(Number(index))
-      if (object) result.set(object.index, { target: hexToOklab(edit.color), source: hexToOklab(object.dominantColor), strength: edit.strength })
-    }
+    const result = toRenderEdits(room.objects, edits)
     if (marking) result.set(markIndex, { target: hexToOklab(MARK_PREVIEW.color), source: hexToOklab(MARK_PREVIEW.source), strength: MARK_PREVIEW.strength })
     return result
   }, [edits, room.objects, marking, markIndex])

@@ -49,6 +49,8 @@ type EditorState = {
   hovered: number
   /** Whether the before/after split is shown. */
   comparing: boolean
+  /** Whether the room is shown in 3D (look around it) instead of the flat, editable photo. */
+  viewing3d: boolean
   /** The active outline brush: dragging on the photo then paints or erases the selected object instead of panning. */
   outlineTool: OutlineBrushMode | null
   /** The brush diameter on screen, in CSS px. */
@@ -129,6 +131,8 @@ type EditorState = {
   redo: () => void
   /** Turns the before/after split on or off. */
   toggleCompare: () => void
+  /** Turns the 3D view on or off; the outline brushes, marking and the split need the flat photo, so they end. */
+  toggle3d: () => void
 }
 
 /** The fresh state for a room. */
@@ -144,6 +148,7 @@ const initial = (roomId: string | null) => {
     selected: 0,
     hovered: 0,
     comparing: false,
+    viewing3d: false,
     outlineTool: null,
     marking: false,
     markTool: OUTLINE_BRUSH_MODE.Paint,
@@ -244,7 +249,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       flush()
       if (Object.keys(get().edits).length > 0) commitEdits({})
     },
-    setOutlineTool: (tool) => set({ outlineTool: get().selected ? tool : null, comparing: false }),
+    setOutlineTool: (tool) => set({ outlineTool: get().selected ? tool : null, comparing: false, viewing3d: false }),
     setBrushSize: (size) => set({ brushSize: Math.round(Math.min(LIMITS.brushSizes.max, Math.max(LIMITS.brushSizes.min, size))) }),
     setBrushShape: (shape) => set({ brushShape: shape }),
     applyOutlineFix: (revision, selectIndex) => {
@@ -254,7 +259,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     startMarking: () => {
       flush()
-      set({ marking: true, markTool: OUTLINE_BRUSH_MODE.Paint, markStrokes: [], markPixels: 0, selected: 0, outlineTool: null, comparing: false })
+      set({ marking: true, markTool: OUTLINE_BRUSH_MODE.Paint, markStrokes: [], markPixels: 0, selected: 0, outlineTool: null, comparing: false, viewing3d: false })
     },
     stopMarking: () => set({ marking: false, markStrokes: [], markPixels: 0 }),
     setMarkTool: (tool) => set({ markTool: tool }),
@@ -272,6 +277,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
       flush()
       const { history, position } = get()
       if (position < history.length - 1) go(position + 1)
+    },
+    toggle3d: () => {
+      if (!get().marking) set({ viewing3d: !get().viewing3d, comparing: false, outlineTool: null, hovered: 0 })
     },
     toggleCompare: () => {
       if (!get().marking) set({ comparing: !get().comparing, outlineTool: null })

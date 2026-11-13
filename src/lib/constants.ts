@@ -24,6 +24,7 @@ export const API = {
   roomPhotoVersion: (id: string, version: number) => `/api/rooms/${id}/photo/${version}`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
   roomLabelMap: (id: string, revision: number) => `/api/rooms/${id}/labels/${revision}`,
+  roomDepth: (id: string) => `/api/rooms/${id}/depth`,
   library: "/api/library",
   libraryLayoutCopy: (designId: string, roomId: string, layoutId: string) => `/api/library/${designId}/${roomId}/${layoutId}/copy`,
   libraryDesignCopy: (designId: string) => `/api/library/${designId}/copy`,
@@ -109,6 +110,12 @@ export const LIMITS = {
   /** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
   brushSizes: { min: 2, max: 120, default: 24 },
   zoom: { min: 1, max: 8 },
+  /**
+   * The 3D view. One photo only shows the room from one spot, so the view turns only a little from the photo's own
+   * angle (degrees) and may move in toward the middle (a share of the distance). The surface is cut where the depth
+   * jumps (relative), or by a smaller jump where two objects' outlines meet. The widest texture drawn (px).
+   */
+  view3d: { yaw: 12, pitch: 6, closest: 0.7, edgeJump: 0.1, outlineJump: 0.05, maxTexture: 2048 },
   /** A press that moves less than this (CSS px) is a tap, not a drag. */
   tapSlop: 5,
   /** Failed room loads tried again (a 404 never is). */
@@ -275,6 +282,9 @@ export const MESSAGES = {
   roomLoadFailed: "We couldn't load this room",
   roomMaybeRemoved: "It may have been removed. Upload a photo to start a new design.",
   libraryLoadFailed: "We couldn't load the sample houses",
+  view3dMeasuring: "Building the 3D view…",
+  view3dFailed: "The 3D view couldn't be shown.",
+  view3dHint: "Drag to look around · double-click to reset",
   libraryHouseSaved: (name: string) => `${name} saved to your designs`,
   librarySignIn: "Sign in to save the whole house",
 } as const

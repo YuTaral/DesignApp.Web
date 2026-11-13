@@ -232,15 +232,17 @@ export class RoomRenderer {
   }
 
   /**
-   * Draws one frame. Resizes the drawing buffer to the canvas's CSS size first.
+   * Draws one frame. Resizes the drawing buffer to the canvas's CSS size first, or to `size` for a canvas that isn't
+   * on the page (the 3D view's texture); then `state.rect` is in those pixels too.
    * @param state - What to show.
+   * @param size - The drawing buffer's size in pixels, for a canvas off the page.
    */
-  render(state: RenderState) {
+  render(state: RenderState, size?: { width: number; height: number }) {
     if (!this.ready) return
     const gl = this.gl
-    const ratio = window.devicePixelRatio || 1
-    const width = Math.max(1, Math.round(this.canvas.clientWidth * ratio))
-    const height = Math.max(1, Math.round(this.canvas.clientHeight * ratio))
+    const ratio = size ? 1 : window.devicePixelRatio || 1
+    const width = size?.width ?? Math.max(1, Math.round(this.canvas.clientWidth * ratio))
+    const height = size?.height ?? Math.max(1, Math.round(this.canvas.clientHeight * ratio))
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width
       this.canvas.height = height

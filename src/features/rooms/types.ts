@@ -65,6 +65,18 @@ export type Room = {
   photoVersions: number[]
   /** The built-in library layout it was copied from, such as "minimalist/kitchen/2"; null for an uploaded photo. */
   libraryRoom: string | null
+  /** The depth map for the 3D view (relative, like photoUrl); null until it is measured. */
+  depthUrl: string | null
+  /** The depth map's horizontal field of view, in degrees; null until it is measured. */
+  depthFovX: number | null
+  /** The depth map's vertical field of view, in degrees; null until it is measured. */
+  depthFovY: number | null
+  /** The empty-room backdrop's photo (the furniture erased), shown behind the furniture in 3D; null when there's none. */
+  backdropPhotoUrl: string | null
+  /** The backdrop's label map (the walls and floor carry on where the furniture was); null when there's none. */
+  backdropLabelsUrl: string | null
+  /** The backdrop's depth map; null when there's none. */
+  backdropDepthUrl: string | null
 }
 
 /**
