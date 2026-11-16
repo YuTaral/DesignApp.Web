@@ -140,6 +140,9 @@
   html {
     @apply font-sans antialiased;
     color-scheme: light;
+    /* The page's scrollbar keeps its room even when hidden. Pages sized to the window (the room builder) were a pixel
+       away from needing one: it came and went with each hover, narrowing the page each time, so the layout shook. */
+    scrollbar-gutter: stable;
     }
   html.dark {
     color-scheme: dark;

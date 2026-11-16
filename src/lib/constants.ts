@@ -21,12 +21,18 @@ export const API = {
   roomObjects: (id: string) => `/api/rooms/${id}/objects`,
   roomRemovals: (id: string) => `/api/rooms/${id}/removals`,
   roomMerges: (id: string) => `/api/rooms/${id}/merges`,
+  roomAnalysis: (id: string) => `/api/rooms/${id}/analysis`,
   roomParts: (id: string) => `/api/rooms/${id}/parts`,
   roomPhoto: (id: string) => `/api/rooms/${id}/photo`,
   roomPhotoVersion: (id: string, version: number) => `/api/rooms/${id}/photo/${version}`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
   roomLabelMap: (id: string, revision: number) => `/api/rooms/${id}/labels/${revision}`,
   palettes: "/api/palettes",
+  builderCatalog: (roomType: string) => `/api/builder/catalog/${roomType}`,
+  plans: "/api/plans",
+  plan: (id: string) => `/api/plans/${id}`,
+  planDescribe: (id: string) => `/api/plans/${id}/describe`,
+  planGenerate: (id: string) => `/api/plans/${id}/generate`,
   library: "/api/library",
   libraryLayoutCopy: (designId: string, roomId: string, layoutId: string) => `/api/library/${designId}/${roomId}/${layoutId}/copy`,
   libraryDesignCopy: (designId: string) => `/api/library/${designId}/copy`,
@@ -63,6 +69,8 @@ export const ROUTES = {
   designs: "/designs",
   design: "/designs/$designId",
   library: "/library",
+  build: "/build",
+  plan: "/build/$planId",
   signIn: "/sign-in",
   signUp: "/sign-up",
 } as const
@@ -81,6 +89,8 @@ export const QUERY_KEYS = {
   room: (id: string) => ["rooms", id] as const,
   library: ["library"] as const,
   palettes: ["palettes"] as const,
+  plan: (id: string) => ["plans", id] as const,
+  catalog: (roomType: string) => ["catalog", roomType] as const,
 } as const
 
 /** Browser storage keys. The theme key is also read by the pre-paint script in index.html. */
@@ -88,6 +98,8 @@ export const STORAGE_KEYS = {
   theme: "designapp-theme",
   ai: "designapp.ai",
   scope: "designapp.scope",
+  /** The room builder's catalog sections the user collapsed, by name. */
+  builderCollapsed: "designapp.builder.collapsed",
 } as const
 
 /** Limits. The API's own limits are named next to each. */
@@ -143,6 +155,7 @@ export const MIME = {
 
 /** Where a room is in the AI analysis, from upload to ready. */
 export const ROOM_STATUS = {
+  Waiting: "Waiting",
   Uploaded: "Uploaded",
   Analyzing: "Analyzing",
   Segmenting: "Segmenting",
@@ -217,6 +230,214 @@ export type OutlineBrushMode = (typeof OUTLINE_BRUSH_MODE)[keyof typeof OUTLINE_
  */
 export const STROKE_SHAPE = { Brush: "Brush", Box: "Box", Lasso: "Lasso" } as const
 export type StrokeShape = (typeof STROKE_SHAPE)[keyof typeof STROKE_SHAPE]
+
+/** The kinds of room the builder makes (Domain Constants.RoomType), each with its own common objects. */
+export const ROOM_TYPE = {
+  LivingRoom: "LivingRoom", Bedroom: "Bedroom", Kitchen: "Kitchen", Bathroom: "Bathroom",
+  DiningRoom: "DiningRoom", HomeOffice: "HomeOffice", KidsRoom: "KidsRoom",
+} as const
+export type RoomType = (typeof ROOM_TYPE)[keyof typeof ROOM_TYPE]
+
+/** How each room type is shown to the user. */
+export const ROOM_TYPE_NAMES: Record<RoomType, string> = {
+  LivingRoom: "Living room", Bedroom: "Bedroom", Kitchen: "Kitchen", Bathroom: "Bathroom",
+  DiningRoom: "Dining room", HomeOffice: "Home office", KidsRoom: "Kids' room",
+}
+
+/**
+ * How a built room's object is drawn in 3D (Domain Constants.ItemShape). Windows and doors are in a wall; a Picture
+ * (paintings, mirrors, a wall TV) and a WallBox (upper cabinets, shelves, a hood) hang on one.
+ */
+export const ITEM_SHAPE = {
+  Box: "Box", Rounded: "Rounded", Cylinder: "Cylinder", Sofa: "Sofa", Bed: "Bed",
+  Table: "Table", Chair: "Chair", Rug: "Rug", Plant: "Plant", Lamp: "Lamp",
+  Window: "Window", Door: "Door", Picture: "Picture", WallBox: "WallBox",
+} as const
+export type ItemShape = (typeof ITEM_SHAPE)[keyof typeof ITEM_SHAPE]
+
+/**
+ * A built room's object's outline seen from above (Domain Constants.ItemForm): a rectangle; an L, with a run along its
+ * whole back and a leg running forward at its right end (before turning), both `BUILDER.legShare` of its smaller side
+ * deep; a P, an L whose leg widens at its front end into a chaise `BUILDER.chaiseShare` times as wide as the runs are
+ * deep (corner sofas); or an ellipse (round when its width and depth are equal).
+ */
+export const ITEM_FORM = { Standard: "Standard", LShaped: "LShaped", PShaped: "PShaped", Round: "Round" } as const
+export type ItemForm = (typeof ITEM_FORM)[keyof typeof ITEM_FORM]
+
+/**
+ * The sides of a built room's floor plan seen from above (Domain Constants.PlanWall): Back at the top, Front at the
+ * bottom. Walls are numbered (see `features/builder/room-outline.ts`); each faces from one side, and a rectangle's walls
+ * 0 to 3 are its back, right, front and left walls.
+ */
+export const PLAN_SIDE = { Back: "Back", Right: "Right", Front: "Front", Left: "Left" } as const
+export type PlanSide = (typeof PLAN_SIDE)[keyof typeof PLAN_SIDE]
+
+/** The sides' wall names as the user reads them. */
+export const PLAN_SIDE_NAMES: Record<PlanSide, string> = { Back: "Back wall", Right: "Right wall", Front: "Front wall", Left: "Left wall" }
+
+/**
+ * Where the 3D view's camera stands to look at the wall in view (Domain Constants.ViewCorner): straight across from its
+ * middle, or in the near left or right corner, turned to look diagonally across the room.
+ */
+export const VIEW_CORNER = { None: "None", Left: "Left", Right: "Right" } as const
+export type ViewCorner = (typeof VIEW_CORNER)[keyof typeof VIEW_CORNER]
+
+/** Where the camera stands, as the user reads it. */
+export const VIEW_CORNER_NAMES: Record<ViewCorner, string> = { None: "Middle", Left: "Left corner", Right: "Right corner" }
+
+/** The interior style a built room's photo is made in (Domain Constants.PhotoStyle): materials and finishes, not layout. */
+export const PHOTO_STYLE = {
+  AsBuilt: "AsBuilt", Modern: "Modern", Scandinavian: "Scandinavian", Boho: "Boho", Industrial: "Industrial", Japandi: "Japandi",
+  MidCentury: "MidCentury", Farmhouse: "Farmhouse", Coastal: "Coastal", Minimalist: "Minimalist", Traditional: "Traditional", ArtDeco: "ArtDeco",
+} as const
+export type PhotoStyle = (typeof PHOTO_STYLE)[keyof typeof PHOTO_STYLE]
+
+/** The photo styles' names and what each looks like, as the user reads them. */
+export const PHOTO_STYLE_NAMES: Record<PhotoStyle, { name: string; looks: string }> = {
+  AsBuilt: { name: "As planned", looks: "The materials your objects' names and colors suggest" },
+  Modern: { name: "Modern", looks: "Handleless fronts, sleek lacquer, thin metal legs" },
+  Scandinavian: { name: "Scandinavian", looks: "Rounded edges, wooden legs and knobs, wool, linen" },
+  Boho: { name: "Boho", looks: "Rattan and cane panels, woven textures, fringes" },
+  Industrial: { name: "Industrial", looks: "Steel frames, rivets, leather, reclaimed wood" },
+  Japandi: { name: "Japandi", looks: "Low profiles, wooden slats, paper and linen" },
+  MidCentury: { name: "Mid-century", looks: "Tapered splayed legs, rounded corners, finger pulls" },
+  Farmhouse: { name: "Farmhouse", looks: "Shaker fronts, cup pulls, wrought iron, turned legs" },
+  Coastal: { name: "Coastal", looks: "Rope and rattan, louvred fronts, weathered wood" },
+  Minimalist: { name: "Minimalist", looks: "Flat handleless fronts, hidden legs, nothing extra" },
+  Traditional: { name: "Traditional", looks: "Raised panels, carved trims, turned legs, tufting" },
+  ArtDeco: { name: "Art deco", looks: "Fluted panels, geometric inlays, metal trims, velvet" },
+}
+
+/** What a built room's floor is made of (Domain Constants.FloorType). */
+export const FLOOR_TYPE = {
+  Wood: "Wood", Parquet: "Parquet", Tiles: "Tiles", Stone: "Stone", Concrete: "Concrete", Carpet: "Carpet", Vinyl: "Vinyl",
+} as const
+export type FloorType = (typeof FLOOR_TYPE)[keyof typeof FLOOR_TYPE]
+
+/** The floor types' names as the user reads them. */
+export const FLOOR_TYPE_NAMES: Record<FloorType, string> = {
+  Wood: "Wooden planks", Parquet: "Parquet", Tiles: "Tiles", Stone: "Stone", Concrete: "Concrete", Carpet: "Carpet", Vinyl: "Vinyl",
+}
+
+/**
+ * The room builder (Domain Constants.Plans and Application Constants.Builder). Walls in metres, objects in
+ * centimetres; positions snap to the grid; the 3D view sent for a photo is `guide` pixels (the photo's 4:3, and
+ * under the one megapixel the image model charges for).
+ */
+export const BUILDER = {
+  wall: { min: 1, max: 30 },
+  /** A room's outline: its most corners, and its shortest wall in centimetres (Domain Constants.Plans.MaxCorners, MinWallSegmentCentimetres). */
+  maxCorners: 20,
+  minWallCm: 20,
+  /** How long a section of wall the "+" pushes out, in centimetres (less on a short wall). */
+  sectionCm: 100,
+  /**
+   * Measuring a generated photo against its plan (`features/builder/photo-accuracy.ts`): the smallest share of the
+   * picture an outline must cover to count; the overlap of a clear one-to-one pair; the share of a plan object a photo
+   * object must cover to take it in (several plan objects seen as one); the least overlap of any pair; the share of an
+   * unmatched photo object that must lie on a plan object for it to be a decoration rather than an extra; and the words
+   * that make a photo object the room's trim.
+   */
+  accuracy: {
+    minShare: 0.001,
+    clearOverlap: 0.3,
+    coveredShare: 0.5,
+    minOverlap: 0.1,
+    decorationShare: 0.5,
+    trimWords: ["skirting", "baseboard", "molding", "moulding", "cornice", "trim"],
+  },
+  ceiling: { min: 2, max: 6 },
+  item: { min: 1, max: 3000 },
+  maxItems: 60,
+  /** How far a pasted object lands from the one copied, in centimetres (a window or door: a third of it past it). */
+  pasteOffset: 30,
+  labelLength: 60,
+  /** The most decorations on one object, and the longest name of one (Domain Constants.Plans). */
+  maxDecorations: 8,
+  decorationLength: 60,
+  descriptionLength: 300,
+  /** The longest extra instructions for the photo (Application Constants.Builder.MaxInstructionsLength). */
+  instructionsLength: 500,
+  gridCm: 10,
+  /** The drag-and-drop type of an object dragged from the catalog onto the plan. */
+  dragType: "application/x-designapp-object",
+  rotationStep: 90,
+  /** How deep an L-shaped object's runs are, as a share of its smaller side (Domain Constants.Plans.LegShare). */
+  legShare: 0.5,
+  /** How wide a P-shaped object's chaise is, as a multiple of its runs' depth, at most its width (Domain Constants.Plans.ChaiseShare). */
+  chaiseShare: 1.7,
+  /** How deep a P-shaped object's runs are, as a share of its smaller side (Domain Constants.Plans.PLegShare). */
+  pLegShare: 0.4,
+  /** The smallest part of an L- or P-shaped object (its run, leg or chaise), in cm (Domain Constants.Plans.MinPartCentimetres). */
+  minPart: 20,
+  autosaveMs: 800,
+  guide: { width: 1024, height: 768 },
+  /** How long the 3D view waits after the room last changed before checking whether something blocks its view, in ms. */
+  blockedCheckMs: 400,
+  /** The width of each view's small picture on the Generate photo screen, in pixels. */
+  viewPictureWidth: 240,
+  /** How many photos are made at the same time when several views are picked. */
+  photosAtOnce: 3,
+  /**
+   * The word in a round object's name that makes it a stool in 3D: a round seat on legs, rather than the solid cylinder
+   * of a side table or bin (the image model turned solid cylinders into tree-stump stools).
+   */
+  stoolWord: "stool",
+  /**
+   * Words in a hung object's name that change its 3D model: a picture with "mirror" gets a mirror's glass, one with
+   * "tv" a screen; a wall box with "hood" gets a cooker hood's canopy and chimney.
+   */
+  mirrorWord: "mirror",
+  screenWord: "tv",
+  hoodWord: "hood",
+  /** The most a hung object may stick out from its wall, in centimetres (Domain Constants.Plans.MaxMountedDepth). */
+  maxMountedDepth: 70,
+  /** A window's usual height above the floor, in centimetres (Domain Constants.Plans.WindowSill). */
+  windowSill: 90,
+  /**
+   * The 3D view: its fixed colors; the camera's eye height in metres (a photographer's, a little under eye level, with
+   * the camera held level so walls stay upright); and the narrowest and widest horizontal view, in degrees, chosen so
+   * the far wall fits (an interior photographer's wide lens); and how much of the picture's height is moved below the
+   * horizon, as a shift lens does (more floor, less ceiling, walls still upright). The camera's values must match
+   * the API's Constants.Builder.Camera, whose photo prompt describes only what this camera sees.
+   */
+  scene: {
+    background: "#FFFFFF", sky: "#FFFFFF", ground: "#9A8F80", pot: "#8C6A4A", ceiling: "#FAFAF7", glass: "#CFE3EE", metal: "#B9B9B9",
+    linen: "#F2EFE8",
+    /**
+     * A painting's stand-in face: one plain mid tone, so the painting stands out from the wall without giving the image
+     * model a picture to copy (it copied a patterned face almost exactly).
+     */
+    art: "#8E9296",
+    eyeHeight: 1.45, inset: 0.05, minFov: 80, maxFov: 100, fitDepthShare: 0.5, lensShift: 0.28,
+    /**
+     * A corner camera's fixed horizontal view and how far it is turned from looking straight at the wall in view, in
+     * degrees (the API's Camera.CornerFov and CornerTurn): together they reach from the side wall it stands by to the
+     * near wall.
+     */
+    cornerFov: 90, cornerTurn: 45,
+    /**
+     * The share of the picture one object may fill before the 3D view warns that it blocks the view (something standing
+     * where the camera is, such as a cabinet in its corner); and how much smaller than the guide the check draws. In
+     * twelve test rooms a blocked corner filled 55–67% and an open view at most 24%.
+     */
+    blockedShare: 0.4, blockedScale: 8,
+  },
+  start: { roomType: "LivingRoom" as RoomType, width: 4, length: 5, height: 2.6, wall: "#E8E2D6", floor: "#B89B7A", floorType: "Wood" as FloorType },
+  wallColors: [
+    "#FFFFFF", "#F4F1EA", "#EFE6CF", "#E8E2D6", "#E8DCC8", "#D8C3A5", "#E9CFC7", "#F2D46B",
+    "#C8C8C8", "#A8B89A", "#7D8B6A", "#9DB4C0", "#4A6274", "#2E4057", "#B5543C", "#3A3A3A",
+  ],
+  floorColors: [
+    "#E8DCC8", "#D8C3A5", "#C9A27E", "#B89B7A", "#B8864B", "#8C6A4A", "#6B4A2E", "#4A3424",
+    "#F4F1EA", "#C8C8C8", "#A9A9A9", "#8A8580", "#5A5A5A", "#2F2C2A", "#9DB4C0", "#A8B89A",
+  ],
+  /** Colors offered for windows and doors: frames and door leaves. */
+  frameColors: [
+    "#FFFFFF", "#F4F1EA", "#E8DCC8", "#C8C8C8", "#8A8580", "#3A3A3A", "#1E1E1E", "#B8864B",
+    "#8C6A4A", "#6B4A2E", "#A8B89A", "#4F6B3A", "#9DB4C0", "#4A6274", "#2E4057", "#8C3B2E",
+  ],
+} as const
 
 /** The user's theme choice; system follows the OS setting. */
 export const THEME = { light: "light", dark: "dark", system: "system" } as const
@@ -305,6 +526,12 @@ export const MESSAGES = {
   colorsSaved: "Colors saved",
   tonesFailed: "Couldn't read this object's colors. Try again.",
   oneMainColor: (label: string) => `The ${label} has one main color, so there is nothing to split.`,
+  planLoadFailed: "Couldn't open this room. It may have been deleted.",
+  planSaveFailed: "Couldn't save the room. Your last change may be lost; try again.",
+  catalogLoadFailed: "Couldn't load the common objects. Reload the page.",
+  guideFailed: "Couldn't draw the 3D view of the room.",
+  objectDescribed: (label: string) => `Added the ${label}. Drag it where it belongs.`,
+  wallItemAdded: (label: string, wall: string) => `Added the ${label} to the ${wall.toLowerCase()}. Drag it into place.`,
   partsFound: (count: number, label: string) => `Found ${count === 1 ? "1 part" : `${count} parts`} of the ${label}.`,
   partMerged: (label: string, parent: string) => `Merged the ${label} into the ${parent}. Undo brings it back.`,
   objectRemoved: (label: string, more: number) =>

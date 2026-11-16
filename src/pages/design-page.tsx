@@ -213,10 +213,10 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
             <Badge variant={status === ROOM_STATUS.Failed ? "destructive" : "secondary"} className="gap-1">
               {status === ROOM_STATUS.Failed ? (
                 <TriangleAlertIcon className="size-3" aria-hidden />
-              ) : (
+              ) : status !== ROOM_STATUS.Waiting && (
                 <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
               )}
-              {status === ROOM_STATUS.Failed ? "Failed" : "Analyzing"}
+              {status === ROOM_STATUS.Failed ? "Failed" : status === ROOM_STATUS.Waiting ? "Not analyzed" : "Analyzing"}
             </Badge>
           )}
           {status === ROOM_STATUS.Ready && room.edits.length > 0 && <CheckIcon className="size-4 text-muted-foreground" aria-hidden />}

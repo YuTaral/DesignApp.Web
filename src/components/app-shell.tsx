@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
-import { HouseIcon, LayoutGridIcon, LogInIcon, LogOutIcon, PlusIcon, UserRoundIcon } from "lucide-react"
+import { HouseIcon, LayoutGridIcon, LogInIcon, LogOutIcon, PlusIcon, UserRoundIcon, RulerIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Logo } from "@/components/logo"
@@ -37,6 +37,9 @@ export function AppShell() {
             <Link to={ROUTES.library} search={{}} className={navLinkClass} activeOptions={{ includeSearch: false }}>
               Sample houses
             </Link>
+            <Link to={ROUTES.build} className={navLinkClass}>
+              Build a room
+            </Link>
             <Link to={ROUTES.designs} className={navLinkClass}>
               My designs
             </Link>
@@ -45,6 +48,11 @@ export function AppShell() {
             <Button variant="ghost" size="icon" className="md:hidden" asChild>
               <Link to={ROUTES.library} search={{}} aria-label="Sample houses">
                 <HouseIcon />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon" className="md:hidden" asChild>
+              <Link to={ROUTES.build} aria-label="Build a room">
+                <RulerIcon />
               </Link>
             </Button>
             <Button variant="ghost" size="icon" className="md:hidden" asChild>

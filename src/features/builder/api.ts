@@ -1,0 +1,227 @@
+import { useQuery } from "@tanstack/react-query"
+
+import type { Room } from "@/features/rooms/types"
+import { getJson, sendForm, sendJson } from "@/lib/api"
+import { API, QUERY_KEYS, type FloorType, type ItemForm, type ItemShape, type PhotoStyle, type RoomType, type ViewCorner } from "@/lib/constants"
+
+/**
+ * One object placed in a built room (mirrors the API's PlanItemRequest). Sizes and positions are in centimetres. A
+ * window or door is on a `wall` instead of the floor: `x` is its middle along that wall, from the wall's left end as
+ * seen from inside the room facing it, `y` is 0, and `elevation` is how high its bottom is above the floor.
+ */
+export type PlanItem = {
+  /** What it is, such as "sofa". */
+  label: string
+  /** How it is drawn in 3D. */
+  shape: ItemShape
+  /** Its middle across the room, from the back-left corner seen from above. */
+  x: number
+  /** Its middle along the room (towards the viewer). */
+  y: number
+  /** Its width (across, before turning). */
+  width: number
+  /** Its depth (along, before turning). */
+  depth: number
+  /** Its height. */
+  height: number
+  /** Its turn, clockwise from above: 0, 90, 180 or 270 degrees. */
+  rotation: number
+  /** Its color, "#RRGGBB". */
+  color: string
+  /** The number of the wall a window or door is on; null (or missing) for objects on the floor. */
+  wall?: number | null
+  /** A window's height above the floor; 0 for everything else. */
+  elevation: number
+  /** Its outline from above: a rectangle, an L (sofas, tables, cabinets), a P (corner sofas) or an ellipse (tables, rugs). */
+  form: ItemForm
+  /** An L- or P-shaped object's parts, each sized on its own; null (or missing) for other outlines. */
+  parts?: ItemParts | null
+  /** The small things on it, such as "cushions", which the photo shows on it; missing or empty for none. */
+  decorations?: string[]
+}
+
+/**
+ * The parts of an L- or P-shaped object in cm, before turning (mirrors ItemPartsRequest): the run along its whole back,
+ * the corner leg at its right end, and a P's chaise at the leg's front end (0 for an L).
+ */
+export type ItemParts = {
+  /** How deep the back run is (front to back). */
+  runDepth: number
+  /** How wide the corner leg is (left to right). */
+  legWidth: number
+  /** How wide a P's chaise is, from the object's right side. */
+  chaiseWidth: number
+  /** How deep a P's chaise is, from the object's front. */
+  chaiseDepth: number
+}
+
+/** A corner of a built room's outline, in cm (mirrors OutlinePointRequest): across from the left, down from the top. */
+export type OutlinePoint = {
+  x: number
+  y: number
+}
+
+/**
+ * Where one object is in the 3D view sent for a photo (mirrors ItemBoxRequest): its position in `plan.items`, and its
+ * box as shares of the picture (0 at the left and top).
+ */
+export type ItemBox = {
+  item: number
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/** A room the user builds (mirrors the API's PlanResponse). Its sizes are in metres. */
+export type Plan = {
+  id: string
+  name: string
+  roomType: RoomType
+  width: number
+  length: number
+  height: number
+  wallColor: string
+  floorColor: string
+  /** What the floor is made of. */
+  floorType: FloorType
+  /** The number of the wall the 3D view and the photo look at; the camera stands across the room from it. */
+  view: number
+  /** Where the camera stands to look at the wall in view: across from its middle, or in a near corner. */
+  corner: ViewCorner
+  /** The walls' corners, clockwise from the top-left one at 0, 0, in cm; `width` and `length` are their extent. */
+  outline: OutlinePoint[]
+  aiMode: string
+  items: PlanItem[]
+  updatedAt: string
+}
+
+/** One view of a built room to make a photo from: the wall it looks at and where the camera stands (mirrors the API's PlanShot). */
+export type PlanShot = Pick<Plan, "view" | "corner">
+
+/** An object the user can add, with its usual size and color (mirrors the API's CatalogObjectResponse). */
+export type CatalogObject = {
+  key: string
+  label: string
+  shape: ItemShape
+  width: number
+  depth: number
+  height: number
+  color: string
+  /** How high its bottom usually is above the floor (a window's sill; else 0). */
+  elevation: number
+  /** Its outline from above. */
+  form: ItemForm
+  /** Its variations (shapes and sizes), the first being the object itself; empty for an object the AI described. */
+  variants: CatalogVariant[]
+  /** Its five most popular decorations, offered when it is added; may be empty. */
+  decorations: string[]
+}
+
+/** One variation of a catalog object, such as the L-shaped corner sofa, in the object's color (mirrors CatalogVariantResponse). */
+export type CatalogVariant = {
+  key: string
+  /** What the choice is called, such as "L-shaped". */
+  name: string
+  /** The object's name in this variation, such as "L-shaped corner sofa". */
+  label: string
+  shape: ItemShape
+  width: number
+  depth: number
+  height: number
+  /** How high its bottom is above the floor (a window's sill; else 0). */
+  elevation: number
+  form: ItemForm
+}
+
+/** What a new plan needs: its type, walls, colors and floor, and whether it starts with a suggested layout. */
+export type NewPlan = Pick<Plan, "name" | "roomType" | "width" | "length" | "height" | "wallColor" | "floorColor" | "floorType"> & {
+  /** Start with furniture, windows and a door sized for the room (the API's default), or empty. */
+  furnish: boolean
+}
+
+/**
+ * Loads a built room.
+ * @param id - The plan's id.
+ */
+export function usePlan(id: string) {
+  return useQuery({ queryKey: QUERY_KEYS.plan(id), queryFn: ({ signal }) => getJson<Plan>(API.plan(id), signal) })
+}
+
+/**
+ * Loads the common objects of a room type. They never change while the app runs.
+ * @param roomType - The room type.
+ */
+export function useCatalog(roomType: RoomType) {
+  return useQuery({
+    queryKey: QUERY_KEYS.catalog(roomType),
+    // Always from the server: a copy the browser kept from an older release would miss newer objects.
+    queryFn: ({ signal }) => getJson<CatalogObject[]>(API.builderCatalog(roomType), signal, "no-cache"),
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * Starts a room to build.
+ * @param plan - Its type, walls and colors.
+ * @param ai - The AI its descriptions and photos use, when the user chose one.
+ * @returns The new plan.
+ */
+export function createPlan(plan: NewPlan, ai?: string): Promise<Plan> {
+  return sendJson<Plan>("POST", ai ? `${API.plans}?ai=${encodeURIComponent(ai)}` : API.plans, plan)
+}
+
+/**
+ * Saves a built room as the user left it.
+ * @param plan - The plan.
+ * @returns The saved plan.
+ */
+export function savePlan(plan: Plan): Promise<Plan> {
+  const { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline } = plan
+  return sendJson<Plan>("PUT", API.plan(plan.id), { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline })
+}
+
+/**
+ * Turns a description into an object to place (the AI; Claude Haiku when real).
+ * @param planId - The plan it is for.
+ * @param description - The user's words.
+ * @returns The object with its usual size and color.
+ */
+export function describeObject(planId: string, description: string): Promise<CatalogObject> {
+  return sendJson<CatalogObject>("POST", API.planDescribe(planId), { description })
+}
+
+/**
+ * Makes a realistic photo of the built room from its 3D view, as a new room to open in the editor.
+ * @param planId - The plan.
+ * @param guide - The room's 3D view as a PNG.
+ * @param style - The photo's interior style.
+ * @param instructions - The user's own extra instructions for the AI (may be empty).
+ * @param seed - Makes the photo repeatable (the same view, prompt and seed give the same photo), to compare changes
+ *   fairly; missing for a new random photo.
+ * @param boxes - Where each object is in the 3D view (`objectBoxes`), which the image model keeps them in; missing for none.
+ * @param shot - The view the guide was drawn from, when it isn't the plan's own (the plan keeps its own); missing for
+ *   the plan's own view.
+ * @returns The new room (waiting for the user to start its analysis).
+ */
+export function generateRoom(
+  planId: string,
+  guide: Blob,
+  style: PhotoStyle,
+  instructions: string,
+  seed?: number,
+  boxes?: ItemBox[],
+  shot?: PlanShot
+): Promise<Room> {
+  const form = new FormData()
+  if (shot) {
+    form.append("view", String(shot.view))
+    form.append("corner", shot.corner)
+  }
+  if (seed !== undefined) form.append("seed", String(seed))
+  if (boxes) form.append("boxes", JSON.stringify(boxes))
+  form.append("guide", guide, "guide.png")
+  form.append("style", style)
+  if (instructions.trim()) form.append("instructions", instructions.trim())
+  return sendForm<Room>(API.planGenerate(planId), form)
+}

@@ -1,0 +1,53 @@
+import { useEffect, useRef } from "react"
+import { cn } from "cn"
+
+import { FLOOR_TYPE, FLOOR_TYPE_NAMES, type FloorType } from "@/lib/constants"
+import { paintFloor } from "./floor-texture"
+
+/**
+ * The floor types as tiles, each showing its pattern in the floor's color.
+ * @param props.value - The floor type chosen.
+ * @param props.color - The floor's color.
+ * @param props.onPick - Takes a floor type.
+ * @param props.className - Extra classes for the grid.
+ */
+export function FloorChoice({ value, color, onPick, className }: { value: FloorType; color: string; onPick: (type: FloorType) => void; className?: string }) {
+  return (
+    <div role="radiogroup" aria-label="Floor type" className={cn("grid grid-cols-4 gap-2", className)}>
+      {Object.values(FLOOR_TYPE).map((type) => (
+        <button
+          key={type}
+          type="button"
+          role="radio"
+          aria-checked={value === type}
+          data-floor-type={type}
+          onClick={() => onPick(type)}
+          className={cn(
+            "grid content-start gap-1 rounded-lg border p-1 text-xs outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
+            value === type && "border-primary bg-accent text-accent-foreground ring-1 ring-primary hover:bg-accent"
+          )}
+        >
+          <FloorSwatch type={type} color={color} />
+          {/* Long names ("Wooden planks") wrap onto a second line rather than being cut off. */}
+          <span className="leading-tight text-balance">{FLOOR_TYPE_NAMES[type]}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * A small square of a floor's pattern.
+ * @param props.type - The floor type.
+ * @param props.color - The floor's color.
+ */
+function FloorSwatch({ type, color }: { type: FloorType; color: string }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const context = ref.current?.getContext("2d")
+    if (context) paintFloor(context, type, color, 128)
+  }, [type, color])
+
+  return <canvas ref={ref} width={128} height={128} className="aspect-square w-full rounded-md" aria-hidden />
+}

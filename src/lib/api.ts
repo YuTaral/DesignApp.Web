@@ -67,13 +67,14 @@ function isProblem(body: unknown): body is { title?: string; detail?: string } {
  * GETs JSON from the API.
  * @param path - An API path such as `/api/rooms/123`.
  * @param signal - Cancels the request.
+ * @param cache - How the browser's HTTP cache is used ("no-cache" always asks the server); its default when missing.
  * @returns The parsed body.
  * @throws ApiError with a user-facing message when the request fails.
  */
-export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+export async function getJson<T>(path: string, signal?: AbortSignal, cache?: RequestCache): Promise<T> {
   let response: Response
   try {
-    response = await fetch(apiUrl(path), { signal, headers: { Accept: MIME.json } })
+    response = await fetch(apiUrl(path), { signal, cache, headers: { Accept: MIME.json } })
   } catch (error) {
     if (signal?.aborted) throw error
     throw toApiError(HTTP_STATUS.network, undefined)
@@ -103,6 +104,24 @@ export async function sendJson<T>(method: "POST" | "PUT" | "DELETE", path: strin
   }
   if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
   if (response.status === HTTP_STATUS.noContent) return undefined as T
+  return (await response.json()) as T
+}
+
+/**
+ * POSTs a multipart form (such as a file) to the API and reads the JSON answer.
+ * @param path - An API path such as `/api/plans/123/generate`.
+ * @param form - The form's fields and files.
+ * @returns The parsed answer.
+ * @throws ApiError with a user-facing message when the request fails.
+ */
+export async function sendForm<T>(path: string, form: FormData): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(apiUrl(path), { method: "POST", headers: { Accept: MIME.json }, body: form })
+  } catch {
+    throw toApiError(HTTP_STATUS.network, undefined)
+  }
+  if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
   return (await response.json()) as T
 }
 

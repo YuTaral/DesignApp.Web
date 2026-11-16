@@ -40,10 +40,13 @@ function DialogContent({
   children,
   onCloseAutoFocus,
   returnFocusTo,
+  closable = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   /** Where the focus goes when the dialog closes, when that isn't what had it on opening (a menu's button, say). */
   returnFocusTo?: React.RefObject<HTMLElement | null>
+  /** Whether the X is shown (hidden while the dialog must stay open, such as while work it shows is going on). */
+  closable?: boolean
 }) {
   return (
     <DialogPrimitive.Portal>
@@ -70,12 +73,14 @@ function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close asChild>
-          <Button variant="ghost" size="icon-sm" className="absolute top-3 right-3">
-            <XIcon />
-            <span className="sr-only">Close</span>
-          </Button>
-        </DialogPrimitive.Close>
+        {closable && (
+          <DialogPrimitive.Close asChild>
+            <Button variant="ghost" size="icon-sm" className="absolute top-3 right-3">
+              <XIcon />
+              <span className="sr-only">Close</span>
+            </Button>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   )

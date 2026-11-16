@@ -17,7 +17,12 @@ const recolored = () => recoloredCount(page)
 const saveText = () => page.evaluate(() => [...document.querySelectorAll('aside button, aside a')].map((b) => b.textContent.trim()).find((t) => /^(save|sign in)/i.test(t)) ?? null)
 const noDialog = () => until(page, () => !document.querySelector('[role=dialog]'), { label: 'dialog closed' })
 const editorReady = () => until(page, () => !!document.querySelector('canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
-const clickText = (selector, text) => page.evaluate((s, t) => [...document.querySelectorAll(s)].find((e) => e.textContent.trim() === t).click(), selector, text)
+// Waits for the element first: a dialog's buttons can appear a moment after the dialog does.
+const clickText = async (selector, text) => {
+  const find = `[...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.trim() === ${JSON.stringify(text)})`
+  await until(page, new Function(`return !!${find}`), { timeout: 5000, label: `"${text}"` })
+  await page.evaluate(new Function(`${find}.click()`))
+}
 const typeInto = async (selector, value) => {
   await page.click(selector)
   await page.keyboard.down('Control')

@@ -4,11 +4,11 @@ import { type AiMode, type AnalysisScope, API, type ObjectCategory, ROOM_STATUS,
 // The full contract is in the API docs at /scalar.
 
 /**
- * Whether the analysis is over, successfully or not.
+ * Whether no analysis is running: it is over (successfully or not), or it waits for the user to start it.
  * @param status - The room's status.
  */
 export function isAnalysisFinished(status: RoomStatus) {
-  return status === ROOM_STATUS.Ready || status === ROOM_STATUS.Failed
+  return status === ROOM_STATUS.Ready || status === ROOM_STATUS.Failed || status === ROOM_STATUS.Waiting
 }
 
 /** Normalized to 0..1 of the photo's width and height. */

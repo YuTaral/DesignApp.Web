@@ -1,12 +1,17 @@
+import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { CheckIcon, CircleIcon, LoaderCircleIcon, PlusIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, CircleIcon, LoaderCircleIcon, PlusIcon, ScanSearchIcon, TriangleAlertIcon } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEditorStore } from "@/features/editor/editor-store"
+import { errorMessage } from "@/lib/api"
+import { startRoomAnalysis } from "./api"
 import type { Room } from "./types"
-import { MESSAGES, ROOM_STATUS, type RoomStatus, ROUTES } from "@/lib/constants"
+import { AI_MODE, MESSAGES, QUERY_KEYS, ROOM_STATUS, type RoomStatus, ROUTES } from "@/lib/constants"
 
 /** The visible analysis steps and the statuses during which each one is running. */
 const steps: { label: string; runningFor: RoomStatus[] }[] = [
@@ -22,7 +27,43 @@ const steps: { label: string; runningFor: RoomStatus[] }[] = [
 export function AnalysisPanel({ room }: { room: Room }) {
   if (room.status === ROOM_STATUS.Failed) return <AnalysisFailed reason={room.failureReason} />
   if (room.status === ROOM_STATUS.Ready) return <ObjectsSummary room={room} />
+  if (room.status === ROOM_STATUS.Waiting) return <AnalysisWaiting room={room} />
   return <AnalysisProgress status={room.status} />
+}
+
+/**
+ * A photo made by the room builder isn't analyzed until the user asks, since the real AI costs money: the button
+ * starts it, and the progress follows as after an upload.
+ * @param props.room - The waiting room.
+ */
+function AnalysisWaiting({ room }: { room: Room }) {
+  const queryClient = useQueryClient()
+  const [starting, setStarting] = useState(false)
+
+  const start = async () => {
+    setStarting(true)
+    try {
+      const updated = await startRoomAnalysis(room.id)
+      queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
+    } catch (error) {
+      toast.error(errorMessage(error))
+      setStarting(false)
+    }
+  }
+
+  return (
+    <div data-analysis-waiting>
+      <h2 className="font-medium">Objects</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        This photo isn't analyzed yet. Analyze it to find the walls and objects you can recolor
+        {room.aiMode === AI_MODE.Real ? " (it uses the real AI, which costs money)." : "."}
+      </p>
+      <Button size="lg" className="mt-3 w-full" disabled={starting} onClick={() => void start()}>
+        {starting ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : <ScanSearchIcon data-icon="inline-start" />}
+        Analyze photo
+      </Button>
+    </div>
+  )
 }
 
 /**

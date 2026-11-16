@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { WEB } from './ff.mjs'
 
-const PASSES = ['editor-pass', 'designs-ui-pass', 'library-pass', 'paint-pass', 'parts-pass', 'focus-check', 'account-check', 'abort-check']
+const PASSES = ['editor-pass', 'designs-ui-pass', 'library-pass', 'paint-pass', 'parts-pass', 'builder-pass', 'shape-pass', 'focus-check', 'account-check', 'abort-check']
 
 const up = await fetch(`${WEB}/api/status`).then((r) => r.ok).catch(() => false)
 if (!up) {

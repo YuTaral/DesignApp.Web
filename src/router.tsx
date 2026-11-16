@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router"
 
 import { AppShell } from "@/components/app-shell"
+import { BuildPage } from "@/pages/build-page"
+import { PlanPage } from "@/pages/plan-page"
 import { SignInPage, SignUpPage } from "@/pages/auth-page"
 import { DesignsPage } from "@/pages/designs-page"
 import { EditorPage } from "@/pages/editor-page"
@@ -29,7 +31,7 @@ const signUpRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTES.
  * The pages: `/` home (upload; `?design=` adds the photo to that design), `/rooms/$roomId` the
  * editor (`?design=` when the room is in a design), `/designs` the account's designs,
  * `/designs/$designId` one design, `/library` the sample houses (`?house=` one house's rooms, `?design=` adds a room
- * to that design), and sign in / sign up.
+ * to that design), `/build` and `/build/$planId` the room builder (walls, then the floor plan), and sign in / sign up.
  */
 const routeTree = rootRoute.addChildren([
   createRoute({
@@ -53,6 +55,8 @@ const routeTree = rootRoute.addChildren([
     validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design), house: optionalText(search.house) }),
     component: LibraryPage,
   }),
+  createRoute({ getParentRoute: () => rootRoute, path: ROUTES.build, component: BuildPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: ROUTES.plan, component: PlanPage }),
   signInRoute,
   signUpRoute,
 ])

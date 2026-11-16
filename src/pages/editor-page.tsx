@@ -59,6 +59,7 @@ import { AI_MODE, HTTP_STATUS, LIMITS, MESSAGES, ROOM_STATUS, type RoomStatus, R
 
 /** Badge text for each analysis status. */
 const statusLabels: Record<RoomStatus, string> = {
+  Waiting: "Not analyzed",
   Uploaded: "Starting analysis…",
   Analyzing: "Finding objects…",
   Segmenting: "Outlining objects…",

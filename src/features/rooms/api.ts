@@ -162,6 +162,16 @@ export function findRoomParts(roomId: string, objectIndex: number, baseRevision:
 }
 
 /**
+ * Starts the analysis of a room that waits for it (a photo made by the room builder).
+ * @param roomId - The room.
+ * @returns The room, now queued for analysis.
+ * @throws ApiError with a message for the user when it can't be started.
+ */
+export function startRoomAnalysis(roomId: string): Promise<Room> {
+  return sendJson<Room>("POST", API.roomAnalysis(roomId))
+}
+
+/**
  * Merges a part (a chair's seat) back into the object it is a part of, as a new label map version.
  * @param roomId - The room.
  * @param objectIndex - The part.
