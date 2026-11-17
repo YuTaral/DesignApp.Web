@@ -1,26 +1,20 @@
 import { useEffect, useState } from "react"
-import { AlertTriangleIcon, CheckIcon, ImageIcon, LoaderCircleIcon, RotateCcwIcon } from "lucide-react"
-import { cn } from "cn"
+import { ImageIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { Room } from "@/features/rooms/types"
-import { apiUrl, errorMessage } from "@/lib/api"
-import { AI_MODE, BUILDER, MESSAGES, PHOTO_STYLE, PHOTO_STYLE_NAMES, VIEW_CORNER, VIEW_CORNER_NAMES, type PhotoStyle } from "@/lib/constants"
-import type { Plan, PlanItem, PlanShot } from "./api"
-import { wallName, walls } from "./room-outline"
+import { errorMessage } from "@/lib/api"
+import { AI_MODE, BUILDER, PHOTO_STYLE, VIEW_CORNER, type PhotoStyle } from "@/lib/constants"
+import type { Plan, PlanShot } from "./api"
+import { keyOf, type Made, type Picture } from "./generate-views"
+import { PhotoResults } from "./photo-results"
+import { PhotoStyleChoice } from "./photo-style-choice"
+import { walls } from "./room-outline"
 import { drawViewPictures } from "./scene-3d"
-
-/** A view's key, to tell views apart: its wall and where its camera stands. */
-const keyOf = (shot: PlanShot) => `${shot.view}:${shot.corner}`
-
-/** One view on the screen: its small picture and whatever blocks it. */
-type Picture = { shot: PlanShot; url: string; blocking: PlanItem | null }
-
-/** One photo asked for: being made, made (its room), or failed (why). */
-type Made = { picture: Picture } & ({ state: "making" } | { state: "done"; room: Room } | { state: "failed"; error: string })
+import { ViewPicker } from "./view-picker"
 
 /**
  * Generate photo: a small picture of every view of the room (each wall seen from the middle and from both near
@@ -63,56 +57,36 @@ export function GenerateDialog({
   const real = plan.aiMode === AI_MODE.Real
 
   /**
-   * Picks or unpicks a view.
-   * @param key - The view's key.
+   * Makes one view's photo, showing it as being made, then made or failed.
+   * @param picture - The view.
    */
-  const toggle = (key: string) => {
-    const next = new Set(chosen)
+  const makeOne = async (picture: Picture) => {
+    const key = keyOf(picture.shot)
+    const show = (result: Made) => setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? result : m)) ?? null)
 
-    if (!next.delete(key)) {
-      next.add(key)
+    show({ picture, state: "making" })
+
+    try {
+      const room = await make(picture.shot, style, instructions)
+
+      show({ picture, state: "done", room })
+    } catch (error) {
+      show({ picture, state: "failed", error: errorMessage(error) })
     }
-
-    setChosen(next)
   }
 
   /** Makes a photo of every picked view, a few at a time. */
   const start = async () => {
     const picked = pictures.filter((p) => chosen.has(keyOf(p.shot)))
-    const update = (key: string, result: Made) => setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? result : m)) ?? null)
     let next = 0
     const worker = async () => {
       while (next < picked.length) {
-        const picture = picked[next++]
-
-        try {
-          update(keyOf(picture.shot), { picture, state: "done", room: await make(picture.shot, style, instructions) })
-        } catch (error) {
-          update(keyOf(picture.shot), { picture, state: "failed", error: errorMessage(error) })
-        }
+        await makeOne(picked[next++])
       }
     }
 
     setMade(picked.map((picture) => ({ picture, state: "making" })))
     await Promise.all(Array.from({ length: Math.min(BUILDER.photosAtOnce, picked.length) }, worker))
-  }
-
-  /**
-   * Makes one failed photo again.
-   * @param picture - Its view.
-   */
-  const retry = async (picture: Picture) => {
-    const key = keyOf(picture.shot)
-
-    setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? { picture, state: "making" } : m)) ?? null)
-
-    try {
-      const room = await make(picture.shot, style, instructions)
-
-      setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? { picture, state: "done", room } : m)) ?? null)
-    } catch (error) {
-      setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? { picture, state: "failed", error: errorMessage(error) } : m)) ?? null)
-    }
   }
 
   /** Closes the dialog (not while photos are made); the next opening starts from the views again. */
@@ -172,43 +146,7 @@ export function GenerateDialog({
                   : "Each photo is saved as its own room. Open one in the editor to analyze and restyle it."}
               </DialogDescription>
             </DialogHeader>
-            {/* As many columns as photos, up to three, so one or two photos fill the width rather than leave gaps. */}
-            <ul
-              className={cn("grid gap-3", made.length === 1 ? "mx-auto w-full max-w-md" : made.length === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3")}
-              data-results
-            >
-              {made.map((m) => (
-                <li key={keyOf(m.picture.shot)} className="space-y-2" data-result={m.state}>
-                  <div className="relative overflow-hidden rounded-xl border bg-muted">
-                    <img
-                      src={m.state === "done" ? apiUrl(m.room.photoUrl) : m.picture.url}
-                      alt={`${viewName(plan, m.picture.shot)}${m.state === "done" ? ", the photo" : ", the 3D view"}`}
-                      className={cn("aspect-[4/3] w-full object-cover", m.state !== "done" && "opacity-60")}
-                    />
-                    {m.state === "making" && (
-                      <div className="absolute inset-0 grid place-items-center" role="status" aria-label="Making the photo">
-                        <LoaderCircleIcon className="size-8 animate-spin text-primary motion-reduce:animate-none" aria-hidden />
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{viewName(plan, m.picture.shot)}</p>
-                  {m.state === "done" && (
-                    <Button size="sm" className="w-full" onClick={() => onOpen(m.room)} data-open-photo>
-                      Open in the editor
-                    </Button>
-                  )}
-                  {m.state === "failed" && (
-                    <div className="space-y-1.5">
-                      <p className="text-xs text-destructive">{m.error}</p>
-                      <Button size="sm" variant="outline" className="w-full" onClick={() => void retry(m.picture)}>
-                        <RotateCcwIcon data-icon="inline-start" />
-                        Try again
-                      </Button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <PhotoResults plan={plan} made={made} onOpen={onOpen} onRetry={(picture) => void makeOne(picture)} />
             <DialogFooter className="gap-2">
               <Button variant="outline" disabled={making} onClick={() => setMade(null)}>
                 Make other photos
@@ -226,112 +164,8 @@ export function GenerateDialog({
                 Pick the views to photograph, one or more, and a style for the furniture's details: handles, legs, fronts and textures. The layout, sizes, main colors and decorations stay as you planned them.
               </DialogDescription>
             </DialogHeader>
-
-            <section className="space-y-3" aria-label="Views">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-medium">Views</h3>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="xs" disabled={!drawn || failed} onClick={() => setChosen(new Set(pictures.filter((p) => !p.blocking).map((p) => keyOf(p.shot))))}>
-                    All open views
-                  </Button>
-                  <Button variant="ghost" size="xs" disabled={count === 0 || failed} onClick={() => setChosen(new Set())}>
-                    None
-                  </Button>
-                </div>
-              </div>
-              {failed && (
-                <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert" data-views-failed>
-                  {MESSAGES.guideFailed} Photos can't be made in this browser.
-                </p>
-              )}
-              <div className={cn("grid gap-x-4 gap-y-3 sm:grid-cols-2", failed && "hidden")}>
-                {walls(plan).map((wall) => (
-                  <div key={wall.index} className="space-y-1.5" data-view-wall={wall.index}>
-                    <p className="text-xs font-medium text-muted-foreground">Looking at the {wallName(plan, wall.index).toLowerCase()}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {shots
-                        .filter((shot) => shot.view === wall.index)
-                        .map((shot) => {
-                          const key = keyOf(shot)
-                          const p = pictures.find((picture) => keyOf(picture.shot) === key)
-
-                          // Not drawn yet: a placeholder of the same size, so nothing moves as the pictures come in.
-                          if (!p) {
-                            return (
-                              <div key={key} className="space-y-1 p-1" aria-hidden data-view-drawing>
-                                <span className="block aspect-[4/3] w-full animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
-                                <span className="block truncate text-[11px] text-muted-foreground">{VIEW_CORNER_NAMES[shot.corner]}</span>
-                              </div>
-                            )
-                          }
-
-                          const on = chosen.has(key)
-
-                          return (
-                              <button
-                                key={key}
-                                type="button"
-                                role="checkbox"
-                                aria-checked={on}
-                                aria-label={`${viewName(plan, p.shot)}${p.blocking ? `, blocked by the ${p.blocking.label}` : ""}`}
-                                data-view-pick={key}
-                                onClick={() => toggle(key)}
-                                className={cn(
-                                  "group space-y-1 rounded-lg p-1 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
-                                  on && "bg-accent ring-2 ring-primary hover:bg-accent"
-                                )}
-                              >
-                                <span className="relative block overflow-hidden rounded-md">
-                                  <img src={p.url} alt="" className="aspect-[4/3] w-full object-cover" />
-                                  {on && (
-                                    <span className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground shadow-soft">
-                                      <CheckIcon className="size-3.5" aria-hidden />
-                                    </span>
-                                  )}
-                                  {p.blocking && (
-                                    <span
-                                      className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-black/65 px-1.5 py-0.5 text-[11px] leading-tight text-amber-300"
-                                      title={`The ${p.blocking.label} stands in front of the camera`}
-                                      data-view-blocked-badge
-                                    >
-                                      <AlertTriangleIcon className="size-3 shrink-0" aria-hidden />
-                                      <span className="truncate">Blocked</span>
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="block truncate text-[11px] text-muted-foreground">{VIEW_CORNER_NAMES[p.shot.corner]}</span>
-                              </button>
-                          )
-                        })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="space-y-2" aria-label="Style">
-              <h3 className="text-sm font-medium">Style</h3>
-              <div role="radiogroup" aria-label="Style" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {Object.values(PHOTO_STYLE).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={style === value}
-                    data-photo-style={value}
-                    onClick={() => setStyle(value)}
-                    className={cn(
-                      "rounded-xl border p-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
-                      style === value && "border-primary bg-accent text-accent-foreground ring-1 ring-primary hover:bg-accent"
-                    )}
-                  >
-                    <span className="block text-sm font-medium">{PHOTO_STYLE_NAMES[value].name}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{PHOTO_STYLE_NAMES[value].looks}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
+            <ViewPicker plan={plan} shots={shots} pictures={pictures} drawn={drawn} failed={failed} chosen={chosen} onChoose={setChosen} />
+            <PhotoStyleChoice value={style} onPick={setStyle} />
             <div className="space-y-1.5">
               <Label htmlFor="photo-instructions">Anything else for the AI (optional)</Label>
               <Textarea
@@ -343,7 +177,6 @@ export function GenerateDialog({
                 onChange={(event) => setInstructions(event.target.value)}
               />
             </div>
-
             <DialogFooter className="items-center gap-2 sm:justify-between">
               <p className="text-xs text-muted-foreground" data-photo-cost>
                 {real
@@ -365,13 +198,4 @@ export function GenerateDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-/**
- * A view in words: "Back wall, from the left corner".
- * @param plan - The room.
- * @param shot - The view.
- */
-function viewName(plan: Plan, shot: PlanShot) {
-  return `${wallName(plan, shot.view)}, from the ${VIEW_CORNER_NAMES[shot.corner].toLowerCase()}`
 }

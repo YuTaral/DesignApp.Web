@@ -126,7 +126,7 @@ export const LIMITS = {
   removal: { maxObjects: 20, restingGap: 3, restingShare: 0.5 },
   /** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
   brushSizes: { min: 2, max: 120, default: 24 },
-  zoom: { min: 1, max: 8 },
+  zoom: { min: 1, max: 8, step: 1.5 },
   /** A view zoomed in on an object (the Parts dialog) shows its box this many times its size, for some margin. */
   focusMargin: 1.3,
   /** A press that moves less than this (CSS px) is a tap, not a drag. */
@@ -344,6 +344,8 @@ export const BUILDER = {
   minWallCm: 20,
   /** How long a section of wall the "+" pushes out, in centimetres (less on a short wall). */
   sectionCm: 100,
+  /** How thick the walls are drawn on the floor plan, in centimetres. */
+  planWallCm: 14,
   /**
    * Measuring a generated photo against its plan (`features/builder/photo-accuracy.ts`): the smallest share of the
    * picture an outline must cover to count; the overlap of a clear one-to-one pair; the share of a plan object a photo
