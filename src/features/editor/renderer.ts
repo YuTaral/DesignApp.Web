@@ -229,9 +229,14 @@ export class RoomRenderer {
    * @throws Error when the browser has no WebGL2.
    */
   constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas
     const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: true })
-    if (!gl) throw new Error("This browser can't show the editor (WebGL2 is unavailable).")
+
+    this.canvas = canvas
+
+    if (!gl) {
+      throw new Error("This browser can't show the editor (WebGL2 is unavailable).")
+    }
+
     this.gl = gl
     this.program = link(gl, vertexShader, fragmentShader)
     this.uniforms = Object.fromEntries(
@@ -241,9 +246,11 @@ export class RoomRenderer {
     )
 
     const corners = gl.createBuffer()
+
     gl.bindBuffer(gl.ARRAY_BUFFER, corners)
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW)
     const location = gl.getAttribLocation(this.program, "a_corner")
+
     gl.enableVertexAttribArray(location)
     gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0)
 
@@ -270,6 +277,7 @@ export class RoomRenderer {
    */
   setPhoto(photo: TexImageSource) {
     const gl = this.gl
+
     gl.bindTexture(gl.TEXTURE_2D, this.photo)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, photo)
@@ -285,6 +293,7 @@ export class RoomRenderer {
    */
   setLabels(map: LabelMap) {
     const gl = this.gl
+
     gl.bindTexture(gl.TEXTURE_2D, this.labels)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, map.width, map.height, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, map.labels)
@@ -298,19 +307,28 @@ export class RoomRenderer {
    * @param parents - For each part, the object it is a part of.
    */
   setEdits(edits: ReadonlyMap<number, RenderEdit>, parents: ReadonlyMap<number, number> = new Map()) {
+    const gl = this.gl
     const data = new Float32Array(256 * ROW.count * 4)
     const at = (row: number, index: number) => (row * 256 + index) * 4
+
     for (const [index, edit] of edits) {
       const tones = edit.tones ?? []
+
       data.set([edit.target.l, edit.target.a, edit.target.b, edit.strength], at(ROW.target, index))
       data.set([edit.source.l, edit.source.a, edit.source.b, tones.length], at(ROW.source, index))
       tones.forEach((tone, i) => {
         data.set([tone.center.l, tone.center.a, tone.center.b, 0], at(ROW.centers + i, index))
-        if (tone.target) data.set([tone.target.l, tone.target.a, tone.target.b, tone.strength], at(ROW.targets + i, index))
+
+        if (tone.target) {
+          data.set([tone.target.l, tone.target.a, tone.target.b, tone.strength], at(ROW.targets + i, index))
+        }
       })
     }
-    for (const [index, parent] of parents) data[at(ROW.group, index)] = parent
-    const gl = this.gl
+
+    for (const [index, parent] of parents) {
+      data[at(ROW.group, index)] = parent
+    }
+
     gl.bindTexture(gl.TEXTURE_2D, this.edits)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 256, ROW.count, 0, gl.RGBA, gl.FLOAT, data)
@@ -322,21 +340,27 @@ export class RoomRenderer {
    * @param state - What to show.
    */
   render(state: RenderState) {
-    if (!this.ready) return
+    if (!this.ready) {
+      return
+    }
+
     const gl = this.gl
     const ratio = window.devicePixelRatio || 1
     const width = Math.max(1, Math.round(this.canvas.clientWidth * ratio))
     const height = Math.max(1, Math.round(this.canvas.clientHeight * ratio))
+
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width
       this.canvas.height = height
     }
+
     gl.viewport(0, 0, width, height)
     gl.clearColor(0, 0, 0, 0)
     gl.clear(gl.COLOR_BUFFER_BIT)
 
     gl.useProgram(this.program)
     const u = this.uniforms
+
     gl.uniform4f(u.u_rect, state.rect.x * ratio, state.rect.y * ratio, state.rect.width * ratio, state.rect.height * ratio)
     gl.uniform2f(u.u_canvas, width, height)
     gl.uniform2i(u.u_labelSize, this.labelSize[0], this.labelSize[1])
@@ -355,6 +379,7 @@ export class RoomRenderer {
   /** Frees the GPU resources. */
   dispose() {
     const gl = this.gl
+
     gl.deleteTexture(this.photo)
     gl.deleteTexture(this.labels)
     gl.deleteTexture(this.edits)
@@ -371,15 +396,26 @@ export class RoomRenderer {
  */
 function link(gl: WebGL2RenderingContext, vertex: string, fragment: string) {
   const program = gl.createProgram()
+
   for (const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]] as const) {
     const shader = gl.createShader(type)!
+
     gl.shaderSource(shader, source)
     gl.compileShader(shader)
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(`Shader error: ${gl.getShaderInfoLog(shader)}`)
+
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      throw new Error(`Shader error: ${gl.getShaderInfoLog(shader)}`)
+    }
+
     gl.attachShader(program, shader)
   }
+
   gl.linkProgram(program)
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`Shader link error: ${gl.getProgramInfoLog(program)}`)
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    throw new Error(`Shader link error: ${gl.getProgramInfoLog(program)}`)
+  }
+
   return program
 }
 

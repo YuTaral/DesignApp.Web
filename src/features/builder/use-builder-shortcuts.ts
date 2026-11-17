@@ -12,22 +12,36 @@ export function useBuilderShortcuts(paused: boolean) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
-      if (paused || target?.closest("input, textarea, select, [contenteditable=true]")) return
+
+      if (paused || target?.closest("input, textarea, select, [contenteditable=true]")) {
+        return
+      }
+
       const { selected, copy, paste, remove, select } = useBuilderStore.getState()
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
       const textSelected = !(window.getSelection()?.isCollapsed ?? true)
-      if (mod && key === "c" && selected >= 0 && !textSelected) copy()
-      else if (mod && key === "v") paste()
-      else if (mod && key === "d" && selected >= 0) {
+
+      if (mod && key === "c" && selected >= 0 && !textSelected) {
+        copy()
+      } else if (mod && key === "v") {
+        paste()
+      } else if (mod && key === "d" && selected >= 0) {
         copy()
         paste()
-      } else if ((key === "delete" || key === "backspace") && selected >= 0) remove(selected)
-      else if (key === "escape" && selected >= 0) select(-1)
-      else return
+      } else if ((key === "delete" || key === "backspace") && selected >= 0) {
+        remove(selected)
+      } else if (key === "escape" && selected >= 0) {
+        select(-1)
+      } else {
+        return
+      }
+
       event.preventDefault()
     }
+
     window.addEventListener("keydown", onKey)
+
     return () => window.removeEventListener("keydown", onKey)
   }, [paused])
 }

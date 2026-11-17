@@ -90,18 +90,24 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
   const toPlan = (clientX: number, clientY: number) => {
     const svg = svgRef.current!
     const point = new DOMPoint(clientX, clientY).matrixTransform(svg.getScreenCTM()!.inverse())
+
     return { x: point.x, y: point.y }
   }
 
   const start = (event: ReactPointerEvent, index: number, kind: Gesture["kind"], corner = { x: 1, y: 1 }) => {
     event.stopPropagation()
     select(index)
-    if (isWallItem(plan.items[index])) return
+
+    if (isWallItem(plan.items[index])) {
+      return
+    }
+
     event.currentTarget.setPointerCapture(event.pointerId)
     const item = plan.items[index]
     const point = toPlan(event.clientX, event.clientY)
     const { width, depth } = footprint(item)
     const anchor = { x: item.x - (corner.x * width) / 2, y: item.y - (corner.y * depth) / 2 }
+
     gesture.current = { kind, index, pointerId: event.pointerId, offset: { x: point.x - item.x, y: point.y - item.y }, anchor }
   }
 
@@ -117,6 +123,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
     // The drawing itself follows the pointer: the "+" disappears and handles move while the shape is dragged.
     svgRef.current!.setPointerCapture(event.pointerId)
     const start = toPlan(event.clientX, event.clientY)
+
     shapeGesture.current = { kind, index, pointerId: event.pointerId, base: plan, start, ...section, shift: { x: 0, y: 0 } }
     setHeld({ x: -MARGIN, y: -MARGIN, width: roomWidth + 2 * MARGIN, length: roomLength + 2 * MARGIN })
     setPlus(null)
@@ -140,6 +147,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
           ? moveWall(g.base.outline, g.index, outward)
           : pushSection(g.base.outline, g.index, g.from, g.to, outward)
     const shift = reshape(g.base, change)
+
     if (shift) {
       g.shift = shift
       setHeld({ x: -MARGIN + shift.x, y: -MARGIN + shift.y, width: g.base.width * 100 + 2 * MARGIN, length: g.base.length * 100 + 2 * MARGIN })
@@ -148,18 +156,28 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
 
   const move = (event: ReactPointerEvent) => {
     const shaped = shapeGesture.current
+
     if (shaped && shaped.pointerId === event.pointerId) {
       moveShape(shaped, event)
+
       return
     }
+
     const g = gesture.current
-    if (!g || g.pointerId !== event.pointerId) return
+
+    if (!g || g.pointerId !== event.pointerId) {
+      return
+    }
+
     const item = plan.items[g.index]
     const point = toPlan(event.clientX, event.clientY)
+
     if (g.kind === "move") {
       update(g.index, { x: toGrid(point.x - g.offset.x), y: toGrid(point.y - g.offset.y) })
+
       return
     }
+
     if (g.kind !== "resize") {
       // A part's handle: the pointer in the object's own frame before turning (turned back by its rotation).
       const turn = (item.rotation * Math.PI) / 180
@@ -172,9 +190,12 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
           : g.kind === "leg"
             ? { legWidth: item.width / 2 - local.x }
             : { chaiseWidth: item.width / 2 - local.x, chaiseDepth: item.depth / 2 - local.y }
+
       update(g.index, { parts: { ...parts, ...next } })
+
       return
     }
+
     // Resizing keeps the opposite corner where it was and grows towards the pointer, which stays inside the walls so
     // the room never has to move the object back.
     const { x: ax, y: ay } = g.anchor
@@ -183,11 +204,15 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
     const along = Math.max(BUILDER.item.min, Math.abs(py - ay))
     const middle = { x: ax + Math.sign(px - ax || 1) * (across / 2), y: ay + Math.sign(py - ay || 1) * (along / 2) }
     const turned = item.rotation % 180 !== 0
+
     update(g.index, { ...middle, ...(turned ? { width: along, depth: across } : { width: across, depth: along }) })
   }
 
   const end = (event: ReactPointerEvent) => {
-    if (gesture.current?.pointerId === event.pointerId) gesture.current = null
+    if (gesture.current?.pointerId === event.pointerId) {
+      gesture.current = null
+    }
+
     if (shapeGesture.current?.pointerId === event.pointerId) {
       shapeGesture.current = null
       setHeld(null)
@@ -199,20 +224,36 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
    * @param event - The pointer going down.
    */
   const startSection = (event: ReactPointerEvent) => {
-    if (!plus) return
+    if (!plus) {
+      return
+    }
+
     const length = wallOf(plan, plus.wall).length
     const width = Math.min(BUILDER.sectionCm, length - 2 * BUILDER.minWallCm)
-    if (width < BUILDER.minWallCm) return
+
+    if (width < BUILDER.minWallCm) {
+      return
+    }
+
     const from = Math.min(length - width, Math.max(0, toGrid(plus.along - width / 2)))
+
     startShape(event, "section", plus.wall, { from, to: from + width })
   }
 
   const drop = (event: DragEvent) => {
     const data = event.dataTransfer.getData(BUILDER.dragType)
-    if (!data) return
+
+    if (!data) {
+      return
+    }
+
     const object = JSON.parse(data) as CatalogObject
+
     // Windows, doors and hung things are placed on a wall seen straight on, in the Wall tab.
-    if (isWallShape(object.shape)) return
+    if (isWallShape(object.shape)) {
+      return
+    }
+
     event.preventDefault()
     add(object, toPlan(event.clientX, event.clientY))
   }
@@ -238,7 +279,9 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
       onPointerUp={end}
       onPointerCancel={end}
       onDragOver={(event) => {
-        if (event.dataTransfer.types.includes(BUILDER.dragType)) event.preventDefault()
+        if (event.dataTransfer.types.includes(BUILDER.dragType)) {
+          event.preventDefault()
+        }
       }}
       onDrop={drop}
     >
@@ -250,6 +293,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
       {walls(plan).map((wall) => {
         const viewed = wall.index === plan.view
         const name = wallName(plan, wall.index)
+
         return (
           <polygon
             key={wall.index}
@@ -265,15 +309,25 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
             onPointerDown={(event) => {
               if (shaping) {
                 startShape(event, "wall", wall.index)
+
                 return
               }
+
               event.stopPropagation()
-              if (!viewed) setRoom({ view: wall.index })
+
+              if (!viewed) {
+                setRoom({ view: wall.index })
+              }
+
               onWall?.(wall.index)
             }}
             onPointerMove={(event) => {
-              if (!shaping || shapeGesture.current) return
+              if (!shaping || shapeGesture.current) {
+                return
+              }
+
               const point = toPlan(event.clientX, event.clientY)
+
               setPlus({ wall: wall.index, along: Math.min(wall.length, Math.max(0, fromWall(plan, wall.index, point.x, point.y).along)) })
             }}
           >
@@ -288,6 +342,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
       {order.map(({ item, index }) => {
         const { width, depth } = footprint(item)
         const chosen = index === selected
+
         return (
           <g
             key={index}
@@ -364,13 +419,17 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
  * @param props.look - Its fill, stroke and data attributes.
  */
 function Outline({ item, width, depth, look }: { item: PlanItem; width: number; depth: number; look: SVGProps<SVGElement> & Record<`data-${string}`, unknown> }) {
-  if (item.form === ITEM_FORM.Round) return <ellipse rx={width / 2} ry={depth / 2} {...(look as SVGProps<SVGEllipseElement>)} />
+  if (item.form === ITEM_FORM.Round) {
+    return <ellipse rx={width / 2} ry={depth / 2} {...(look as SVGProps<SVGEllipseElement>)} />
+  }
+
   if (hasParts(item)) {
     // Drawn before turning from its parts, then turned like the object: SVG turns clockwise on screen, as the plan
     // does. Dashed lines show where the parts meet.
     const { runDepth: run, legWidth: leg, chaiseDepth } = partsOf(item)!
     const [w, d] = [item.width, item.depth]
     const cd = item.form === ITEM_FORM.PShaped ? chaiseDepth : 0
+
     return (
       <g transform={`rotate(${item.rotation})`}>
         <polygon points={cornerOutline(item).map((p) => p.join(",")).join(" ")} strokeLinejoin="round" {...(look as SVGProps<SVGPolygonElement>)} />
@@ -381,7 +440,9 @@ function Outline({ item, width, depth, look }: { item: PlanItem; width: number; 
       </g>
     )
   }
+
   const round = item.shape === ITEM_SHAPE.Cylinder || item.shape === ITEM_SHAPE.Plant
+
   return <rect x={-width / 2} y={-depth / 2} width={width} height={depth} rx={round ? Math.min(width, depth) / 2 : 4} {...(look as SVGProps<SVGRectElement>)} />
 }
 
@@ -399,7 +460,11 @@ function PartHandles({ item, onStart }: { item: PlanItem; onStart: (event: React
     { part: "run", x: -leg / 2, y: -d / 2 + run, label: "Back run depth" },
     { part: "leg", x: w / 2 - leg, y: (-d / 2 + run + d / 2 - cd) / 2, label: "Corner leg width" },
   ]
-  if (item.form === ITEM_FORM.PShaped) handles.push({ part: "chaise", x: w / 2 - chaiseWidth, y: d / 2 - cd, label: "Chaise size" })
+
+  if (item.form === ITEM_FORM.PShaped) {
+    handles.push({ part: "chaise", x: w / 2 - chaiseWidth, y: d / 2 - cd, label: "Chaise size" })
+  }
+
   return (
     <g transform={`rotate(${item.rotation})`}>
       {handles.map(({ part, x, y, label }) => (
@@ -427,6 +492,7 @@ function PartHandles({ item, onStart }: { item: PlanItem; onStart: (event: React
  */
 function facingOf(item: PlanItem) {
   const turn = (item.rotation * Math.PI) / 180
+
   return { x: -Math.round(Math.sin(turn)), y: Math.round(Math.cos(turn)) }
 }
 
@@ -451,6 +517,7 @@ function markSize(width: number, depth: number, text: number) {
 function labelSize(item: PlanItem, width: number, depth: number, text: number) {
   const marked = !SIDELESS.has(item.shape) && item.form !== ITEM_FORM.Round && facingOf(item).x !== 0
   const room = marked ? Math.max(width / 3, width - 3 * markSize(width, depth, text)) : width
+
   return Math.min(text, (room / Math.max(4, item.label.length)) * 1.6)
 }
 
@@ -472,6 +539,7 @@ function FacingMarks({ item, width, depth, text }: { item: PlanItem; width: numb
     { letter: "F", sign: 1 },
     { letter: "B", sign: -1 },
   ]
+
   return (
     <g className="pointer-events-none" data-facing={item.rotation}>
       {marks.map(({ letter, sign }) => (
@@ -518,6 +586,7 @@ function Opening({ plan, item, index, chosen, onSelect }: { plan: Plan; item: Pl
   const shut = { x: hinge.x + wall.dx * reach, y: hinge.y + wall.dy * reach }
   // The arc turns from the open leaf to the closed one the short way round (clockwise on screen when the cross is positive).
   const sweep = inward[0] * (shut.y - hinge.y) - inward[1] * (shut.x - hinge.x) > 0 ? 1 : 0
+
   return (
     <g data-item={index} data-opening={item.shape} className="cursor-pointer" onPointerDown={onSelect}>
       {item.shape === ITEM_SHAPE.Door && (
@@ -560,6 +629,7 @@ function Hung({ plan, item, index, chosen, onSelect }: { plan: Plan; item: PlanI
   // At least a few centimetres deep, so a flat picture can still be seen and clicked.
   const deep = Math.max(item.depth, 8)
   const corners = [a, b, { x: b.x + wall.nx * deep, y: b.y + wall.ny * deep }, { x: a.x + wall.nx * deep, y: a.y + wall.ny * deep }]
+
   return (
     <g data-item={index} data-hung={item.shape} className="cursor-pointer" onPointerDown={onSelect}>
       <polygon
@@ -588,6 +658,7 @@ function Camera({ plan, text }: { plan: Plan; text: number }) {
   const turn = (Math.atan2(at.lookX, -at.lookY) * 180) / Math.PI
   const size = Math.max(18, text * 1.6)
   const [x, y] = [at.x + at.lookX * size * 0.5, at.y + at.lookY * size * 0.5]
+
   return (
     <g className="pointer-events-none fill-primary" transform={`translate(${x} ${y}) rotate(${turn})`} data-camera={plan.view} data-corner={at.corner}>
       <path d={`M 0 ${-size} L ${size * 0.7} ${size * 0.15} L ${-size * 0.7} ${size * 0.15} Z`} fillOpacity="0.35" />
@@ -607,6 +678,7 @@ function band(plan: Plan, wall: OutlineWall) {
   const [before, after] = [all[(wall.index - 1 + all.length) % all.length], all[(wall.index + 1) % all.length]]
   // Outside a right-angled corner lies against both walls' outward normals.
   const outer = (corner: { x: number; y: number }, other: OutlineWall) => ({ x: corner.x - (wall.nx + other.nx) * WALL, y: corner.y - (wall.ny + other.ny) * WALL })
+
   return [wall.start, wall.end, outer(wall.end, after), outer(wall.start, before)].map((p) => `${p.x},${p.y}`).join(" ")
 }
 
@@ -637,12 +709,14 @@ function ShapeHandles({
   const plusAt = plus ? wallPoint(plan, plus.wall, plus.along) : null
   const plusWall = plus ? wallOf(plan, plus.wall) : null
   const size = Math.max(14, text * 1.1)
+
   return (
     <g data-shape-handles>
       {walls(plan).map((wall) => {
         const middle = wallPoint(plan, wall.index, wall.length / 2)
         // Just inside the room, so the "+" outside the wall never covers it.
         const [x, y] = [middle.x + wall.nx * text * 1.2, middle.y + wall.ny * text * 1.2]
+
         return (
           <text key={wall.index} x={x} y={y + text / 3} textAnchor="middle" fontSize={text} className="pointer-events-none fill-foreground" style={label} data-wall-length={wall.index}>
             {Math.round(wall.length)} cm

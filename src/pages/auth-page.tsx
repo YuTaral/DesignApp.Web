@@ -55,6 +55,7 @@ function AuthPage({ mode, redirect }: { mode: "sign-in" | "sign-up"; redirect?: 
       </div>
     )
   }
+
   return <AuthForm mode={mode} redirect={redirect} onSubmitted={() => setSubmitted(true)} />
 }
 

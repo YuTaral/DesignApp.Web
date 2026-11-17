@@ -26,17 +26,25 @@ export function useMergePart(room: Room) {
    */
   const merge = async (part: DetectedObject): Promise<boolean> => {
     const parent = room.objects.find((o) => o.index === part.parentIndex)
-    if (revision === null || !parent) return false
+
+    if (revision === null || !parent) {
+      return false
+    }
+
     setMerging(true)
+
     try {
       const updated = await mergeRoomPart(room.id, part.index, revision)
+
       // The editor first, as with outline fixes, so the version sync never sends the old version back.
       applyOutlineFix(updated.labelMapRevision, parent.index)
       queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
       toast.success(MESSAGES.partMerged(part.label, parent.label))
+
       return true
     } catch (error) {
       toast.error(errorMessage(error))
+
       return false
     } finally {
       setMerging(false)

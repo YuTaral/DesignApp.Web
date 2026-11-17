@@ -17,8 +17,12 @@ import { AI_MODE, LIMITS, RESTING_CATEGORIES, SURFACE_CATEGORIES } from "@/lib/c
 export function RemoveObjectPanel({ room }: { room: Room }) {
   const selected = useEditorStore((state) => state.selected)
   const object = room.objects.find((o) => o.index === selected)
+
   // A part is merged back into its object instead (in the Parts dialog).
-  if (!object || SURFACE_CATEGORIES.includes(object.category) || object.parentIndex) return null
+  if (!object || SURFACE_CATEGORIES.includes(object.category) || object.parentIndex) {
+    return null
+  }
+
   // A new selection starts with all of its suggestions ticked.
   return <RemoveObjectSection key={object.index} room={room} object={object} />
 }
@@ -33,18 +37,28 @@ function RemoveObjectSection({ room, object }: { room: Room; object: DetectedObj
   const { remove, removing } = useRemoveObject(room)
   const onIt = useMemo(() => {
     const restsOn = presentObjects?.restsOn
-    if (!restsOn) return []
+
+    if (!restsOn) {
+      return []
+    }
+
     // Everything resting on the object, and on what rests on it (a bowl on a tray on a table).
     const found = new Set<number>()
     const queue = [object.index]
+
     while (queue.length > 0) {
       const below = queue.shift()!
+
       for (const [index, support] of restsOn) {
-        if (support !== below || index === object.index || found.has(index)) continue
+        if (support !== below || index === object.index || found.has(index)) {
+          continue
+        }
+
         found.add(index)
         queue.push(index)
       }
     }
+
     // Only things that sit on furniture (textiles, decor, lamps); the search above still passes through the others,
     // so the vase on an island's countertop is found when the island is picked.
     return room.objects.filter((o) => found.has(o.index) && RESTING_CATEGORIES.includes(o.category) && presentObjects.indexes.has(o.index))
@@ -75,8 +89,13 @@ function RemoveObjectSection({ room, object }: { room: Room; object: DetectedObj
                 checked={!unticked.has(o.index)}
                 onChange={(event) => {
                   const next = new Set(unticked)
-                  if (event.target.checked) next.delete(o.index)
-                  else next.add(o.index)
+
+                  if (event.target.checked) {
+                    next.delete(o.index)
+                  } else {
+                    next.add(o.index)
+                  }
+
                   setUnticked(next)
                 }}
               />

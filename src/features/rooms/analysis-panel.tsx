@@ -25,9 +25,18 @@ const steps: { label: string; runningFor: RoomStatus[] }[] = [
  * @param props.room - The room being edited.
  */
 export function AnalysisPanel({ room }: { room: Room }) {
-  if (room.status === ROOM_STATUS.Failed) return <AnalysisFailed reason={room.failureReason} />
-  if (room.status === ROOM_STATUS.Ready) return <ObjectsSummary room={room} />
-  if (room.status === ROOM_STATUS.Waiting) return <AnalysisWaiting room={room} />
+  if (room.status === ROOM_STATUS.Failed) {
+    return <AnalysisFailed reason={room.failureReason} />
+  }
+
+  if (room.status === ROOM_STATUS.Ready) {
+    return <ObjectsSummary room={room} />
+  }
+
+  if (room.status === ROOM_STATUS.Waiting) {
+    return <AnalysisWaiting room={room} />
+  }
+
   return <AnalysisProgress status={room.status} />
 }
 
@@ -42,8 +51,10 @@ function AnalysisWaiting({ room }: { room: Room }) {
 
   const start = async () => {
     setStarting(true)
+
     try {
       const updated = await startRoomAnalysis(room.id)
+
       queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
     } catch (error) {
       toast.error(errorMessage(error))
@@ -80,6 +91,7 @@ function AnalysisProgress({ status }: { status: RoomStatus }) {
       <ol className="mt-4 space-y-2.5" aria-live="polite">
         {steps.map((step, index) => {
           const state = index < current ? "done" : index === current ? "running" : "waiting"
+
           return (
             <li key={step.label} className="flex items-center gap-2.5 text-sm">
               {state === "done" && <CheckIcon className="size-4 text-primary" aria-hidden />}

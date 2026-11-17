@@ -47,11 +47,15 @@ const STATUS_MESSAGES: Record<number, string> = {
  * @param body - The parsed response body, if there was one.
  */
 export function toApiError(status: number, body: unknown): ApiError {
-  if (status === HTTP_STATUS.network) return new ApiError(HTTP_STATUS.network, MESSAGES.network)
+  if (status === HTTP_STATUS.network) {
+    return new ApiError(HTTP_STATUS.network, MESSAGES.network)
+  }
+
   const detail = isProblem(body) ? body.detail : undefined
   // The API writes `detail` for user mistakes (4xx). Server errors never expose internals.
   const message =
     (status < HTTP_STATUS.serverError && detail) || STATUS_MESSAGES[status] || MESSAGES.serverError
+
   return new ApiError(status, message)
 }
 
@@ -73,13 +77,21 @@ function isProblem(body: unknown): body is { title?: string; detail?: string } {
  */
 export async function getJson<T>(path: string, signal?: AbortSignal, cache?: RequestCache): Promise<T> {
   let response: Response
+
   try {
     response = await fetch(apiUrl(path), { signal, cache, headers: { Accept: MIME.json } })
   } catch (error) {
-    if (signal?.aborted) throw error
+    if (signal?.aborted) {
+      throw error
+    }
+
     throw toApiError(HTTP_STATUS.network, undefined)
   }
-  if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
+
+  if (!response.ok) {
+    throw toApiError(response.status, await response.json().catch(() => undefined))
+  }
+
   return (await response.json()) as T
 }
 
@@ -93,6 +105,7 @@ export async function getJson<T>(path: string, signal?: AbortSignal, cache?: Req
  */
 export async function sendJson<T>(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   let response: Response
+
   try {
     response = await fetch(apiUrl(path), {
       method,
@@ -102,8 +115,15 @@ export async function sendJson<T>(method: "POST" | "PUT" | "DELETE", path: strin
   } catch {
     throw toApiError(HTTP_STATUS.network, undefined)
   }
-  if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
-  if (response.status === HTTP_STATUS.noContent) return undefined as T
+
+  if (!response.ok) {
+    throw toApiError(response.status, await response.json().catch(() => undefined))
+  }
+
+  if (response.status === HTTP_STATUS.noContent) {
+    return undefined as T
+  }
+
   return (await response.json()) as T
 }
 
@@ -116,12 +136,17 @@ export async function sendJson<T>(method: "POST" | "PUT" | "DELETE", path: strin
  */
 export async function sendForm<T>(path: string, form: FormData): Promise<T> {
   let response: Response
+
   try {
     response = await fetch(apiUrl(path), { method: "POST", headers: { Accept: MIME.json }, body: form })
   } catch {
     throw toApiError(HTTP_STATUS.network, undefined)
   }
-  if (!response.ok) throw toApiError(response.status, await response.json().catch(() => undefined))
+
+  if (!response.ok) {
+    throw toApiError(response.status, await response.json().catch(() => undefined))
+  }
+
   return (await response.json()) as T
 }
 

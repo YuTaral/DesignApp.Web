@@ -46,7 +46,10 @@ function FloorSwatch({ type, color }: { type: FloorType; color: string }) {
 
   useEffect(() => {
     const context = ref.current?.getContext("2d")
-    if (context) paintFloor(context, type, color, 128)
+
+    if (context) {
+      paintFloor(context, type, color, 128)
+    }
   }, [type, color])
 
   return <canvas ref={ref} width={128} height={128} className="aspect-square w-full rounded-md" aria-hidden />

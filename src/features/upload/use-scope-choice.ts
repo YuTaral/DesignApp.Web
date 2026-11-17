@@ -9,6 +9,7 @@ import { ANALYSIS_SCOPE, type AnalysisScope, isEnumValue, STORAGE_KEYS } from "@
 function rememberedScope(): AnalysisScope {
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.scope)
+
     return isEnumValue(ANALYSIS_SCOPE, saved) ? saved : ANALYSIS_SCOPE.WholeRoom
   } catch {
     return ANALYSIS_SCOPE.WholeRoom
@@ -23,11 +24,13 @@ export function useScopeChoice() {
   const [scope, setScope] = useState<AnalysisScope>(rememberedScope)
   const choose = (next: AnalysisScope) => {
     setScope(next)
+
     try {
       localStorage.setItem(STORAGE_KEYS.scope, next)
     } catch {
       // Not remembered; the choice still applies to this upload.
     }
   }
+
   return [scope, choose] as const
 }

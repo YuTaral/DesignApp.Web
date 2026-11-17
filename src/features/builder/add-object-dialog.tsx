@@ -66,7 +66,11 @@ function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogO
 
   const confirm = () => {
     add({ ...inVariation(object, variant), color, ...size }, onWall ? { wall, along: wallLength(plan, wall) / 2 } : undefined, decorations)
-    if (onWall) toast.success(MESSAGES.wallItemAdded(variant.label, wallName(plan, wall)))
+
+    if (onWall) {
+      toast.success(MESSAGES.wallItemAdded(variant.label, wallName(plan, wall)))
+    }
+
     onClose()
   }
 
@@ -148,6 +152,7 @@ function ShapePreview({ variant, color }: { variant: CatalogVariant; color: stri
   const corner = hasParts(variant)
     ? cornerOutline({ ...variant, label: variant.label, x: 0, y: 0, rotation: 0, color, wall: null, elevation: 0 }).map((p) => p.join(",")).join(" ")
     : null
+
   return (
     <svg viewBox={`${-box / 2} ${-box / 2} ${box} ${box}`} className="size-16" aria-hidden data-shape-preview={variant.form}>
       {corner ? (

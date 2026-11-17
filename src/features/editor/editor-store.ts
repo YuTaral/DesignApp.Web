@@ -187,6 +187,7 @@ type EditorState = {
 const initial = (roomId: string | null) => {
   // One object for both, so flush() sees nothing pending before the first change.
   const edits: Edits = {}
+
   return {
     roomId,
     edits,
@@ -225,6 +226,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
    */
   const commit = (snapshot: Snapshot) => {
     const { history, position } = get()
+
     set({ ...snapshot, history: [...history.slice(0, position + 1), snapshot], position: position + 1 })
   }
 
@@ -237,7 +239,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
   /** Records a change that was shown but never committed (a slider move that ended without a commit). */
   const flush = () => {
     const { edits, history, position } = get()
-    if (edits !== history[position].edits) commitEdits(edits)
+
+    if (edits !== history[position].edits) {
+      commitEdits(edits)
+    }
   }
 
   /**
@@ -247,6 +252,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
   const toneFor = (index: number) => {
     const { edits, selected, selectedTone } = get()
     const tones = edits[index]?.tones
+
     return tones && selected === index && selectedTone !== null && selectedTone < tones.length ? selectedTone : null
   }
 
@@ -256,6 +262,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
    */
   const go = (position: number) => {
     const snapshot = get().history[position]
+
     set({ edits: snapshot.edits, revision: snapshot.revision, position })
   }
 
@@ -264,7 +271,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
     const { edits, selected, selectedTone } = get()
     const tones = edits[selected]?.tones
     const tone = tones ? Math.min(selectedTone ?? 0, tones.length - 1) : null
-    if (tone !== selectedTone) set({ selectedTone: tone })
+
+    if (tone !== selectedTone) {
+      set({ selectedTone: tone })
+    }
   }
 
   return {
@@ -273,28 +283,45 @@ export const useEditorStore = create<EditorState>((set, get) => {
     brushShape: STROKE_SHAPE.Brush,
 
     open: (roomId) => {
-      if (get().roomId !== roomId) set(initial(roomId))
+      if (get().roomId !== roomId) {
+        set(initial(roomId))
+      }
     },
     loadDesign: (roomId, designId, edits, sizes) => {
       const state = get()
-      if (state.roomId === roomId && state.designId === designId) return
+
+      if (state.roomId === roomId && state.designId === designId) {
+        return
+      }
+
       // The outlines shown don't depend on the design; keep them when the room stays the same.
       const revision = state.roomId === roomId ? state.revision : null
+
       set({ ...initial(roomId), edits, revision, history: [{ edits, revision }], designId, savedEdits: edits, sizes, savedSizes: sizes })
     },
     markSaved: (designId, edits, sizes) => set({ designId, savedEdits: edits, savedSizes: sizes }),
     setBaseRevision: (revision) => {
       const state = get()
-      if (state.revision !== null) return
+
+      if (state.revision !== null) {
+        return
+      }
+
       set({ revision, history: state.history.map((s) => (s.revision === null ? { ...s, revision } : s)) })
     },
     select: (index) => {
-      if (get().marking) return
+      if (get().marking) {
+        return
+      }
+
       const selectedTone = get().edits[index]?.tones ? 0 : null
+
       set(index === 0 ? { selected: 0, selectedTone: null, outlineTool: null } : { selected: index, selectedTone })
     },
     hover: (index) => {
-      if (get().hovered !== index) set({ hovered: index })
+      if (get().hovered !== index) {
+        set({ hovered: index })
+      }
     },
     setColor: (index, color, paint) => {
       // A strength still being changed becomes its own step first, so undo can come back to it.
@@ -302,16 +329,22 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const { edits } = get()
       const tone = toneFor(index)
       const edit = edits[index]
+
       if (tone !== null && edit?.tones) {
         const tones = edit.tones.map((t, i) => (i === tone ? { center: t.center, share: t.share, color, strength: t.color ? t.strength : DEFAULT_STRENGTH, paint } : t))
+
         commitEdits({ ...edits, [index]: summarize(tones) })
+
         return
       }
+
       const strength = edit?.strength ?? DEFAULT_STRENGTH
+
       commitEdits({ ...edits, [index]: paint ? { color, strength, paint } : { color, strength } })
     },
     setSize: (index, size) => {
       const rest = { ...get().sizes }
+
       delete rest[index]
       set({ sizes: size ? { ...rest, [index]: size } : rest })
     },
@@ -319,8 +352,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const { edits } = get()
       const edit = edits[index]
       const tone = toneFor(index)
+
       if (edit?.tones && tone !== null) {
-        if (edit.tones[tone].color) set({ edits: { ...edits, [index]: summarize(edit.tones.map((t, i) => (i === tone ? { ...t, strength } : t))) } })
+        if (edit.tones[tone].color) {
+          set({ edits: { ...edits, [index]: summarize(edit.tones.map((t, i) => (i === tone ? { ...t, strength } : t))) } })
+        }
       } else if (edit) {
         set({ edits: { ...edits, [index]: { ...edit, strength } } })
       }
@@ -330,15 +366,26 @@ export const useEditorStore = create<EditorState>((set, get) => {
       flush()
       const { edits } = get()
       const edit = edits[index]
-      if (!edit) return
-      const tone = toneFor(index)
-      // A tone resets alone; the object stays split.
-      if (edit.tones && tone !== null) {
-        if (!edit.tones[tone].color) return
-        commitEdits({ ...edits, [index]: summarize(edit.tones.map((t, i) => (i === tone ? { center: t.center, share: t.share, strength: t.strength } : t))) })
+
+      if (!edit) {
         return
       }
+
+      const tone = toneFor(index)
+
+      // A tone resets alone; the object stays split.
+      if (edit.tones && tone !== null) {
+        if (!edit.tones[tone].color) {
+          return
+        }
+
+        commitEdits({ ...edits, [index]: summarize(edit.tones.map((t, i) => (i === tone ? { center: t.center, share: t.share, strength: t.strength } : t))) })
+
+        return
+      }
+
       const rest = { ...edits }
+
       delete rest[index]
       commitEdits(rest)
     },
@@ -348,6 +395,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const edit = edits[index]
       const keep = edit && !edit.tones ? { color: edit.color, strength: edit.strength, paint: edit.paint } : {}
       const tones = found.map((t) => ({ center: t.center, share: t.share, strength: DEFAULT_STRENGTH, ...keep }))
+
       commitEdits({ ...edits, [index]: summarize(tones) })
       set({ selectedTone: 0 })
     },
@@ -355,9 +403,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
       flush()
       const { edits } = get()
       const edit = edits[index]
-      if (!edit?.tones) return
+
+      if (!edit?.tones) {
+        return
+      }
+
       const first = edit.tones.find((t) => t.color)
       const rest = { ...edits }
+
       delete rest[index]
       commitEdits(first?.color ? { ...rest, [index]: first.paint ? { color: first.color, strength: first.strength, paint: first.paint } : { color: first.color, strength: first.strength } } : rest)
       set({ selectedTone: null })
@@ -365,11 +418,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
     selectTone: (tone) => set({ selectedTone: tone }),
     highlightTone: (tone) => {
       const current = get().highlightedTone
-      if (current?.index !== tone?.index || current?.tone !== tone?.tone) set({ highlightedTone: tone })
+
+      if (current?.index !== tone?.index || current?.tone !== tone?.tone) {
+        set({ highlightedTone: tone })
+      }
     },
     resetAll: () => {
       flush()
-      if (Object.keys(get().edits).length > 0) commitEdits({})
+
+      if (Object.keys(get().edits).length > 0) {
+        commitEdits({})
+      }
     },
     setOutlineTool: (tool) => set({ outlineTool: get().selected ? tool : null, comparing: false }),
     setBrushSize: (size) => set({ brushSize: Math.round(Math.min(LIMITS.brushSizes.max, Math.max(LIMITS.brushSizes.min, size))) }),
@@ -377,7 +436,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
     applyOutlineFix: (revision, selectIndex) => {
       flush()
       commit({ edits: get().edits, revision })
-      if (selectIndex !== undefined) set({ selected: selectIndex })
+
+      if (selectIndex !== undefined) {
+        set({ selected: selectIndex })
+      }
     },
     startMarking: () => {
       flush()
@@ -390,29 +452,48 @@ export const useEditorStore = create<EditorState>((set, get) => {
     openParts: (index) => {
       if (index === null) {
         set({ partsObject: null, highlightedTone: null, outlineTool: null })
+
         return
       }
+
       // The object (or one of its parts) stays selected; a split one's color controls start on its first color.
       const { edits, selected } = get()
+
       set({ partsObject: index, outlineTool: null, comparing: false, selectedTone: edits[selected]?.tones ? 0 : null })
     },
     setRemoving: (labels) => set({ removing: labels, outlineTool: labels.length > 0 ? null : get().outlineTool }),
     undo: () => {
-      if (get().marking || get().removing.length > 0) return
+      if (get().marking || get().removing.length > 0) {
+        return
+      }
+
       flush()
       const { position } = get()
-      if (position > 0) go(position - 1)
+
+      if (position > 0) {
+        go(position - 1)
+      }
+
       keepToneInRange()
     },
     redo: () => {
-      if (get().marking || get().removing.length > 0) return
+      if (get().marking || get().removing.length > 0) {
+        return
+      }
+
       flush()
       const { history, position } = get()
-      if (position < history.length - 1) go(position + 1)
+
+      if (position < history.length - 1) {
+        go(position + 1)
+      }
+
       keepToneInRange()
     },
     toggleCompare: () => {
-      if (!get().marking) set({ comparing: !get().comparing, outlineTool: null })
+      if (!get().marking) {
+        set({ comparing: !get().comparing, outlineTool: null })
+      }
     },
   }
 })
@@ -424,7 +505,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
  */
 export function summarize(tones: readonly ToneEdit[]): ObjectEdit {
   const first = tones.find((t) => t.color)
-  if (!first?.color) return { color: tones[0].center, strength: 0, tones }
+
+  if (!first?.color) {
+    return { color: tones[0].center, strength: 0, tones }
+  }
+
   return first.paint ? { color: first.color, strength: first.strength, paint: first.paint, tones } : { color: first.color, strength: first.strength, tones }
 }
 
@@ -435,16 +520,19 @@ export function summarize(tones: readonly ToneEdit[]): ObjectEdit {
  */
 export function sameEdits(a: Edits, b: Edits) {
   const keys = Object.keys(a)
+
   return (
     keys.length === Object.keys(b).length &&
     keys.every((key) => {
       const x = a[Number(key)]
       const y = b[Number(key)]
+
       return (
         y !== undefined && x.color.toUpperCase() === y.color.toUpperCase() && x.strength === y.strength && x.paint === y.paint &&
         (x.tones?.length ?? 0) === (y.tones?.length ?? 0) &&
         (x.tones ?? []).every((t, i) => {
           const u = y.tones![i]
+
           return t.center.toUpperCase() === u.center.toUpperCase() && t.share === u.share && t.strength === u.strength && t.paint === u.paint &&
             (t.color ?? "").toUpperCase() === (u.color ?? "").toUpperCase()
         })
@@ -460,10 +548,12 @@ export function sameEdits(a: Edits, b: Edits) {
  */
 export function sameSizes(a: SurfaceSizes, b: SurfaceSizes) {
   const keys = Object.keys(a)
+
   return (
     keys.length === Object.keys(b).length &&
     keys.every((key) => {
       const y = b[Number(key)]
+
       return y !== undefined && a[Number(key)].width === y.width && a[Number(key)].height === y.height
     })
   )

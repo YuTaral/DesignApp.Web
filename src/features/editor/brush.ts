@@ -28,24 +28,34 @@ function walkBrush(
   const stamp = (cx: number, cy: number) => {
     const x0 = Math.max(0, Math.floor(cx - radius)), x1 = Math.min(width - 1, Math.ceil(cx + radius))
     const y0 = Math.max(0, Math.floor(cy - radius)), y1 = Math.min(height - 1, Math.ceil(cy + radius))
+
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const dx = x + 0.5 - cx, dy = y + 0.5 - cy
-        if (dx * dx + dy * dy <= radius * radius) onPixel(y * width + x)
+
+        if (dx * dx + dy * dy <= radius * radius) {
+          onPixel(y * width + x)
+        }
       }
     }
   }
 
   let previous = from
+
   for (const point of points) {
     const bx = point.x * width, by = point.y * height
+
     if (!previous) {
       stamp(bx, by)
     } else {
       const ax = previous.x * width, ay = previous.y * height
       const steps = Math.max(1, Math.ceil(Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) / spacing))
-      for (let s = 1; s <= steps; s++) stamp(ax + ((bx - ax) * s) / steps, ay + ((by - ay) * s) / steps)
+
+      for (let s = 1; s <= steps; s++) {
+        stamp(ax + ((bx - ax) * s) / steps, ay + ((by - ay) * s) / steps)
+      }
     }
+
     previous = point
   }
 }
@@ -66,26 +76,41 @@ function walkArea(width: number, height: number, shape: StrokeShape, points: Str
     const ax = points[0].x * width, ay = points[0].y * height, bx = points[1].x * width, by = points[1].y * height
     const x0 = Math.max(0, Math.ceil(Math.min(ax, bx) - 0.5)), x1 = Math.min(width - 1, Math.floor(Math.max(ax, bx) - 0.5))
     const y0 = Math.max(0, Math.ceil(Math.min(ay, by) - 0.5)), y1 = Math.min(height - 1, Math.floor(Math.max(ay, by) - 0.5))
+
     for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) onPixel(y * width + x)
+      for (let x = x0; x <= x1; x++) {
+        onPixel(y * width + x)
+      }
     }
+
     return
   }
 
   const xs = points.map((p) => p.x * width)
   const ys = points.map((p) => p.y * height)
   const crossings: number[] = []
+
   for (let y = 0; y < height; y++) {
     const cy = y + 0.5
+
     crossings.length = 0
+
     for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-      if ((ys[i] <= cy) === (ys[j] <= cy)) continue
+      if ((ys[i] <= cy) === (ys[j] <= cy)) {
+        continue
+      }
+
       crossings.push(xs[j] + ((cy - ys[j]) * (xs[i] - xs[j])) / (ys[i] - ys[j]))
     }
+
     crossings.sort((a, b) => a - b)
+
     for (let k = 0; k + 1 < crossings.length; k += 2) {
       const x0 = Math.max(0, Math.ceil(crossings[k] - 0.5)), x1 = Math.min(width - 1, Math.ceil(crossings[k + 1] - 0.5) - 1)
-      for (let x = x0; x <= x1; x++) onPixel(y * width + x)
+
+      for (let x = x0; x <= x1; x++) {
+        onPixel(y * width + x)
+      }
     }
   }
 }
@@ -110,8 +135,11 @@ function walkStroke(
   onPixel: (p: number) => void,
   from?: StrokePoint
 ) {
-  if (shape === STROKE_SHAPE.Brush) walkBrush(width, height, points, radius, onPixel, from)
-  else walkArea(width, height, shape, points, onPixel)
+  if (shape === STROKE_SHAPE.Brush) {
+    walkBrush(width, height, points, radius, onPixel, from)
+  } else {
+    walkArea(width, height, shape, points, onPixel)
+  }
 }
 
 /**
@@ -143,6 +171,7 @@ export function stampStroke(
   parent?: number
 ): number {
   let changed = 0
+
   walkStroke(width, height, shape, points, radius, (p) => {
     if (mode === OUTLINE_BRUSH_MODE.Paint && labels[p] !== target && (parent === undefined || labels[p] === parent)) {
       labels[p] = target
@@ -152,6 +181,7 @@ export function stampStroke(
       changed++
     }
   }, from)
+
   return changed
 }
 
@@ -181,11 +211,13 @@ export function stampMark(
 ): number {
   const value = mode === OUTLINE_BRUSH_MODE.Paint ? 1 : 0
   let changed = 0
+
   walkStroke(width, height, shape, points, radius, (p) => {
     if (mask[p] !== value) {
       mask[p] = value
       changed++
     }
   }, from)
+
   return changed
 }

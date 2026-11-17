@@ -16,7 +16,10 @@ const editorReady = () => until(page, () => !!document.querySelector('canvas[dat
 const text = (selector) => page.evaluate((s) => document.querySelector(s)?.innerText.replace(/\s+/g, ' ').trim() ?? null, selector)
 const clickText = (scope, label) => page.evaluate((s, t) => [...document.querySelectorAll(`${s} button`)].find((b) => b.textContent.trim() === t).click(), scope, label)
 const select = async (index) => {
-  if (!(await selectObject(page, index))) throw new Error(`Object ${index} can't be clicked on the photo`)
+  if (!(await selectObject(page, index))) {
+    throw new Error(`Object ${index} can't be clicked on the photo`)
+  }
+
   await frame()
 }
 const pickRal = async (query, ref) => {
@@ -25,8 +28,10 @@ const pickRal = async (query, ref) => {
   await page.type('aside input[aria-label="Search RAL colors"]', query)
   await until(page, new Function(`return document.querySelectorAll('aside [data-paint]').length > 0 && !!document.querySelector('aside [data-paint="${ref}"]')`), { label: 'paint found' })
   const shown = await page.evaluate(() => document.querySelectorAll('aside [data-paint]').length)
+
   await page.click(`aside [data-paint="${ref}"]`)
   await frame()
+
   return shown
 }
 const openList = async () => {
@@ -41,6 +46,7 @@ try {
   const math = await page.evaluate(async () => {
     const m = await import('/src/features/paints/paint-math.ts')
     const tins = (litres) => m.formatTins(m.tinsFor(litres))
+
     return {
       litres: m.formatNumber(m.litresFor(10, { coats: 2, coverage: 10 })),
       tins: [tins(2.2), tins(0.4), tins(7), tins(11), tins(19.6)],
@@ -48,6 +54,7 @@ try {
       search: [m.matchesPaint({ code: 'RAL 9010', name: 'Pure white' }, 'white 9010'), m.matchesPaint({ code: 'RAL 9010', name: 'Pure white' }, 'red')],
     }
   })
+
   step('Paint math: litres, tins and the closest paint', math.litres === '2.2' && math.tins.join('|') === '1 × 2.5 L|1 × 1 L|1 × 5 L + 2 × 1 L|1 × 10 L + 1 × 1 L|2 × 10 L'
     && math.closest === 'b' && math.search.join() === 'true,false', JSON.stringify(math))
 
@@ -55,12 +62,14 @@ try {
   const room = await page.evaluate(() => fetch('/api/library/minimalist/living-room/1/copy', { method: 'POST' }).then((r) => r.json()))
   const wall = room.objects.find((o) => o.category === 'Wall')
   const furniture = room.objects.find((o) => !['Wall', 'Floor', 'Ceiling', 'Opening'].includes(o.category))
+
   await page.goto(`${WEB}/rooms/${room.id}`, { waitUntil: 'networkidle0' })
   await editorReady()
   await select(wall.index)
   const found = await pickRal('9010', 'ral-classic/9010')
   const label = await text('aside [data-paint-label]')
   const recolored = await recoloredCount(page)
+
   await shot('paint-ral')
   step('Searching "9010" finds RAL 9010 and paints the wall with it', found === 1 && recolored === 1 && label === 'RAL 9010 · Pure white', `${found} found, label "${label}"`)
 
@@ -70,9 +79,11 @@ try {
   await frame()
   const suggestion = await text('aside [data-closest-paint]')
   const labelGone = !(await page.$('aside [data-paint-label]'))
+
   await clickText('aside [data-closest-paint]', 'Use it')
   await frame()
   const switched = await text('aside [data-paint-label]')
+
   step('A quick swatch suggests the closest RAL color, and one click uses it', labelGone && /Closest paint: RAL \d{4}/.test(suggestion ?? '') && /^RAL \d{4} · /.test(switched ?? ''),
     `"${suggestion}" → "${switched}"`)
   // Back to RAL 9010 for the amounts below, and a piece of furniture in a quick color: furniture has no paint list.
@@ -82,6 +93,7 @@ try {
   await page.click('aside [role=radiogroup][aria-label^="Color for"] button')
   await frame()
   const furnitureButton = await page.evaluate(() => [...document.querySelectorAll('aside button')].some((b) => b.textContent.trim() === 'Paint list'))
+
   await select(wall.index)
 
   // 4. The paint list: the wall's height starts at 2.5 m; a 4 m width makes 10 m², 2.2 L, one 2.5 L tin.
@@ -89,12 +101,14 @@ try {
   const wallRow = `[role=dialog] [data-paint-row="${wall.index}"]`
   const inputs = await page.$$(`${wallRow} input`)
   const prefilled = await inputs[1].evaluate((i) => i.value)
+
   await inputs[0].type('4')
   await frame()
   const area = await text(`${wallRow} [data-area]`)
   const total = await text('[role=dialog] [data-paint-total="ral-classic/9010"] [data-litres]')
   const tins = await text('[role=dialog] [data-paint-total="ral-classic/9010"] [data-tins]')
   const shop = await text(`[role=dialog] [data-paint-row="${furniture.index}"]`)
+
   await shot('paint-list')
   step('A 4 × 2.5 m wall needs 2.2 L for two coats: one 2.5 L tin', prefilled === '2.5' && area === '10 m²' && total === '10 m² · 2.2 L' && tins === '1 × 2.5 L',
     `height ${prefilled}, ${area}, ${total}, ${tins}`)
@@ -102,10 +116,12 @@ try {
     `button ${furnitureButton}, row "${shop}"`)
   // Three coats: 3.3 L, which a 2.5 L and a 1 L tin cover.
   const coats = await page.$('[role=dialog] input[max="4"]')
+
   await coats.click({ count: 3 })
   await coats.type('3')
   await frame()
   const threeCoats = await text('[role=dialog] [data-paint-total="ral-classic/9010"]')
+
   step('Changing the coats changes the amount', /3\.3 L/.test(threeCoats ?? '') && /1 × 2\.5 L \+ 1 × 1 L/.test(threeCoats ?? ''), threeCoats)
   await page.keyboard.press('Escape')
   await until(page, () => !document.querySelector('[role=dialog]'), { label: 'list closed' })
@@ -126,14 +142,17 @@ try {
   await page.click('[role=dialog] button[type=submit]')
   await until(page, () => !!new URL(location.href).searchParams.get('design'), { label: 'saved design' })
   const designId = new URL(page.url()).searchParams.get('design')
+
   await page.reload({ waitUntil: 'networkidle0' })
   await editorReady()
   await sleep(300)
   await select(wall.index)
   const keptLabel = await text('aside [data-paint-label]')
+
   await openList()
   const keptWidth = await page.$eval(`${wallRow} input`, (i) => i.value)
   const keptTotal = await text('[role=dialog] [data-paint-total="ral-classic/9010"] [data-litres]')
+
   step('After saving and a reload the paint and the wall size are kept', keptLabel === 'RAL 9010 · Pure white' && keptWidth === '4' && keptTotal === '10 m² · 2.2 L',
     `"${keptLabel}", width ${keptWidth}, ${keptTotal}`)
   await page.keyboard.press('Escape')
@@ -147,6 +166,7 @@ try {
   await page.waitForSelector('[role=dialog] [data-paint-row]')
   await sleep(400)
   const pageList = await text('[role=dialog]')
+
   await shot('paint-design-page')
   step('The design page shows the room\'s paint list', /RAL 9010 Pure white/.test(pageList ?? '') && /4 × 2\.5 m/.test(pageList ?? '') && /1 × 2\.5 L/.test(pageList ?? ''))
   await page.keyboard.press('Escape')
@@ -160,11 +180,14 @@ try {
   await clickText('aside', 'RAL colors')
   await page.waitForSelector('aside [data-paint]')
   const tabOverflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+
   await openList()
   const listOverflow = await page.evaluate(() => {
     const dialog = document.querySelector('[role=dialog]')
+
     return Math.max(document.documentElement.scrollWidth - innerWidth, dialog.scrollWidth - dialog.clientWidth)
   })
+
   await shot('paint-phone')
   step('The RAL colors and the paint list fit a phone screen', tabOverflow <= 0 && listOverflow <= 0, `tab ${tabOverflow} px, list ${listOverflow} px too wide`)
 } catch (error) {

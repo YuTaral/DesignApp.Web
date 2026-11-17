@@ -37,6 +37,7 @@ export type OutlineWall = {
  */
 export function rectangle(width: number, length: number): OutlinePoint[] {
   const [w, l] = [Math.round(width * 100), Math.round(length * 100)]
+
   return [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: l }, { x: 0, y: l }]
 }
 
@@ -46,10 +47,12 @@ export function rectangle(width: number, length: number): OutlinePoint[] {
  */
 export function walls(plan: Shaped): OutlineWall[] {
   const points = plan.outline
+
   return points.map((start, index) => {
     const end = points[(index + 1) % points.length]
     const [dx, dy] = [Math.sign(end.x - start.x), Math.sign(end.y - start.y)]
     const side = dx === 1 ? PLAN_SIDE.Back : dy === 1 ? PLAN_SIDE.Right : dx === -1 ? PLAN_SIDE.Front : PLAN_SIDE.Left
+
     return { index, start, end, dx, dy, length: Math.abs(end.x - start.x) + Math.abs(end.y - start.y), nx: -dy, ny: dx, side }
   })
 }
@@ -61,6 +64,7 @@ export function walls(plan: Shaped): OutlineWall[] {
  */
 export function wallOf(plan: Shaped, wall: number): OutlineWall {
   const all = walls(plan)
+
   return all[wall] ?? all[0]
 }
 
@@ -81,6 +85,7 @@ export function wallLength(plan: Shaped, wall: number) {
  */
 export function wallPoint(plan: Shaped, wall: number, along: number) {
   const { start, dx, dy } = wallOf(plan, wall)
+
   return { x: start.x + dx * along, y: start.y + dy * along }
 }
 
@@ -95,6 +100,7 @@ export function wallPoint(plan: Shaped, wall: number, along: number) {
 export function fromWall(plan: Shaped, wall: number, x: number, y: number) {
   const { start, dx, dy, nx, ny } = wallOf(plan, wall)
   const [rx, ry] = [x - start.x, y - start.y]
+
   return { along: rx * dx + ry * dy, away: rx * nx + ry * ny }
 }
 
@@ -108,9 +114,11 @@ export function nearestWall(plan: Shaped, x: number, y: number) {
   const seen = walls(plan).map((wall) => {
     const { along, away } = fromWall(plan, wall.index, x, y)
     const kept = Math.min(wall.length, Math.max(0, along))
+
     return { wall: wall.index, along: kept, distance: Math.hypot(along - kept, away) }
   })
   const nearest = seen.reduce((a, b) => (b.distance < a.distance ? b : a))
+
   return { wall: nearest.wall, along: nearest.along }
 }
 
@@ -125,6 +133,7 @@ export function wallName(plan: Shaped, wall: number) {
   const own = all[wall] ?? all[0]
   const same = all.filter((w) => w.side === own.side)
   const name = PLAN_SIDE_NAMES[own.side]
+
   return same.length > 1 ? `${name} ${same.indexOf(own) + 1}` : name
 }
 
@@ -137,9 +146,14 @@ export function wallName(plan: Shaped, wall: number) {
 export function contains(plan: Shaped, x: number, y: number) {
   const all = walls(plan)
   const onWall = all.some((w) => between(x, w.start.x, w.end.x) && between(y, w.start.y, w.end.y))
-  if (onWall) return true
+
+  if (onWall) {
+    return true
+  }
+
   // Count the walls running down the plan that a ray to the right crosses.
   const crossings = all.filter((w) => w.dx === 0 && w.start.x > x && y >= Math.min(w.start.y, w.end.y) && y < Math.max(w.start.y, w.end.y))
+
   return crossings.length % 2 === 1
 }
 
@@ -171,14 +185,17 @@ export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Pla
   // Along the wall in view (the photo's right), from its left end.
   const along = (p: { x: number; y: number }) => (p.x - view.start.x) * view.dx + (p.y - view.start.y) * view.dy
   const corner = plan.corner ?? VIEW_CORNER.None
+  // Turned to the right (towards the room) from the left corner, to the left from the right one.
+  const turn = DEGREE * (corner === VIEW_CORNER.Left ? BUILDER.scene.cornerTurn : corner === VIEW_CORNER.Right ? -BUILDER.scene.cornerTurn : 0)
   let at = along(middle)
+
   if (corner !== VIEW_CORNER.None) {
     // The near wall's ends (the room's sides when there is none), a little in from the side wall.
     const ends = facing ? [along(facing.wall.start), along(facing.wall.end)] : plan.outline.map(along)
+
     at = corner === VIEW_CORNER.Left ? Math.min(...ends) + inset : Math.max(...ends) - inset
   }
-  // Turned to the right (towards the room) from the left corner, to the left from the right one.
-  const turn = DEGREE * (corner === VIEW_CORNER.Left ? BUILDER.scene.cornerTurn : corner === VIEW_CORNER.Right ? -BUILDER.scene.cornerTurn : 0)
+
   return {
     x: view.start.x + view.dx * at + view.nx * (deep - inset),
     y: view.start.y + view.dy * at + view.ny * (deep - inset),
@@ -222,6 +239,7 @@ function between(value: number, a: number, b: number) {
 export function stretch(outline: OutlinePoint[], width: number, length: number): OutlinePoint[] {
   const { width: oldWidth, length: oldLength } = extent({ outline })
   const [w, l] = [Math.round(width * 100), Math.round(length * 100)]
+
   return outline.map((p) => ({ x: p.x === oldWidth ? w : p.x, y: p.y === oldLength ? l : p.y }))
 }
 
@@ -236,12 +254,20 @@ export function stretch(outline: OutlinePoint[], width: number, length: number):
 export function seenFrom(plan: Shaped, wall: number, x: number, y: number) {
   const own = wallOf(plan, wall)
   const { along, away } = fromWall(plan, wall, x, y)
-  if (away < 0 || along < 0 || along > own.length) return false
+
+  if (away < 0 || along < 0 || along > own.length) {
+    return false
+  }
+
   // A wall parallel to this one, between it and the point, across the line from the point straight to the wall.
   return !walls(plan).some((other) => {
-    if (other.index === own.index || (other.dx === 0) !== (own.dx === 0)) return false
+    if (other.index === own.index || (other.dx === 0) !== (own.dx === 0)) {
+      return false
+    }
+
     const gap = fromWall(plan, wall, other.start.x, other.start.y).away
     const [a, b] = [fromWall(plan, wall, other.start.x, other.start.y).along, fromWall(plan, wall, other.end.x, other.end.y).along]
+
     return gap > 0 && gap < away && along > Math.min(a, b) && along < Math.max(a, b)
   })
 }
@@ -258,7 +284,11 @@ export function seenFrom(plan: Shaped, wall: number, x: number, y: number) {
 export function fits(plan: Shaped, x: number, y: number, width: number, depth: number) {
   const [left, right, top, bottom] = [x - width / 2, x + width / 2, y - depth / 2, y + depth / 2]
   const corners = [[left, top], [right, top], [right, bottom], [left, bottom]]
-  if (!corners.every(([cx, cy]) => contains(plan, cx, cy))) return false
+
+  if (!corners.every(([cx, cy]) => contains(plan, cx, cy))) {
+    return false
+  }
+
   return !plan.outline.some((p) => p.x > left && p.x < right && p.y > top && p.y < bottom)
 }
 
@@ -273,16 +303,24 @@ export function fits(plan: Shaped, x: number, y: number, width: number, depth: n
  * @param depth - Its size down the plan.
  */
 export function fitInside(plan: Shaped, x: number, y: number, width: number, depth: number) {
-  if (fits(plan, x, y, width, depth)) return { x, y }
+  if (fits(plan, x, y, width, depth)) {
+    return { x, y }
+  }
+
   const room = extent(plan)
   const step = BUILDER.gridCm
   let best: { x: number; y: number; distance: number } | null = null
+
   for (let cy = depth / 2; cy <= room.length - depth / 2 + 0.01; cy += step) {
     for (let cx = width / 2; cx <= room.width - width / 2 + 0.01; cx += step) {
       const distance = Math.hypot(cx - x, cy - y)
-      if ((!best || distance < best.distance) && fits(plan, cx, cy, width, depth)) best = { x: cx, y: cy, distance }
+
+      if ((!best || distance < best.distance) && fits(plan, cx, cy, width, depth)) {
+        best = { x: cx, y: cy, distance }
+      }
     }
   }
+
   return best ? { x: best.x, y: best.y } : { x: room.width / 2, y: room.length / 2 }
 }
 
@@ -309,12 +347,15 @@ export type Reshaped = {
  */
 export function normalize(points: OutlinePoint[]) {
   let list = points.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }))
+
   for (let changed = true; changed && list.length > 2; ) {
     changed = false
+
     for (let i = 0; i < list.length && list.length > 2; i++) {
       const [before, here, after] = [list[(i - 1 + list.length) % list.length], list[i], list[(i + 1) % list.length]]
       const repeated = here.x === after.x && here.y === after.y
       const straight = (before.x === here.x && here.x === after.x) || (before.y === here.y && here.y === after.y)
+
       if (repeated || straight) {
         list = list.filter((_, n) => n !== i)
         changed = true
@@ -322,9 +363,12 @@ export function normalize(points: OutlinePoint[]) {
       }
     }
   }
+
   const shift = { x: -Math.min(...list.map((p) => p.x)), y: -Math.min(...list.map((p) => p.y)) }
+
   list = list.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y }))
   const first = list.reduce((best, p, i) => (p.y < list[best].y || (p.y === list[best].y && p.x < list[best].x) ? i : best), 0)
+
   return { outline: [...list.slice(first), ...list.slice(0, first)], shift }
 }
 
@@ -336,31 +380,59 @@ export function normalize(points: OutlinePoint[]) {
  */
 export function isValidOutline(points: OutlinePoint[]) {
   const n = points.length
-  if (n < 4 || n > BUILDER.maxCorners || points.some((p) => !Number.isInteger(p.x) || !Number.isInteger(p.y))) return false
+
+  if (n < 4 || n > BUILDER.maxCorners || points.some((p) => !Number.isInteger(p.x) || !Number.isInteger(p.y))) {
+    return false
+  }
+
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
   const [min, max] = [BUILDER.wall.min * 100, BUILDER.wall.max * 100]
-  if (Math.min(...xs) !== 0 || Math.min(...ys) !== 0 || Math.max(...xs) < min || Math.max(...xs) > max || Math.max(...ys) < min || Math.max(...ys) > max) return false
+
+  if (Math.min(...xs) !== 0 || Math.min(...ys) !== 0 || Math.max(...xs) < min || Math.max(...xs) > max || Math.max(...ys) < min || Math.max(...ys) > max) {
+    return false
+  }
+
   const topLeft = points.filter((p) => p.y === 0).reduce((a, b) => (b.x < a.x ? b : a))
-  if (points[0] !== topLeft && (points[0].x !== topLeft.x || points[0].y !== topLeft.y)) return false
+
+  if (points[0] !== topLeft && (points[0].x !== topLeft.x || points[0].y !== topLeft.y)) {
+    return false
+  }
+
   const all = walls({ outline: points })
+
   for (let i = 0; i < n; i++) {
     const [wall, next] = [all[i], all[(i + 1) % n]]
     const straight = (wall.dx === 0) !== (wall.dy === 0)
-    if (!straight || wall.length < BUILDER.minWallCm || (wall.dx === 0) === (next.dx === 0)) return false
+
+    if (!straight || wall.length < BUILDER.minWallCm || (wall.dx === 0) === (next.dx === 0)) {
+      return false
+    }
   }
+
   const area = points.reduce((sum, p, i) => sum + p.x * points[(i + 1) % n].y - points[(i + 1) % n].x * p.y, 0)
-  if (area <= 0) return false
+
+  if (area <= 0) {
+    return false
+  }
+
   for (let i = 0; i < n; i++) {
     for (let j = i + 2; j < n; j++) {
-      if (i === 0 && j === n - 1) continue
+      if (i === 0 && j === n - 1) {
+        continue
+      }
+
       const [a, b] = [all[i], all[j]]
       const overlap =
         Math.min(a.start.x, a.end.x) <= Math.max(b.start.x, b.end.x) && Math.min(b.start.x, b.end.x) <= Math.max(a.start.x, a.end.x) &&
         Math.min(a.start.y, a.end.y) <= Math.max(b.start.y, b.end.y) && Math.min(b.start.y, b.end.y) <= Math.max(a.start.y, a.end.y)
-      if (overlap) return false
+
+      if (overlap) {
+        return false
+      }
     }
   }
+
   return true
 }
 
@@ -374,6 +446,7 @@ export function moveWall(outline: OutlinePoint[], wall: number, distance: number
   const own = walls({ outline })[wall]
   const [ox, oy] = [-own.nx * distance, -own.ny * distance]
   const next = (wall + 1) % outline.length
+
   return {
     outline: outline.map((p, i) => (i === wall || i === next ? { x: p.x + ox, y: p.y + oy } : p)),
     move: (w, p) => (w === wall ? { x: p.x + ox, y: p.y + oy } : p),
@@ -393,6 +466,7 @@ export function moveCorner(outline: OutlinePoint[], corner: number, x: number, y
   const [before, after] = [(corner - 1 + n) % n, corner]
   const across = (w: number) => all[w].dy === 0
   const shifted = (w: number, p: OutlinePoint) => (across(w) ? { x: p.x, y } : { x, y: p.y })
+
   return {
     outline: outline.map((p, i) => (i === corner ? { x, y } : i === before ? shifted(before, p) : i === (corner + 1) % n ? shifted(after, p) : p)),
     move: (w, p) => (w === before || w === after ? shifted(w, p) : p),
@@ -414,11 +488,16 @@ export function pushSection(outline: OutlinePoint[], wall: number, from: number,
   const at = (along: number) => ({ x: own.start.x + own.dx * along, y: own.start.y + own.dy * along })
   const [a, b] = [at(from), at(to)]
   const inserted = [a, { x: a.x + ox, y: a.y + oy }, { x: b.x + ox, y: b.y + oy }, b]
+
   return {
     outline: [...outline.slice(0, wall + 1), ...inserted, ...outline.slice(wall + 1)],
     move: (w, p) => {
-      if (w !== wall) return p
+      if (w !== wall) {
+        return p
+      }
+
       const along = (p.x - own.start.x) * own.dx + (p.y - own.start.y) * own.dy
+
       return along >= from && along <= to ? { x: p.x + ox, y: p.y + oy } : p
     },
   }

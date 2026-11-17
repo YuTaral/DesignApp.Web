@@ -33,12 +33,17 @@ export function useOutlineFixes(room: Room, { sync = true }: { sync?: boolean } 
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (sync) setBaseRevision(room.labelMapRevision)
+    if (sync) {
+      setBaseRevision(room.labelMapRevision)
+    }
   }, [sync, room.labelMapRevision, setBaseRevision])
 
   // Undo or redo across a stroke shows another version; tell the API, so a reload shows the same outlines.
   useEffect(() => {
-    if (!sync || revision === null || revision === room.labelMapRevision) return
+    if (!sync || revision === null || revision === room.labelMapRevision) {
+      return
+    }
+
     selectLabelMapRevision(room.id, revision)
       .then((updated) => queryClient.setQueryData(QUERY_KEYS.room(room.id), updated))
       .catch((error: unknown) => toast.error(errorMessage(error)))
@@ -50,17 +55,24 @@ export function useOutlineFixes(room: Room, { sync = true }: { sync?: boolean } 
    * @returns Whether it was saved (on failure the user sees why, and the canvas undoes its preview).
    */
   const save = async (stroke: FinishedStroke): Promise<boolean> => {
-    if (!selected || revision === null) return false
+    if (!selected || revision === null) {
+      return false
+    }
+
     setSaving(true)
+
     try {
       const updated = await saveOutlineStroke(room.id, { baseRevision: revision, objectIndex: selected, ...stroke })
+
       // The editor first: if a render came between the two, the sync above would only repeat the
       // new version to the API, never send back the old one.
       applyOutlineFix(updated.labelMapRevision)
       queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
+
       return true
     } catch (error) {
       toast.error(errorMessage(error))
+
       return false
     } finally {
       setSaving(false)

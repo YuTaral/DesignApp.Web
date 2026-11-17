@@ -61,6 +61,7 @@ export function useLibrary() {
 /** Copies one layout of a sample room into a room of the visitor, ready at once (no AI runs). */
 export function useCopyLibraryRoom() {
   const queryClient = useQueryClient()
+
   return useMutation({
     mutationFn: ({ designId, roomId, layoutId, ai }: { designId: string; roomId: string; layoutId: string; ai?: AiMode }) => {
       return sendJson<Room>("POST", withAi(API.libraryLayoutCopy(designId, roomId, layoutId), ai))
@@ -72,6 +73,7 @@ export function useCopyLibraryRoom() {
 /** Copies a whole sample house, each room in its first layout, into a new design of the account. */
 export function useCopyLibraryDesign() {
   const queryClient = useQueryClient()
+
   return useMutation({
     mutationFn: ({ designId, ai }: { designId: string; ai?: AiMode }) => {
       return sendJson<Design>("POST", withAi(API.libraryDesignCopy(designId), ai))

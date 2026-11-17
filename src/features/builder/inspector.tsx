@@ -22,7 +22,11 @@ import { WallChoice } from "./wall-choice"
 export function Inspector({ plan }: { plan: Plan }) {
   const selected = useBuilderStore((state) => state.selected)
   const item = plan.items[selected]
-  if (!item) return <RoomInspector plan={plan} />
+
+  if (!item) {
+    return <RoomInspector plan={plan} />
+  }
+
   return isWallItem(item) ? <WallItemInspector plan={plan} index={selected} /> : <ItemInspector plan={plan} index={selected} />
 }
 
@@ -179,7 +183,10 @@ function VariationChoice({ plan, index }: { plan: Plan; index: number }) {
   const catalog = useCatalog(plan.roomType).data ?? []
   const item = plan.items[index]
   const found = variationOf(catalog, item)
-  if (!found || found.object.variants.length < 2) return null
+
+  if (!found || found.object.variants.length < 2) {
+    return null
+  }
 
   return (
     <div className="space-y-2">
@@ -217,6 +224,7 @@ function ItemDecorations({ plan, index }: { plan: Plan; index: number }) {
   const catalog = useCatalog(plan.roomType).data ?? []
   const item = plan.items[index]
   const suggestions = variationOf(catalog, item)?.object.decorations ?? []
+
   return <DecorationChoice suggestions={suggestions} value={item.decorations ?? []} onChange={(decorations) => update(index, { decorations })} />
 }
 
@@ -318,7 +326,10 @@ export function NumberField({
         onChange={(event) => {
           setText(event.target.value)
           const number = Number(event.target.value)
-          if (event.target.value !== "" && number >= min && number <= max) onCommit(number)
+
+          if (event.target.value !== "" && number >= min && number <= max) {
+            onCommit(number)
+          }
         }}
       />
     </label>

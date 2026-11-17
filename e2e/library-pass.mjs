@@ -12,7 +12,12 @@ const step = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  $
 
 const { browser, page, log, shot } = await launch()
 const posts = []
-page.on('request', (r) => { if (r.method() === 'POST') posts.push(new URL(r.url()).pathname) })
+
+page.on('request', (r) => {
+  if (r.method() === 'POST') {
+    posts.push(new URL(r.url()).pathname)
+  }
+})
 const hasText = (needle) => page.evaluate((n) => document.body.innerText.includes(n), needle)
 const frame = () => sleep(250)
 const editorReady = () => until(page, () => !!document.querySelector('canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
@@ -21,16 +26,23 @@ const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll
 const listed = async () => {
   const room = await page.evaluate(() => fetch(`/api/rooms/${location.pathname.split('/').at(-1)}`).then((r) => r.json()))
   const shown = await shownObjects(page)
+
   return room.objects.filter((o) => !o.parentIndex && shown.has(o.index)).map((o) => ({ index: o.index, text: o.label, category: o.category }))
 }
 /** Selects the first of the objects that can be clicked on the photo, and returns it. */
 const selectFirst = async (objects) => {
-  for (const object of objects) if (await selectObject(page, object.index)) return object
+  for (const object of objects) {
+    if (await selectObject(page, object.index)) {
+      return object
+    }
+  }
+
   throw new Error('No object could be clicked on the photo')
 }
 const mapNow = () => page.evaluate(() => document.querySelector('canvas[data-photo-rect]').dataset.labelMap)
 const toPage = (u, v) => page.evaluate((u, v) => {
   const c = document.querySelector('canvas[data-photo-rect]'); const r = JSON.parse(c.dataset.photoRect); const b = c.getBoundingClientRect()
+
   return { x: b.left + r.x + u * r.width, y: b.top + r.y + v * r.height }
 }, u, v)
 
@@ -43,15 +55,18 @@ try {
   await until(page, () => location.pathname === '/library', { label: 'library page' })
   const houses = await page.evaluate(() => fetch('/api/library').then((r) => r.json()))
   const house = houses[0]
+
   // One card per house, each with its cover (a grid of its rooms), all on one screen on a desktop.
   await until(page, () => {
     const covers = [...document.querySelectorAll('main a[data-house] img')]
+
     return covers.length > 0 && covers.every((i) => i.complete && i.naturalWidth > 0)
   }, { label: 'house covers loaded' })
   const houseCards = await page.evaluate(() => [...document.querySelectorAll('main a[data-house]')].map((a) => ({
     id: a.dataset.house, cover: a.querySelector('img').src.endsWith('/cover'), name: a.querySelector('h2').textContent.trim(),
   })))
   const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight)
+
   await shot('library')
   step('Every sample house is a card with its cover', houseCards.map((c) => c.name).join('|') === houses.map((h) => h.name).join('|') && houseCards.every((c) => c.cover),
     `${houseCards.map((c) => c.name).join(', ')}; page ${pageHeight} px tall`)
@@ -59,10 +74,12 @@ try {
   await until(page, () => new URL(location.href).searchParams.has('house'), { label: 'house in the address' })
   await until(page, () => {
     const visible = [...document.querySelectorAll('main ul li button[data-room] img')].filter((i) => i.getBoundingClientRect().top < innerHeight)
+
     return visible.length > 0 && visible.every((i) => i.complete && i.naturalWidth > 0)
   }, { label: 'room photos on screen loaded' })
   const thumbnails = await page.evaluate(() => [...document.querySelectorAll('main ul li button[data-room] img')].every((i) => i.src.endsWith('/thumbnail')))
   const tiles = await page.evaluate((id) => [...document.querySelectorAll(`section[aria-labelledby="house-${id}"] button[data-room]`)].map((b) => b.dataset.room), house.id)
+
   await shot('library-house-rooms')
   step('A house\'s card opens its rooms, with thumbnails for the tiles', tiles.join() === house.rooms.map((r) => r.id).join() && thumbnails, `${tiles.length} rooms`)
   step('A guest is asked to sign in to save the whole house', await hasText('Sign in to save the whole house'))
@@ -71,14 +88,18 @@ try {
   // or an analysis.
   const room = house.rooms[0]
   const layout = room.layouts.at(-1)
+
   await page.click(`main button[data-room="${room.id}"]`)
+
   if (room.layouts.length > 1) {
     await until(page, () => {
       const images = [...document.querySelectorAll('[role=dialog] button[data-layout] img')]
+
       return images.length > 0 && images.every((i) => i.complete && i.naturalWidth > 0)
     }, { label: 'layout chooser with its photos' })
     await sleep(400) // the dialog's fade-in
     const shown = await page.evaluate(() => [...document.querySelectorAll('[role=dialog] button[data-layout]')].map((b) => b.dataset.layout))
+
     await shot('library-layouts')
     step('A room with several layouts asks which one', shown.join() === room.layouts.map((l) => l.id).join(), `${shown.length} layouts`)
     // Escape closes it without copying anything, and the focus goes back to the room's tile.
@@ -86,21 +107,27 @@ try {
     await until(page, () => !document.querySelector('[role=dialog]'), { label: 'chooser closed' })
     await sleep(400)
     const focused = await page.evaluate(() => document.activeElement?.dataset?.room)
+
     step('Escape closes the chooser and gives the focus back to the room', focused === room.id && !posts.some((p) => p.endsWith('/copy')), `focus on ${focused}`)
     await page.click(`main button[data-room="${room.id}"]`)
     await until(page, () => document.querySelectorAll('[role=dialog] button[data-layout]').length > 0, { label: 'layout chooser again' })
     await sleep(300)
     await page.click(`[role=dialog] button[data-layout="${layout.id}"]`)
   }
+
   const started = Date.now()
+
   await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'editor page' })
   await editorReady()
   const openedIn = Date.now() - started
+
   await sleep(300)
   const items = await listed()
   const statusText = await page.evaluate(() => [...document.querySelectorAll('[aria-live=polite]')].map((e) => e.textContent.trim()).join(' '))
+
   await shot('library-room')
   const opened = await page.evaluate((id) => fetch(`/api/rooms/${id}`).then((r) => r.json()), new URL(page.url()).pathname.split('/').at(-1))
+
   step('The chosen layout opens Ready with all its objects', /Ready/.test(statusText) && items.length === layout.objectCount
     && opened.libraryRoom === `${house.id}/${room.id}/${layout.id}`, `${items.length} objects, ${opened.libraryRoom}, ${openedIn} ms`)
   step('It is marked as a sample room', await hasText('Sample room'))
@@ -111,12 +138,14 @@ try {
   await page.click('[role=radiogroup][aria-label^="Color for"] button')
   await frame()
   const recolored = await recoloredCount(page)
+
   step('An object can be recolored', recolored === 1, `${recolored} recolored`)
 
   // 4. Fix the selected object's outline with a box.
   await clickButton('Add'); await clickButton('Box'); await frame()
   const before = await mapNow()
   const [a, b] = [await toPage(0.45, 0.45), await toPage(0.55, 0.55)]
+
   await page.mouse.move(a.x, a.y); await page.mouse.down()
   await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up()
   await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap !== ${JSON.stringify(before)}`), { label: 'box saved' })
@@ -126,14 +155,23 @@ try {
 
   // 5. Remove the last listed object (the fake eraser in Development).
   const victim = await selectFirst((await listed()).filter((o) => !['Wall', 'Floor', 'Ceiling'].includes(o.category)).reverse())
+
   await page.evaluate(() => [...document.querySelectorAll('aside button')].find((b) => /^Remove (object|\d+ objects)$/.test(b.textContent.trim())).click())
-  for (let i = 0; i < 300 && (await shownObjects(page)).has(victim.index); i++) await sleep(100)
-  if ((await shownObjects(page)).has(victim.index)) throw new Error('Timed out waiting for the object to be removed')
+
+  for (let i = 0; i < 300 && (await shownObjects(page)).has(victim.index); i++) {
+    await sleep(100)
+  }
+
+  if ((await shownObjects(page)).has(victim.index)) {
+    throw new Error('Timed out waiting for the object to be removed')
+  }
+
   step('An object can be removed from a sample room', true, victim.text)
   await page.keyboard.press('Escape'); await frame()
 
   // 6. Sign up from the editor and save the room as a design.
   const roomId = new URL(page.url()).pathname.split('/').at(-1)
+
   await page.click('::-p-text(Sign in to save)')
   await until(page, () => location.pathname === '/sign-in', { label: 'sign-in' })
   await page.click('::-p-text(Create an account)')
@@ -161,6 +199,7 @@ try {
   await sleep(300)
   const cards = await page.evaluate(() => [...document.querySelectorAll('main a[href*="/rooms/"]')].map((a) => a.getAttribute('href')))
   const distinct = [...new Set(cards.map((h) => h.split('?')[0]))]
+
   await shot('library-house')
   step('The whole house becomes a design with every room', distinct.length === tiles.length, `${distinct.length} of ${tiles.length} rooms`)
   await page.goto(`${WEB}${distinct.at(-1)}`, { waitUntil: 'networkidle0' })
@@ -172,6 +211,7 @@ try {
   await page.goto(`${WEB}/library`, { waitUntil: 'networkidle0' })
   await until(page, () => document.querySelectorAll('main a[data-house]').length > 0, { label: 'house cards on phone' })
   const phoneCards = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+
   await page.click(`main a[data-house="${house.id}"]`)
   await until(page, () => document.querySelectorAll('main ul li button[data-room]').length > 0, { label: 'tiles on phone' })
   await page.click('::-p-text(All houses)')
@@ -180,6 +220,7 @@ try {
   await page.click(`main a[data-house="${house.id}"]`)
   await until(page, () => document.querySelectorAll('main ul li button[data-room]').length > 0, { label: 'tiles on phone again' })
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+
   await shot('library-phone')
   step('The library fits a phone screen (houses and rooms)', overflow <= 0 && phoneCards <= 0, `rooms ${overflow} px, houses ${phoneCards} px too wide`)
 } catch (error) {

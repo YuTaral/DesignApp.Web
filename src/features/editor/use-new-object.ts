@@ -25,19 +25,26 @@ export function useNewObject(room: Room) {
    * @returns Whether it was saved (on failure the user sees why, and the mark stays).
    */
   const save = async (label: string, category: ObjectCategory): Promise<boolean> => {
-    if (revision === null || markStrokes.length === 0) return false
+    if (revision === null || markStrokes.length === 0) {
+      return false
+    }
+
     setSaving(true)
+
     try {
       const updated = await addRoomObject(room.id, { baseRevision: revision, label, category, strokes: markStrokes })
       const known = new Set(room.objects.map((o) => o.index))
       const added = updated.objects.find((o) => !known.has(o.index))
+
       // The editor first, as with outline fixes, so the version sync never sends the old version back.
       applyOutlineFix(updated.labelMapRevision, added?.index)
       stopMarking()
       queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
+
       return true
     } catch (error) {
       toast.error(errorMessage(error))
+
       return false
     } finally {
       setSaving(false)

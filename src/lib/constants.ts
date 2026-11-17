@@ -162,6 +162,7 @@ export const ROOM_STATUS = {
   Ready: "Ready",
   Failed: "Failed",
 } as const
+
 export type RoomStatus = (typeof ROOM_STATUS)[keyof typeof ROOM_STATUS]
 
 /** The kind of a detected object. */
@@ -177,6 +178,7 @@ export const OBJECT_CATEGORY = {
   Other: "Other",
   Opening: "Opening",
 } as const
+
 export type ObjectCategory = (typeof OBJECT_CATEGORY)[keyof typeof OBJECT_CATEGORY]
 
 /**
@@ -211,10 +213,12 @@ export const ANALYSIS_SCOPE = {
   NoDoorsOrWindows: "NoDoorsOrWindows",
   ObjectsOnly: "ObjectsOnly",
 } as const
+
 export type AnalysisScope = (typeof ANALYSIS_SCOPE)[keyof typeof ANALYSIS_SCOPE]
 
 /** Which AI analyzes a photo: the free built-in fakes or Claude and SAM 3. */
 export const AI_MODE = { Fake: "Fake", Real: "Real" } as const
+
 export type AiMode = (typeof AI_MODE)[keyof typeof AI_MODE]
 
 /** How the area being marked as a new object is tinted while marking: the accent color over a mid gray. */
@@ -222,6 +226,7 @@ export const MARK_PREVIEW = { color: "#F97316", source: "#808080", strength: 0.7
 
 /** Whether a brush stroke adds pixels to the object or takes them away. */
 export const OUTLINE_BRUSH_MODE = { Paint: "Paint", Erase: "Erase" } as const
+
 export type OutlineBrushMode = (typeof OUTLINE_BRUSH_MODE)[keyof typeof OUTLINE_BRUSH_MODE]
 
 /**
@@ -229,6 +234,7 @@ export type OutlineBrushMode = (typeof OUTLINE_BRUSH_MODE)[keyof typeof OUTLINE_
  * box's two corners, or the inside of a lasso drawn around an area.
  */
 export const STROKE_SHAPE = { Brush: "Brush", Box: "Box", Lasso: "Lasso" } as const
+
 export type StrokeShape = (typeof STROKE_SHAPE)[keyof typeof STROKE_SHAPE]
 
 /** The kinds of room the builder makes (Domain Constants.RoomType), each with its own common objects. */
@@ -236,6 +242,7 @@ export const ROOM_TYPE = {
   LivingRoom: "LivingRoom", Bedroom: "Bedroom", Kitchen: "Kitchen", Bathroom: "Bathroom",
   DiningRoom: "DiningRoom", HomeOffice: "HomeOffice", KidsRoom: "KidsRoom",
 } as const
+
 export type RoomType = (typeof ROOM_TYPE)[keyof typeof ROOM_TYPE]
 
 /** How each room type is shown to the user. */
@@ -253,6 +260,7 @@ export const ITEM_SHAPE = {
   Table: "Table", Chair: "Chair", Rug: "Rug", Plant: "Plant", Lamp: "Lamp",
   Window: "Window", Door: "Door", Picture: "Picture", WallBox: "WallBox",
 } as const
+
 export type ItemShape = (typeof ITEM_SHAPE)[keyof typeof ITEM_SHAPE]
 
 /**
@@ -262,6 +270,7 @@ export type ItemShape = (typeof ITEM_SHAPE)[keyof typeof ITEM_SHAPE]
  * deep (corner sofas); or an ellipse (round when its width and depth are equal).
  */
 export const ITEM_FORM = { Standard: "Standard", LShaped: "LShaped", PShaped: "PShaped", Round: "Round" } as const
+
 export type ItemForm = (typeof ITEM_FORM)[keyof typeof ITEM_FORM]
 
 /**
@@ -270,6 +279,7 @@ export type ItemForm = (typeof ITEM_FORM)[keyof typeof ITEM_FORM]
  * 0 to 3 are its back, right, front and left walls.
  */
 export const PLAN_SIDE = { Back: "Back", Right: "Right", Front: "Front", Left: "Left" } as const
+
 export type PlanSide = (typeof PLAN_SIDE)[keyof typeof PLAN_SIDE]
 
 /** The sides' wall names as the user reads them. */
@@ -280,6 +290,7 @@ export const PLAN_SIDE_NAMES: Record<PlanSide, string> = { Back: "Back wall", Ri
  * middle, or in the near left or right corner, turned to look diagonally across the room.
  */
 export const VIEW_CORNER = { None: "None", Left: "Left", Right: "Right" } as const
+
 export type ViewCorner = (typeof VIEW_CORNER)[keyof typeof VIEW_CORNER]
 
 /** Where the camera stands, as the user reads it. */
@@ -290,6 +301,7 @@ export const PHOTO_STYLE = {
   AsBuilt: "AsBuilt", Modern: "Modern", Scandinavian: "Scandinavian", Boho: "Boho", Industrial: "Industrial", Japandi: "Japandi",
   MidCentury: "MidCentury", Farmhouse: "Farmhouse", Coastal: "Coastal", Minimalist: "Minimalist", Traditional: "Traditional", ArtDeco: "ArtDeco",
 } as const
+
 export type PhotoStyle = (typeof PHOTO_STYLE)[keyof typeof PHOTO_STYLE]
 
 /** The photo styles' names and what each looks like, as the user reads them. */
@@ -312,6 +324,7 @@ export const PHOTO_STYLE_NAMES: Record<PhotoStyle, { name: string; looks: string
 export const FLOOR_TYPE = {
   Wood: "Wood", Parquet: "Parquet", Tiles: "Tiles", Stone: "Stone", Concrete: "Concrete", Carpet: "Carpet", Vinyl: "Vinyl",
 } as const
+
 export type FloorType = (typeof FLOOR_TYPE)[keyof typeof FLOOR_TYPE]
 
 /** The floor types' names as the user reads them. */
@@ -441,6 +454,7 @@ export const BUILDER = {
 
 /** The user's theme choice; system follows the OS setting. */
 export const THEME = { light: "light", dark: "dark", system: "system" } as const
+
 export type Theme = (typeof THEME)[keyof typeof THEME]
 
 /**

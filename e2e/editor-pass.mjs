@@ -16,8 +16,12 @@ const shownCode = (index) => `return (async () => {
 })()`
 
 const only = ARGS
+
 fs.mkdirSync(SHOTS, { recursive: true })
-for (const f of fs.readdirSync(SHOTS)) fs.rmSync(path.join(SHOTS, f))
+
+for (const f of fs.readdirSync(SHOTS)) {
+  fs.rmSync(path.join(SHOTS, f))
+}
 
 const { browser, page, log, shot } = await launch()
 const report = []
@@ -29,6 +33,7 @@ async function toPage(u, v) {
     const canvas = document.querySelector('canvas[data-photo-rect]')
     const r = JSON.parse(canvas.dataset.photoRect)
     const b = canvas.getBoundingClientRect()
+
     return { x: b.left + r.x + u * r.width, y: b.top + r.y + v * r.height }
   }, u, v)
 }
@@ -42,6 +47,7 @@ async function pixel(u, v) {
     const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height
     const ctx = c.getContext('2d'); ctx.drawImage(canvas, 0, 0)
     const d = ctx.getImageData(Math.round((r.x + u * r.width) * ratio), Math.round((r.y + v * r.height) * ratio), 1, 1).data
+
     return [d[0], d[1], d[2]]
   }, u, v)
 }
@@ -52,6 +58,7 @@ async function labelAt(u, v) {
     const url = document.querySelector('canvas[data-photo-rect]').dataset.labelMap
     const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
     const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
+
     return ctx.getImageData(Math.floor(u * bmp.width), Math.floor(v * bmp.height), 1, 1).data[0]
   }, u, v)
 }
@@ -61,11 +68,14 @@ const frame = () => sleep(120)
 
 try {
   const files = fs.readdirSync(ROOMS).filter((f) => !only.length || only.includes(path.parse(f).name))
+
   for (const file of files) {
     const name = path.parse(file).name
+
     await page.setViewport({ width: 1280, height: 860 })
     await page.goto(WEB, { waitUntil: 'networkidle0' })
     const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click('::-p-text(Choose photo)')])
+
     await chooser.accept([path.join(ROOMS, file)])
     await until(page, () => document.querySelector('[data-slot=badge]')?.textContent?.trim() === 'Ready', { timeout: 30000, label: 'Ready' })
     await until(page, () => !document.querySelector('[aria-label="Preparing the editor"]') && !!document.querySelector('[aria-label="Zoom in"]'), { label: 'editor ready' })
@@ -81,46 +91,80 @@ try {
       const d = ctx.getImageData(0, 0, bmp.width, bmp.height).data
       const w = bmp.width, h = bmp.height, at = (x, y) => d[(y * w + x) * 4]
       const points = {}
+
       for (const o of room.objects) {
         let best = null
-        for (let y = 3; y < h - 3 && !best; y += 2) for (let x = 3; x < w - 3; x += 2) {
-          if (at(x, y) !== o.index) continue
+
+        for (let y = 3; y < h - 3 && !best; y += 2) {
+          for (let x = 3; x < w - 3; x += 2) {
+          if (at(x, y) !== o.index) {
+            continue
+          }
+
           let ok = true
-          for (let dy = -2; dy <= 2 && ok; dy++) for (let dx = -2; dx <= 2; dx++) if (at(x + dx, y + dy) !== o.index) { ok = false; break }
-          if (ok) { best = { u: (x + 0.5) / w, v: (y + 0.5) / h }; break }
+
+          for (let dy = -2; dy <= 2 && ok; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              if (at(x + dx, y + dy) !== o.index) {
+                ok = false
+                break
+              }
+            }
+          }
+
+          if (ok) {
+            best = { u: (x + 0.5) / w, v: (y + 0.5) / h }
+            break
+          }
         }
+        }
+
         points[o.index] = best
       }
+
       return { objects: room.objects, points }
     })
 
     let hits = 0
     const misses = []
+
     for (const o of room.objects) {
       const p = room.points[o.index]
+
       if (!p) { misses.push(`${o.label} (no interior point)`); continue }
+
       const { x, y } = await toPage(p.u, p.v)
+
       await page.mouse.click(x, y)
       await frame()
       const got = await heading()
-      if (got?.toLowerCase() === o.label.toLowerCase()) hits++
-      else misses.push(`${o.label} → ${got}`)
+
+      if (got?.toLowerCase() === o.label.toLowerCase()) {
+        hits++
+      } else {
+        misses.push(`${o.label} → ${got}`)
+      }
     }
+
     step(`${file}: clicking each object selects it`, misses.length === 0, `${hits}/${room.objects.length}${misses.length ? '; ' + misses.slice(0, 3).join(', ') : ''}`)
 
     // Recolor the largest object (first in the list after the photo's own order isn't guaranteed: pick by index 1).
     const target = room.objects[0], other = room.objects[1]
     const tp = room.points[target.index], op = room.points[other.index]
+
     await page.mouse.click(...Object.values(await toPage(tp.u, tp.v)))
     await frame()
     const before = await pixel(tp.u, tp.v), otherBefore = await pixel(op.u, op.v)
+
     await page.click('[aria-label="Color #4A6274"]')
     await frame()
     const after = await pixel(tp.u, tp.v), otherAfter = await pixel(op.u, op.v)
     const bluer = after[2] - after[0] > before[2] - before[0] + 15
+
     step(`${file}: recoloring "${target.label}" changes its pixels`, bluer, `${before} → ${after}`)
     step(`${file}: ...and leaves "${other.label}" alone`, otherBefore.join() === otherAfter.join(), `${otherBefore} → ${otherAfter}`)
     const counted = await recoloredCount(page)
+
     step(`${file}: the Objects section counts it as recolored`, counted === 1, `${counted} recolored`)
 
     // Strength 0 brings the original back; the slider is keyboard-operable.
@@ -128,6 +172,7 @@ try {
     await page.keyboard.press('Home')
     await frame()
     const zero = await pixel(tp.u, tp.v)
+
     step(`${file}: strength 0% shows the original`, zero.every((c, i) => Math.abs(c - before[i]) <= 2), `${zero}`)
     await page.keyboard.press('End')
     await frame()
@@ -135,15 +180,23 @@ try {
     // History so far: original, color at 80%, strength 0%, strength 100%. Step back to the
     // original with the toolbar, then forward one step with the keyboard.
     const full = await pixel(tp.u, tp.v)
-    for (let i = 0; i < 3; i++) { await page.click('[aria-label="Undo"]'); await frame() }
+
+    for (let i = 0; i < 3; i++) {
+      await page.click('[aria-label="Undo"]')
+      await frame()
+    }
+
     const original = await pixel(tp.u, tp.v)
     const undoLeft = await page.evaluate(() => !document.querySelector('[aria-label=Undo]').disabled)
+
     await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.press('KeyZ')
     await page.keyboard.up('Shift'); await page.keyboard.up('Control'); await frame()
     const redone = await pixel(tp.u, tp.v)
+
     await page.keyboard.down('Control'); await page.keyboard.press('KeyY'); await page.keyboard.press('KeyY'); await page.keyboard.up('Control'); await frame()
     const latest = await pixel(tp.u, tp.v)
     const close = (a, b) => a.every((c, i) => Math.abs(c - b[i]) <= 2)
+
     step(`${file}: undo back to the original photo, redo forward again`,
       close(original, before) && !undoLeft && close(redone, after) && close(latest, full),
       `original ${original}, redo→${redone}, redo×2→${latest}`)
@@ -151,6 +204,7 @@ try {
     // Compare: the divider in the middle; far left shows the original.
     await page.click('::-p-text(Compare)'); await frame()
     const hasHandle = await page.evaluate(() => !!document.querySelector('[aria-label="Before and after divider"]'))
+
     await shot(`${name}-compare`)
     step(`${file}: compare shows the before/after divider`, hasHandle)
     await page.click('::-p-text(Compare)'); await frame()
@@ -158,11 +212,13 @@ try {
     // Hover: the label chip names the object under the mouse.
     await page.mouse.move(...Object.values(await toPage(op.u, op.v))); await frame()
     const chip = await page.evaluate(() => document.querySelector('canvas[data-photo-rect] ~ div.pointer-events-none')?.textContent?.trim())
+
     step(`${file}: hovering shows the object's name`, chip?.toLowerCase() === other.label.toLowerCase(), chip ?? 'none')
 
     // Zoom in, then the same object is still hit at its new place.
     await page.click('[aria-label="Zoom in"]'); await frame()
     const zoomed = await page.evaluate(() => JSON.parse(document.querySelector('canvas[data-photo-rect]').dataset.photoRect).width)
+
     await shot(`${name}-zoomed`)
     await page.click('[aria-label="Fit photo"]'); await frame()
     step(`${file}: zoom in and fit`, zoomed > 0, `photo width ${Math.round(zoomed)} px when zoomed`)
@@ -174,11 +230,16 @@ try {
       const clickButton = (text) => page.evaluate((t) => [...document.querySelectorAll('aside button, [data-outline-panel] button')].find((b) => b.textContent.trim() === t).click(), text)
       const drag = async (points) => {
         const [first, ...rest] = await Promise.all(points.map(([u, v]) => toPage(u, v)))
+
         await page.mouse.move(first.x, first.y)
         await page.mouse.down()
+
         for (const p of rest) { await page.mouse.move(p.x, p.y, { steps: 4 }); await sleep(16) }
+
         const outlined = await page.evaluate(() => document.querySelector('svg[data-stroke-area]')?.dataset.strokeArea ?? null)
+
         await page.mouse.up()
+
         return outlined
       }
       const nextMap = async (before) => {
@@ -193,17 +254,21 @@ try {
       const sizeHidden = await page.evaluate(() => !document.querySelector('[aria-label="Brush size"]'))
       const mapBefore = await mapNow()
       const outlined = await drag([[0.10, 0.10], [0.16, 0.15]])
+
       await nextMap(mapBefore)
       const added = await labelAt(...center)
+
       await shot(`${name}-box-add`)
       step(`${file}: a box adds its whole area to "${other.label}"`, outlined === 'Box' && sizeHidden && added === other.index,
         `outline shown: ${outlined}; label at its centre ${added}`)
 
       const mapAdded = await mapNow()
+
       await clickButton('Erase'); await frame()
       await drag([[0.10, 0.10], [0.16, 0.15]])
       await nextMap(mapAdded)
       const erased = await labelAt(...center)
+
       step(`${file}: a box erases its area from it again`, erased === 0, `label at its centre ${erased}`)
       await page.click('[aria-label="Undo"]'); await page.click('[aria-label="Undo"]')
       await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap === ${JSON.stringify(mapBefore)}`), { label: 'undo both boxes' })
@@ -215,34 +280,48 @@ try {
     if (file === files[0]) {
       await page.click('::-p-text(New object)'); await frame()
       const start = await toPage(op.u, op.v)
+
       await page.mouse.move(start.x, start.y)
       await page.mouse.down()
-      for (let i = 1; i <= 5; i++) { await page.mouse.move(start.x + i * 4, start.y + i * 2); await sleep(16) }
+
+      for (let i = 1; i <= 5; i++) {
+        await page.mouse.move(start.x + i * 4, start.y + i * 2)
+        await sleep(16)
+      }
+
       await page.mouse.up(); await frame()
       // A second stroke with the lasso: a square drawn around an area away from the brush mark.
       await page.evaluate(() => [...document.querySelectorAll('aside button')].find((b) => b.textContent.trim() === 'Lasso').click()); await frame()
       const ring = await Promise.all([[0.30, 0.30], [0.36, 0.30], [0.36, 0.36], [0.30, 0.36]].map(([u, v]) => toPage(u, v)))
+
       await page.mouse.move(ring[0].x, ring[0].y)
       await page.mouse.down()
+
       for (const p of ring.slice(1)) { await page.mouse.move(p.x, p.y, { steps: 6 }); await sleep(16) }
+
       await page.mouse.up(); await frame()
       await page.evaluate(() => [...document.querySelectorAll('aside button')].find((b) => b.textContent.trim() === 'Brush').click())
       const saveDisabled = await page.evaluate(() => document.querySelector('form[aria-label="New object"] button[type=submit]').disabled)
+
       await page.type('#new-object-name', 'test lamp')
       await page.select('#new-object-type', 'Lighting')
       await shot(`${name}-marking`)
       const mapBefore = await page.evaluate(() => document.querySelector('canvas[data-photo-rect]').dataset.labelMap)
+
       await page.click('form[aria-label="New object"] button[type=submit]')
       await until(page, () => document.querySelector('aside h2.truncate')?.textContent?.trim() === 'test lamp', { label: 'new object selected' })
       // Clicks are matched against the outlines on screen: wait for the new version before clicking the mark.
       await until(page, new Function(`return document.querySelector('canvas[data-photo-rect]').dataset.labelMap !== ${JSON.stringify(mapBefore)}`), { label: 'new outlines loaded' })
       const lamp = await page.evaluate(async () => {
         const id = location.pathname.split('/').at(-1)
+
         return (await (await fetch(`/api/rooms/${id}`)).json()).objects.find((o) => o.label === 'test lamp')?.index
       })
       const onPhoto = (await shownObjects(page)).has(lamp)
+
       step(`${file}: a hand-marked object is saved, selected and on the photo`, saveDisabled && onPhoto, `Save waited for a name: ${saveDisabled}`)
       const lassoed = await labelAt(0.33, 0.33)
+
       step(`${file}: the lasso marked the inside of the drawn square too`, lamp !== undefined && lassoed === lamp, `label ${lassoed}, lamp ${lamp}`)
 
       await page.keyboard.press('Escape'); await frame()
@@ -260,6 +339,7 @@ try {
       const surfaces = ['Wall', 'Floor', 'Ceiling']
       const victim = room.objects.find((o) => !surfaces.includes(o.category) && room.points[o.index] && o.index !== target.index && o.index !== other.index)
       const vp = room.points[victim.index]
+
       await page.keyboard.press('Escape'); await frame()
       await page.mouse.click(...Object.values(await toPage(vp.u, vp.v))); await frame()
       const picked = await heading()
@@ -267,16 +347,20 @@ try {
       // The button names how many objects go (the selected one plus anything ticked as lying on it).
       const removing = await page.evaluate(() => {
         const button = [...document.querySelectorAll('aside button')].find((b) => /^Remove (object|\d+ objects)$/.test(b.textContent.trim()))
+
         button.click()
+
         return button.textContent.trim()
       })
       const overlay = await until(page, () => document.querySelector('[data-removing]')?.textContent?.trim(), { label: 'loading overlay on the photo', timeout: 5000 })
       const undoWhileRemoving = await page.evaluate(() => document.querySelector('[aria-label=Undo]').disabled)
+
       step(`${file}: the photo shows the removal is running, and undo waits`, !!overlay && undoWhileRemoving, overlay)
       await until(page, new Function(`return ${shownCode(victim.index).replace(/^return /, '')}.then((shown) => !shown)`), { label: 'removed object leaves the photo', timeout: 30000 })
       await sleep(500)
       await page.mouse.move(5, 5); await frame()
       const photoAfter = await page.evaluate(() => document.querySelector('canvas[data-photo-rect]').toDataURL())
+
       await shot(`${name}-removed`)
       step(`${file}: removing "${victim.label}" takes it out of the outlines and the photo`,
         picked?.toLowerCase() === victim.label.toLowerCase() && photoBefore !== photoAfter, `selected ${picked}; "${removing}"`)
@@ -293,6 +377,7 @@ try {
   await page.setViewport({ width: 375, height: 812 })
   await sleep(500)
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+
   await shot('phone')
   step('Phone width: editor has no sideways scroll', overflow <= 0, `overflow ${overflow}px`)
 } catch (error) {

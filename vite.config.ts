@@ -25,8 +25,13 @@ const apiProxy: Record<string, ProxyOptions> = {
       // Answer with a problem the web app understands instead of an empty error page.
       proxy.on('error', (error, _request, response) => {
         const reason = (error as NodeJS.ErrnoException).code ?? error.message
+
         console.error(`[designapp] can't reach the API at ${apiTarget}: ${reason}`)
-        if (!('writeHead' in response) || response.headersSent) return
+
+        if (!('writeHead' in response) || response.headersSent) {
+          return
+        }
+
         response.writeHead(502, { 'Content-Type': 'application/problem+json' })
         response.end(JSON.stringify({ status: 502, title: 'API unavailable', detail: `The dev server can't reach the API at ${apiTarget}.` }))
       })

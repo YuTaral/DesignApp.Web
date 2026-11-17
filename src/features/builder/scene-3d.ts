@@ -39,6 +39,7 @@ export class PlanScene {
     this.renderer.setPixelRatio(ratio)
     this.renderer.setSize(width, height, false)
     const scene = buildScene(plan, this.renderer.capabilities.getMaxAnisotropy())
+
     this.camera = camera(plan, width, height)
     this.renderer.render(scene, this.camera)
     dispose(scene)
@@ -51,20 +52,30 @@ export class PlanScene {
    * @param y - Up the picture, -1 (bottom) to 1 (top).
    */
   wallAt(plan: Plan, x: number, y: number): number | null {
-    if (!this.camera) return null
+    if (!this.camera) {
+      return null
+    }
+
     const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(new THREE.Vector2(x, y), this.camera)
     const behind = cameraStand(plan).behind
     const meshes = walls(plan)
       .filter((wall) => wall.index !== behind)
       .map((wall) => wallMesh(plan, wall, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })))
+
+    raycaster.setFromCamera(new THREE.Vector2(x, y), this.camera)
+
     // The walls aren't in a scene, so their placement is applied by hand before the ray is cast.
-    for (const mesh of meshes) mesh.updateMatrixWorld()
+    for (const mesh of meshes) {
+      mesh.updateMatrixWorld()
+    }
+
     const hit = raycaster.intersectObjects(meshes)[0]
+
     for (const mesh of meshes) {
       mesh.geometry.dispose()
       ;(mesh.material as THREE.Material).dispose()
     }
+
     return (hit?.object.userData.wall as number | undefined) ?? null
   }
 
@@ -75,7 +86,10 @@ export class PlanScene {
    */
   dispose(release = false) {
     this.renderer.dispose()
-    if (release) this.renderer.forceContextLoss()
+
+    if (release) {
+      this.renderer.forceContextLoss()
+    }
   }
 }
 
@@ -88,8 +102,10 @@ export class PlanScene {
 export async function renderGuide(plan: Plan): Promise<Blob> {
   const canvas = document.createElement("canvas")
   const view = new PlanScene(canvas)
+
   try {
     view.render(plan, BUILDER.guide.width, BUILDER.guide.height, 1)
+
     return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("No picture"))), "image/png"))
   } finally {
     view.dispose(true)
@@ -123,9 +139,11 @@ export function camera(plan: Plan, width: number, height: number) {
   const fullHeight = height * (1 + BUILDER.scene.lensShift)
   const vertical = 2 * Math.atan(Math.tan(horizontal / 2) * (fullHeight / width))
   const view = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(vertical), width / fullHeight, 0.05, 100)
+
   view.setViewOffset(width, fullHeight, 0, fullHeight - height, width, height)
   view.position.set(x, eye, z)
   view.lookAt(lookX, eye, lookZ)
+
   return view
 }
 
@@ -136,51 +154,58 @@ export function camera(plan: Plan, width: number, height: number) {
  * @param anisotropy - The sharpest texture filtering the GPU offers.
  */
 function buildScene(plan: Plan, anisotropy: number) {
-  const scene = new THREE.Scene()
-  scene.background = new THREE.Color(BUILDER.scene.background)
   const { width, length, height } = plan
-
-  scene.add(new THREE.HemisphereLight(BUILDER.scene.sky, BUILDER.scene.ground, 1.9), new THREE.AmbientLight(BUILDER.scene.sky, 0.5))
+  const scene = new THREE.Scene()
   const sun = new THREE.DirectionalLight(BUILDER.scene.sky, 1.3)
-  sun.position.set(width * 0.3, height * 2.2, length * 0.8)
-  sun.target.position.set(width / 2, 0, length / 2)
-  sun.castShadow = true
-  sun.shadow.mapSize.set(2048, 2048)
   const reach = Math.max(width, length) * 1.2
-  Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: 0.1, far: reach * 4 })
-  scene.add(sun, sun.target)
-
   // The floor and ceiling are the outline's shape; turned flat, the shape's y runs along the room (the floor's is
   // flipped, as it turns the other way).
   const shape = (flip: number) => new THREE.ShapeGeometry(new THREE.Shape(plan.outline.map((p) => new THREE.Vector2(p.x / 100, (flip * p.y) / 100))))
   const floor = new THREE.Mesh(shape(-1), floorMaterial(plan, anisotropy))
-  floor.rotation.x = -Math.PI / 2
-  floor.receiveShadow = true
   // The ceiling gets no direct light, so it glows a little to read as the white it is.
   const ceiling = new THREE.Mesh(
     shape(1),
     new THREE.MeshStandardMaterial({ color: BUILDER.scene.ceiling, emissive: BUILDER.scene.ceiling, emissiveIntensity: 0.55, roughness: 0.9 })
   )
+  // Every wall but the one behind the camera is drawn, with the windows and doors on them.
+  const behind = cameraStand(plan).behind
+
+  scene.background = new THREE.Color(BUILDER.scene.background)
+  scene.add(new THREE.HemisphereLight(BUILDER.scene.sky, BUILDER.scene.ground, 1.9), new THREE.AmbientLight(BUILDER.scene.sky, 0.5))
+  sun.position.set(width * 0.3, height * 2.2, length * 0.8)
+  sun.target.position.set(width / 2, 0, length / 2)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(2048, 2048)
+  Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: 0.1, far: reach * 4 })
+  scene.add(sun, sun.target)
+
+  floor.rotation.x = -Math.PI / 2
+  floor.receiveShadow = true
+  floor.userData.surface = MASK_ID.floor
   ceiling.rotation.x = Math.PI / 2
   ceiling.position.set(0, height, 0)
-  floor.userData.surface = MASK_ID.floor
   ceiling.userData.surface = MASK_ID.ceiling
   scene.add(floor, ceiling)
 
-  // Every wall but the one behind the camera, and the windows and doors on them.
-  const behind = cameraStand(plan).behind
   for (const wall of walls(plan).filter((w) => w.index !== behind)) {
     const mesh = wallMesh(plan, wall, material(plan.wallColor))
+
     mesh.userData.surface = MASK_ID.wall
     mesh.receiveShadow = true
     scene.add(mesh)
   }
+
   for (const [index, item] of plan.items.entries()) {
     const drawn = !isWallItem(item) ? model(item) : item.wall !== behind ? (isMountedShape(item.shape) ? hung(plan, item) : opening(plan, item)) : null
-    if (!drawn) continue
+
+    if (!drawn) {
+      continue
+    }
+
     drawn.userData.item = index
     scene.add(drawn)
   }
+
   return scene
 }
 
@@ -204,12 +229,18 @@ export async function drawViewPictures(
   const height = Math.round((width * BUILDER.guide.height) / BUILDER.guide.width)
   const canvas = document.createElement("canvas")
   const view = new PlanScene(canvas)
+
   try {
     for (const shot of shots) {
       // Lets the page paint between pictures (a timer rather than a frame, which a hidden tab never gets).
       await new Promise((resolve) => setTimeout(resolve, 0))
-      if (stopped()) return
+
+      if (stopped()) {
+        return
+      }
+
       const seen = { ...plan, ...shot }
+
       view.render(seen, width, height, 1)
       onPicture({ shot, url: canvas.toDataURL("image/jpeg", 0.85), blocking: blockingItem(seen) })
     }
@@ -229,8 +260,15 @@ export function blockingItem(plan: Plan): PlanItem | null {
   const [width, height] = [Math.round(BUILDER.guide.width / BUILDER.scene.blockedScale), Math.round(BUILDER.guide.height / BUILDER.scene.blockedScale)]
   const { ids } = renderMasks(plan, width, height)
   const counts = new Map<number, number>()
-  for (const id of ids) if (id > 0 && id < MASK_ID.floor) counts.set(id, (counts.get(id) ?? 0) + 1)
+
+  for (const id of ids) {
+    if (id > 0 && id < MASK_ID.floor) {
+      counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+  }
+
   const [id, count] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [0, 0]
+
   return count > ids.length * BUILDER.scene.blockedShare ? (plan.items[id - 1] ?? null) : null
 }
 
@@ -244,11 +282,17 @@ export function objectBoxes(plan: Plan): ItemBox[] {
   const { width, height } = BUILDER.guide
   const { ids } = renderMasks(plan, width, height)
   const boxes = new Map<number, { count: number; left: number; top: number; right: number; bottom: number }>()
+
   for (let p = 0; p < ids.length; p++) {
     const id = ids[p]
-    if (id === 0 || id >= MASK_ID.floor) continue
+
+    if (id === 0 || id >= MASK_ID.floor) {
+      continue
+    }
+
     const [x, y] = [p % width, Math.floor(p / width)]
     const box = boxes.get(id - 1) ?? { count: 0, left: x, top: y, right: x, bottom: y }
+
     box.count++
     box.left = Math.min(box.left, x)
     box.top = Math.min(box.top, y)
@@ -256,6 +300,7 @@ export function objectBoxes(plan: Plan): ItemBox[] {
     box.bottom = Math.max(box.bottom, y)
     boxes.set(id - 1, box)
   }
+
   return [...boxes.entries()]
     .filter(([, box]) => box.count >= ids.length * BUILDER.accuracy.minShare)
     .sort(([a], [b]) => a - b)
@@ -280,41 +325,65 @@ export const MASK_ID = { floor: 250, wall: 251, ceiling: 252 } as const
  */
 export function renderMasks(plan: Plan, width: number, height: number) {
   const renderer = new THREE.WebGLRenderer({ antialias: false })
-  renderer.outputColorSpace = THREE.LinearSRGBColorSpace
   const scene = buildScene(plan, 1)
-  scene.background = new THREE.Color(0, 0, 0)
+  const view = camera(plan, width, height)
+  const target = new THREE.WebGLRenderTarget(width, height)
+  const rgba = new Uint8Array(width * height * 4)
+  const ids = new Uint8Array(width * height)
   const flat = new Map<number, THREE.MeshBasicMaterial>()
   /** The flat material of an id, whose red channel is the id exactly. */
   const look = (id: number) => {
-    if (!flat.has(id)) flat.set(id, new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(id / 255, 0, 0, THREE.LinearSRGBColorSpace), side: THREE.DoubleSide }))
+    if (!flat.has(id)) {
+      flat.set(id, new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(id / 255, 0, 0, THREE.LinearSRGBColorSpace), side: THREE.DoubleSide }))
+    }
+
     return flat.get(id)!
   }
+
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace
+  scene.background = new THREE.Color(0, 0, 0)
   scene.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return
+    if (!(object instanceof THREE.Mesh)) {
+      return
+    }
+
     let owner: THREE.Object3D | null = object
-    while (owner && owner.userData.item === undefined && owner.userData.surface === undefined) owner = owner.parent
+
+    while (owner && owner.userData.item === undefined && owner.userData.surface === undefined) {
+      owner = owner.parent
+    }
+
     const id = owner?.userData.item !== undefined ? owner.userData.item + 1 : (owner?.userData.surface ?? 0)
+
     for (const m of [object.material].flat() as THREE.MeshStandardMaterial[]) {
       m.map?.dispose()
       m.dispose()
     }
+
     object.material = look(id)
   })
-  const view = camera(plan, width, height)
-  const target = new THREE.WebGLRenderTarget(width, height)
   renderer.setRenderTarget(target)
   renderer.render(scene, view)
-  const rgba = new Uint8Array(width * height * 4)
   renderer.readRenderTargetPixels(target, 0, 0, width, height, rgba)
+
   // WebGL reads rows from the bottom.
-  const ids = new Uint8Array(width * height)
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) ids[y * width + x] = rgba[((height - 1 - y) * width + x) * 4]
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      ids[y * width + x] = rgba[((height - 1 - y) * width + x) * 4]
+    }
+  }
+
   target.dispose()
   dispose(scene)
-  for (const m of flat.values()) m.dispose()
+
+  for (const m of flat.values()) {
+    m.dispose()
+  }
+
   renderer.dispose()
   // Frees the WebGL context now rather than when it is collected: browsers allow only a few at once.
   renderer.forceContextLoss()
+
   return { ids, camera: view }
 }
 
@@ -326,9 +395,11 @@ export function renderMasks(plan: Plan, width: number, height: number) {
  */
 function wallMesh(plan: Plan, wall: OutlineWall, paint: THREE.Material) {
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(wall.length / 100, plan.height), paint)
+
   mesh.position.set((wall.start.x + wall.end.x) / 200, plan.height / 2, (wall.start.y + wall.end.y) / 200)
   mesh.rotation.y = wallTurn(wall)
   mesh.userData.wall = wall.index
+
   return mesh
 }
 
@@ -353,45 +424,57 @@ function opening(plan: Plan, item: PlanItem & { wall: number }) {
   const group = new THREE.Group()
   const block = (bw: number, bh: number, bd: number, x: number, y: number, z: number, look = paint) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), look)
+
     mesh.position.set(x, y, z)
     mesh.castShadow = mesh.receiveShadow = true
     group.add(mesh)
   }
   const frame = 0.06
+  const at = wallPoint(plan, item.wall, item.x)
 
   if (item.shape === ITEM_SHAPE.Window) {
     const glass = new THREE.Mesh(
       new THREE.PlaneGeometry(w - frame, h - frame),
       new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, emissive: BUILDER.scene.glass, emissiveIntensity: 0.55, roughness: 0.15 })
     )
+
     glass.position.set(0, bottom + h / 2, 0.004)
     group.add(glass)
     block(w, frame, frame, 0, bottom + frame / 2, frame / 2)
     block(w, frame, frame, 0, bottom + h - frame / 2, frame / 2)
     block(frame, h, frame, -w / 2 + frame / 2, bottom + h / 2, frame / 2)
     block(frame, h, frame, w / 2 - frame / 2, bottom + h / 2, frame / 2)
-    if (w > 1.3) block(frame * 0.8, h, frame, 0, bottom + h / 2, frame / 2)
-    if (bottom > 0.05) block(w + 0.08, 0.03, 0.14, 0, bottom - 0.015, 0.07)
+
+    if (w > 1.3) {
+      block(frame * 0.8, h, frame, 0, bottom + h / 2, frame / 2)
+    }
+
+    if (bottom > 0.05) {
+      block(w + 0.08, 0.03, 0.14, 0, bottom - 0.015, 0.07)
+    }
   } else {
     const trim = material(shade(item.color, 1.06))
     const metal = new THREE.MeshStandardMaterial({ color: BUILDER.scene.metal, roughness: 0.35, metalness: 0.8 })
+    const leaves = w > 1.2 ? 2 : 1
+    const leaf = (w - 2 * frame) / leaves
+
     block(frame, h, 0.03, -w / 2 + frame / 2, h / 2, 0.015, trim)
     block(frame, h, 0.03, w / 2 - frame / 2, h / 2, 0.015, trim)
     block(w, frame, 0.03, 0, h - frame / 2, 0.015, trim)
-    const leaves = w > 1.2 ? 2 : 1
-    const leaf = (w - 2 * frame) / leaves
+
     for (let i = 0; i < leaves; i++) {
       const middle = -w / 2 + frame + leaf * (i + 0.5)
-      block(leaf - 0.006, h - frame, 0.04, middle, (h - frame) / 2, 0.02)
       // The handle sits on the leaf's edge away from its hinge: the middle for a pair of leaves.
       const side = leaves === 2 ? (i === 0 ? 1 : -1) : 1
+
+      block(leaf - 0.006, h - frame, 0.04, middle, (h - frame) / 2, 0.02)
       block(0.12, 0.02, 0.03, middle + side * (leaf / 2 - 0.12), 1.0, 0.06, metal)
     }
   }
 
-  const at = wallPoint(plan, item.wall, item.x)
   group.position.set(at.x / 100, 0, at.y / 100)
   group.rotation.y = wallTurn(wallOf(plan, item.wall))
+
   return group
 }
 
@@ -408,39 +491,47 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
   const group = new THREE.Group()
   const block = (bw: number, bh: number, bd: number, x: number, y: number, z: number, look: THREE.Material = paint) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), look)
+
     mesh.position.set(x, y, z)
     mesh.castShadow = mesh.receiveShadow = true
     group.add(mesh)
   }
   const name = item.label.toLowerCase()
+  const at = wallPoint(plan, item.wall, item.x)
 
   if (item.shape === ITEM_SHAPE.Picture) {
     const frame = Math.min(0.05, w / 8, h / 8)
-    block(w, h, d, 0, bottom + h / 2, d / 2)
     const face = name.includes(BUILDER.mirrorWord)
       ? new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, emissive: BUILDER.scene.glass, emissiveIntensity: 0.35, roughness: 0.05, metalness: 0.6 })
       : name.split(/\W+/).includes(BUILDER.screenWord)
         ? new THREE.MeshStandardMaterial({ color: "#1E1E1E", roughness: 0.25 })
         : material(BUILDER.scene.art)
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(w - 2 * frame, h - 2 * frame), face)
+
+    block(w, h, d, 0, bottom + h / 2, d / 2)
     panel.position.set(0, bottom + h / 2, d + 0.002)
     group.add(panel)
   } else if (name.includes(BUILDER.hoodWord)) {
     const canopy = Math.min(h, 0.25)
-    block(w, canopy, d, 0, bottom + canopy / 2, d / 2)
     const top = Math.max(bottom + canopy, plan.height - 0.01)
+
+    block(w, canopy, d, 0, bottom + canopy / 2, d / 2)
     block(w * 0.35, top - bottom - canopy, d * 0.5, 0, (top + bottom + canopy) / 2, d * 0.25)
   } else {
-    block(w, h, d, 0, bottom + h / 2, d / 2)
     // Cabinet doors: a dark seam every 60 cm or so.
     const doors = h > 0.2 ? Math.max(1, Math.round(w / 0.6)) : 1
     const seam = material(shade(item.color, 0.7))
-    for (let n = 1; n < doors; n++) block(0.006, h * 0.96, 0.004, -w / 2 + (w * n) / doors, bottom + h / 2, d + 0.002, seam)
+
+    block(w, h, d, 0, bottom + h / 2, d / 2)
+
+    for (let n = 1; n < doors; n++) {
+      block(0.006, h * 0.96, 0.004, -w / 2 + (w * n) / doors, bottom + h / 2, d + 0.002, seam)
+    }
   }
 
-  const at = wallPoint(plan, item.wall, item.x)
   group.position.set(at.x / 100, 0, at.y / 100)
   group.rotation.y = wallTurn(wallOf(plan, item.wall))
+
   return group
 }
 
@@ -452,30 +543,38 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
  */
 function model(item: PlanItem) {
   let group: THREE.Group
+
   if (hasParts(item)) {
     // Each part as its own piece, sized from the object's parts: the back run, the leg below it and a P's chaise.
     const { runDepth, legWidth, chaiseWidth, chaiseDepth } = partsOf(item)!
     const front = item.form === ITEM_FORM.PShaped ? chaiseDepth : 0
-    group = new THREE.Group()
     const run = piece({ ...item, depth: runDepth }, { openRight: true })
+    const legLength = item.depth - runDepth - front
+
+    group = new THREE.Group()
     run.position.z = -(item.depth - runDepth) / 200
     group.add(run)
-    const legLength = item.depth - runDepth - front
+
     if (legLength > 0) {
       const side = piece({ ...item, width: legWidth, depth: legLength }, { chaise: true })
+
       side.position.set((item.width - legWidth) / 200, 0, (runDepth - front) / 200)
       group.add(side)
     }
+
     if (front > 0) {
       const end = piece({ ...item, width: chaiseWidth, depth: front }, { chaise: true })
+
       end.position.set((item.width - chaiseWidth) / 200, 0, (item.depth - front) / 200)
       group.add(end)
     }
   } else {
     group = piece(item, {})
   }
+
   group.position.set(item.x / 100, 0, item.y / 100)
   group.rotation.y = -THREE.MathUtils.degToRad(item.rotation)
+
   return group
 }
 
@@ -493,9 +592,11 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
   /** Adds a block of the object, by its size and the position of its middle. */
   const block = (bw: number, bh: number, bd: number, x: number, y: number, z: number, look: THREE.Material = paint, geometry?: THREE.BufferGeometry) => {
     const mesh = new THREE.Mesh(geometry ?? new THREE.BoxGeometry(bw, bh, bd), look)
+
     mesh.position.set(x, y, z)
     mesh.castShadow = mesh.receiveShadow = true
     group.add(mesh)
+
     return mesh
   }
   /** Adds a soft block, with rounded edges. */
@@ -504,23 +605,31 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
   /** Adds a round piece, stretched to an ellipse when its sides differ. */
   const round = (bw: number, bh: number, bd: number, y: number, top = 0.5, bottom = 0.5, look: THREE.Material = paint) => {
     const mesh = block(1, 1, 1, 0, y, 0, look, new THREE.CylinderGeometry(top, bottom, 1, 32))
+
     mesh.scale.set(bw, bh, bd)
+
     return mesh
   }
   const legs = (legHeight: number, size: number, look: THREE.Material = paint) => {
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) block(size, legHeight, size, sx * (w / 2 - size / 2), legHeight / 2, sz * (d / 2 - size / 2), look)
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      block(size, legHeight, size, sx * (w / 2 - size / 2), legHeight / 2, sz * (d / 2 - size / 2), look)
+    }
   }
 
   if (item.form === ITEM_FORM.Round && item.shape === ITEM_SHAPE.Rug) {
     round(w, 0.01, d, 0.005)
+
     return group
   }
+
   if (item.form === ITEM_FORM.Round && item.shape === ITEM_SHAPE.Table) {
     // A round or oval top on a pedestal and a foot.
     const top = Math.min(0.04, h * 0.08)
+
     round(w, top, d, h - top / 2)
     round(0.08, h - top, 0.08, (h - top) / 2)
     round(Math.min(w, d) * 0.5, 0.03, Math.min(w, d) * 0.5, 0.015)
+
     return group
   }
 
@@ -532,22 +641,29 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       if (!item.label.toLowerCase().includes(BUILDER.stoolWord)) {
         // A darker rim marks its top, so its height reads (a plain cylinder came out taller in photos).
         const rim = Math.min(0.03, h * 0.08)
+
         round(w, h - rim, d, (h - rim) / 2)
         round(w * 1.02, rim, d * 1.02, h - rim / 2, 0.5, 0.5, darker)
         break
       }
+
       // A stool: a round seat on four slightly splayed legs joined by a footrest ring, so it reads as a stool.
       const seat = Math.min(0.05, h * 0.1)
+
       round(w, seat, d, h - seat / 2)
       const leg = Math.min(0.03, w / 10)
+
       for (let i = 0; i < 4; i++) {
         const turn = Math.PI / 4 + (i * Math.PI) / 2
         const [dx, dz] = [Math.cos(turn) * (w / 2 - leg) * 0.8, Math.sin(turn) * (d / 2 - leg) * 0.8]
         const post = block(leg, h - seat, leg, dx, (h - seat) / 2, dz, darker, new THREE.CylinderGeometry(0.5, 0.5, 1, 12))
+
         post.scale.set(leg, h - seat, leg)
         post.rotation.set(Math.sin(turn) * 0.06, 0, -Math.cos(turn) * 0.06)
       }
+
       const ring = block(1, 1, 1, 0, h * 0.35, 0, darker, new THREE.TorusGeometry(0.5, 0.04, 8, 32))
+
       ring.scale.set(w * 0.8, w * 0.8, w * 0.8)
       ring.rotation.x = Math.PI / 2
       break
@@ -557,21 +673,28 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       const seat = Math.min(0.45, h * 0.55)
       const arm = Math.min(0.18, w * 0.12)
       const back = Math.min(0.22, d * 0.25)
+      const armHeight = Math.min(h * 0.75, seat + 0.2)
+      const arms = options.openRight ? 1 : 2
+      const sideArm = (x: number) => soft(arm, armHeight - 0.06, d, x, 0.06 + (armHeight - 0.06) / 2, 0)
+
       legs(0.06, 0.05, darker)
       block(w, seat - 0.16, d, 0, 0.06 + (seat - 0.16) / 2, 0)
-      const armHeight = Math.min(h * 0.75, seat + 0.2)
-      const sideArm = (x: number) => soft(arm, armHeight - 0.06, d, x, 0.06 + (armHeight - 0.06) / 2, 0)
+
       if (options.chaise) {
         // The leg of a corner sofa: a long seat with an arm on its outer side, its back being the run's seat.
         soft(w - arm, 0.12, d, -arm / 2, seat - 0.06, 0)
         sideArm(w / 2 - arm / 2)
         break
       }
-      const arms = options.openRight ? 1 : 2
+
       soft(w - arms * arm, 0.12, d - back, options.openRight ? arm / 2 : 0, seat - 0.06, back / 2)
       soft(w, h - 0.06, back, 0, 0.06 + (h - 0.06) / 2, -d / 2 + back / 2)
       sideArm(-w / 2 + arm / 2)
-      if (!options.openRight) sideArm(w / 2 - arm / 2)
+
+      if (!options.openRight) {
+        sideArm(w / 2 - arm / 2)
+      }
+
       break
     }
     case ITEM_SHAPE.Bed: {
@@ -579,19 +702,24 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       const frame = Math.min(0.3, h * 0.35)
       const mattress = Math.min(0.22, h * 0.25)
       const head = Math.min(0.08, d * 0.05)
-      block(w, frame, d - head, 0, frame / 2, head / 2, darker)
-      soft(w - 0.04, mattress, d - head - 0.04, 0, frame + mattress / 2, head / 2)
       const pillow = material(BUILDER.scene.linen)
       const pillows = w > 1.2 ? 2 : 1
+
+      block(w, frame, d - head, 0, frame / 2, head / 2, darker)
+      soft(w - 0.04, mattress, d - head - 0.04, 0, frame + mattress / 2, head / 2)
+
       for (let i = 0; i < pillows; i++) {
         const pw = (w - 0.12) / pillows - 0.04
+
         soft(pw, 0.12, 0.4, -w / 2 + 0.08 + (pw + 0.04) * (i + 0.5), frame + mattress + 0.05, -d / 2 + head + 0.25, pillow)
       }
+
       block(w, h, head, 0, h / 2, -d / 2 + head / 2, darker)
       break
     }
     case ITEM_SHAPE.Table: {
       const top = Math.min(0.04, h * 0.08)
+
       block(w, top, d, 0, h - top / 2, 0)
       legs(h - top, Math.min(0.05, w / 6, d / 6))
       break
@@ -601,10 +729,15 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       // even from behind (a solid back panel turned into a wooden block).
       const seat = Math.min(0.46, h * 0.55)
       const post = Math.min(0.035, w / 8, d / 8)
+
       block(w, 0.05, d, 0, seat - 0.025, 0)
       legs(seat - 0.05, post)
       const back = -d / 2 + post / 2
-      for (const side of [-1, 1]) block(post, h - seat, post, side * (w / 2 - post / 2), seat + (h - seat) / 2, back)
+
+      for (const side of [-1, 1]) {
+        block(post, h - seat, post, side * (w / 2 - post / 2), seat + (h - seat) / 2, back)
+      }
+
       block(w, (h - seat) * 0.28, 0.025, 0, h - ((h - seat) * 0.28) / 2, back)
       block(w - 2 * post, 0.04, 0.02, 0, seat + (h - seat) * 0.45, back)
       break
@@ -616,18 +749,24 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       // Leaf clusters around a stem, filling its width and height, so it reads as a plant rather than a ball (photos
       // drew the ball's plant wider).
       const pot = Math.min(0.4, h * 0.3)
+
       round(w * 0.55, pot, d * 0.55, pot / 2, 0.5, 0.4, material(BUILDER.scene.pot))
       const top = h - pot
+
       round(0.03, top * 0.6, 0.03, pot + top * 0.3, 0.5, 0.5, darker)
+
       for (const [fx, fy, fz, size] of PLANT_CLUSTERS) {
         const leaves = block(1, 1, 1, 0, 0, 0, paint, new THREE.SphereGeometry(0.5, 16, 12))
+
         leaves.scale.set(w * size, top * size, d * size)
         leaves.position.set(fx * (w / 2) * (1 - size), pot + top * (size / 2 + fy * (1 - size)), fz * (d / 2) * (1 - size))
       }
+
       break
     }
     case ITEM_SHAPE.Lamp: {
       const shadeHeight = Math.min(0.35, h * 0.25)
+
       round(w * 0.6, 0.03, d * 0.6, 0.015)
       round(0.03, h - shadeHeight, 0.03, (h - shadeHeight) / 2)
       round(w, shadeHeight, d, h - shadeHeight / 2, 0.35, 0.5)
@@ -636,6 +775,7 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
     default:
       block(w, h, d, 0, h / 2, 0)
   }
+
   return group
 }
 
@@ -661,13 +801,16 @@ const PLANT_CLUSTERS = [
  */
 function floorMaterial(plan: Plan, anisotropy: number) {
   const canvas = document.createElement("canvas")
+
   canvas.width = canvas.height = 512
   paintFloor(canvas.getContext("2d")!, plan.floorType, plan.floorColor, 512)
   const texture = new THREE.CanvasTexture(canvas)
+
   texture.colorSpace = THREE.SRGBColorSpace
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping
   texture.repeat.set(1 / FLOOR_TILE_METRES, 1 / FLOOR_TILE_METRES)
   texture.anisotropy = anisotropy
+
   return new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7, metalness: 0 })
 }
 
@@ -685,8 +828,12 @@ function material(color: string) {
  */
 function dispose(scene: THREE.Scene) {
   scene.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return
+    if (!(object instanceof THREE.Mesh)) {
+      return
+    }
+
     object.geometry.dispose()
+
     for (const m of [object.material].flat() as THREE.MeshStandardMaterial[]) {
       m.map?.dispose()
       m.dispose()

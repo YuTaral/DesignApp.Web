@@ -58,6 +58,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
       const seen = fromWall(plan, wall, item.x, item.y)
       const size = footprint(item)
       const [across, deep] = alongWall ? [size.width, size.depth] : [size.depth, size.width]
+
       return { item, along: seen.along, across, gap: Math.max(0, seen.away - deep / 2) }
     })
     .sort((a, b) => b.gap - a.gap)
@@ -72,6 +73,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
    */
   const toWall = (clientX: number, clientY: number) => {
     const point = new DOMPoint(clientX, clientY).matrixTransform(svgRef.current!.getScreenCTM()!.inverse())
+
     return { x: point.x, y: height - point.y }
   }
 
@@ -82,18 +84,26 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
     const item = plan.items[index]
     const point = toWall(event.clientX, event.clientY)
     const anchor = { x: item.x - (corner.x * item.width) / 2, y: corner.y > 0 ? item.elevation : item.elevation + item.height }
+
     gesture.current = { kind, index, pointerId: event.pointerId, offset: { x: point.x - item.x, y: point.y - item.elevation }, anchor }
   }
 
   const move = (event: ReactPointerEvent) => {
     const g = gesture.current
-    if (!g || g.pointerId !== event.pointerId) return
-    const item = plan.items[g.index]
-    const point = toWall(event.clientX, event.clientY)
-    if (g.kind === "move") {
-      update(g.index, { x: point.x - g.offset.x, elevation: item.shape === ITEM_SHAPE.Door ? 0 : point.y - g.offset.y })
+
+    if (!g || g.pointerId !== event.pointerId) {
       return
     }
+
+    const item = plan.items[g.index]
+    const point = toWall(event.clientX, event.clientY)
+
+    if (g.kind === "move") {
+      update(g.index, { x: point.x - g.offset.x, elevation: item.shape === ITEM_SHAPE.Door ? 0 : point.y - g.offset.y })
+
+      return
+    }
+
     // Resizing keeps the opposite corner where it began and grows towards the pointer, which stays between the wall's
     // ends and between the floor and the ceiling, so the wall never has to move the window to fit it.
     const { x: ax, y: ay } = g.anchor
@@ -102,18 +112,29 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
     const tall = Math.max(BUILDER.item.min, Math.abs(py - ay))
     const middle = ax + Math.sign(px - ax || 1) * (width / 2)
     const bottom = py >= ay ? ay : ay - tall
+
     update(g.index, { x: middle, elevation: item.shape === ITEM_SHAPE.Door ? 0 : Math.max(0, bottom), width, height: tall })
   }
 
   const end = (event: ReactPointerEvent) => {
-    if (gesture.current?.pointerId === event.pointerId) gesture.current = null
+    if (gesture.current?.pointerId === event.pointerId) {
+      gesture.current = null
+    }
   }
 
   const drop = (event: DragEvent) => {
     const data = event.dataTransfer.getData(BUILDER.dragType)
-    if (!data) return
+
+    if (!data) {
+      return
+    }
+
     const object = JSON.parse(data) as CatalogObject
-    if (!isWallShape(object.shape)) return
+
+    if (!isWallShape(object.shape)) {
+      return
+    }
+
     event.preventDefault()
     add(object, { wall, along: toWall(event.clientX, event.clientY).x })
   }
@@ -142,7 +163,9 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
         onPointerUp={end}
         onPointerCancel={end}
         onDragOver={(event) => {
-          if (event.dataTransfer.types.includes(BUILDER.dragType)) event.preventDefault()
+          if (event.dataTransfer.types.includes(BUILDER.dragType)) {
+            event.preventDefault()
+          }
         }}
         onDrop={drop}
       >
@@ -152,6 +175,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
         {/* Windows and doors first, so the room's objects stand in front of them. */}
         {openings.map(({ item, index }) => {
           const [left, top] = [item.x - item.width / 2, height - item.elevation - item.height]
+
           return (
             <g key={index} data-item={index} data-opening={item.shape} className="cursor-move" onPointerDown={(event) => start(event, index, "move")}>
               {item.shape === ITEM_SHAPE.Window ? (
@@ -175,8 +199,10 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
             label !== null &&
             standing.slice(n + 1).some((near) => {
               const half = labelWidth(label, text * 0.8) / 2
+
               return near.along - near.across / 2 < along + half && near.along + near.across / 2 > along - half && height - near.item.height < middle + text / 2
             })
+
           return (
             <g key={n} className="pointer-events-none" opacity={gap <= NEAR ? 0.9 : Math.max(0.25, 0.7 - gap / 600)} data-wall-object>
               <rect x={along - across / 2} y={height - Math.max(item.height, 2)} width={across} height={Math.max(item.height, 2)} rx={3} fill={item.color} stroke="black" strokeOpacity="0.3" />
@@ -244,6 +270,7 @@ function Measurements({ item, height, text }: { item: { x: number; width: number
   const middle = height - item.elevation - item.height / 2
   // A halo in the wall's own color keeps the numbers readable over the drawing.
   const style = { paintOrder: "stroke", stroke: "white", strokeWidth: 4, strokeOpacity: 0.8 } as const
+
   return (
     <g className="pointer-events-none" data-measurements>
       <line x1={0} y1={middle} x2={left} y2={middle} strokeWidth={2} strokeDasharray="6 4" className="stroke-primary" />
@@ -289,6 +316,7 @@ function HungFront({ item, index, height, text, onStart }: { item: PlanItem; ind
   // A cabinet wider than a door gets one seam per 60 cm.
   const doors = item.shape === ITEM_SHAPE.WallBox && h > 20 ? Math.max(1, Math.round(w / 60)) : 1
   const label = h > text * 1.4 ? fitLabel(item.label, w, text * 0.8) : null
+
   return (
     <g data-item={index} data-hung={item.shape} className="cursor-move" onPointerDown={onStart}>
       <rect x={left} y={top} width={w} height={h} rx={item.shape === ITEM_SHAPE.Picture ? 1 : 2} fill={item.color} stroke="black" strokeOpacity="0.35" strokeWidth={1.5} />
@@ -324,7 +352,12 @@ function labelWidth(label: string, size: number) {
  */
 function fitLabel(label: string, room: number, size: number) {
   const space = room - size // a little margin on each side
-  if (labelWidth(label, size) <= space) return label
+
+  if (labelWidth(label, size) <= space) {
+    return label
+  }
+
   const letters = Math.floor(space / (size * LETTER_WIDTH)) - 1
+
   return letters >= MIN_LABEL_LETTERS ? `${label.slice(0, letters).trimEnd()}…` : null
 }

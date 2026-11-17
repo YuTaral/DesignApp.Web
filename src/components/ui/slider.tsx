@@ -13,8 +13,14 @@ function Slider({
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
   const _values = React.useMemo(
     () => {
-      if (Array.isArray(value)) return value
-      if (Array.isArray(defaultValue)) return defaultValue
+      if (Array.isArray(value)) {
+        return value
+      }
+
+      if (Array.isArray(defaultValue)) {
+        return defaultValue
+      }
+
       return [min, max]
     },
     [value, defaultValue, min, max]

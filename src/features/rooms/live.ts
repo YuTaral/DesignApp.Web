@@ -17,7 +17,9 @@ export function useLiveRoom(roomId: string, finished: boolean) {
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    if (finished) return
+    if (finished) {
+      return
+    }
 
     const update = (room: Room) => queryClient.setQueryData(QUERY_KEYS.room(room.id), room)
     const connection = new HubConnectionBuilder()
@@ -28,10 +30,14 @@ export function useLiveRoom(roomId: string, finished: boolean) {
 
     connection.on(HUB.events.roomChanged, (room: Room) => {
       update(room)
-      if (isAnalysisFinished(room.status)) void connection.stop()
+
+      if (isAnalysisFinished(room.status)) {
+        void connection.stop()
+      }
     })
     // Watch returns the current state, which also covers anything missed while reconnecting.
     const watch = () => connection.invoke<Room>(HUB.methods.watch, roomId).then(update)
+
     connection.onreconnected(() => void watch().catch(() => {}))
 
     // Start on the next tick: React's development double-mount runs this effect's cleanup

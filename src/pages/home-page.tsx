@@ -59,6 +59,7 @@ export function HomePage() {
   const upload = useMutation({
     mutationFn: (file: File) => {
       abort.current = new AbortController()
+
       return uploadRoom(file, { onProgress: setProgress, signal: abort.current.signal, scope, ai })
     },
     onMutate: (file) => {
@@ -68,21 +69,28 @@ export function HomePage() {
     onSuccess: async (room) => {
       queryClient.setQueryData(QUERY_KEYS.room(room.id), room)
       attachRoom(room.id)
+
       if (target) {
         try {
           await addRoom.mutateAsync({ designId: target.id, roomId: room.id, edits: [] })
           void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: { design: target.id } })
+
           return
         } catch (error) {
           toast.error(errorMessage(error))
         }
       }
+
       void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: {} })
     },
     onError: (error) => {
       clear()
       setProgress(null)
-      if (error instanceof DOMException && error.name === "AbortError") return
+
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+
       toast.error(errorMessage(error))
     },
   })

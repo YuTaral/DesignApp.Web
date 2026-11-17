@@ -26,19 +26,29 @@ export async function launch({ headless = !process.argv.includes('--show') } = {
   })
   const page = await browser.newPage()
   const log = []
+
   // Only warnings and errors: React and Vite log plenty of harmless dev chatter.
-  page.on('console', (m) => { if (['error', 'warn'].includes(m.type())) log.push(`[console.${m.type()}] ${m.text()}`) })
+  page.on('console', (m) => {
+    if (['error', 'warn'].includes(m.type())) {
+      log.push(`[console.${m.type()}] ${m.text()}`)
+    }
+  })
   page.on('pageerror', (e) => log.push(`[pageerror] ${e.message}`))
   page.on('requestfailed', (r) => log.push(`[requestfailed] ${r.method()} ${r.url()} ${r.failure()?.errorText ?? ''}`))
   page.on('response', (r) => {
-    if (r.status() >= 400) log.push(`[http ${r.status()}] ${r.request().method()} ${r.url()}`)
+    if (r.status() >= 400) {
+      log.push(`[http ${r.status()}] ${r.request().method()} ${r.url()}`)
+    }
   })
   let n = 0
   const shot = async (name) => {
     const file = path.join(SHOTS, `${String(++n).padStart(2, '0')}-${name}.png`)
+
     await page.screenshot({ path: file })
+
     return file
   }
+
   return { browser, page, log, shot }
 }
 
@@ -47,11 +57,17 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 /** Waits until fn() returns something truthy (polled in the page). */
 export async function until(page, fn, { timeout = 15000, label = 'condition' } = {}) {
   const start = Date.now()
+
   while (Date.now() - start < timeout) {
     const value = await page.evaluate(fn).catch(() => null)
-    if (value) return value
+
+    if (value) {
+      return value
+    }
+
     await sleep(100)
   }
+
   throw new Error(`Timed out waiting for ${label}`)
 }
 
@@ -72,25 +88,49 @@ export async function selectObject(page, index, canvas = 'main canvas[data-photo
     const margin = 4
     const offsets = Array.from({ length: 2 * margin + 1 }, (_, i) => i - margin)
     const inside = []
+
     for (let y = margin; y < h - margin; y += 2) {
       for (let x = margin; x < w - margin; x += 2) {
         const p = y * w + x
-        if (labels[p * 4] !== index) continue
+
+        if (labels[p * 4] !== index) {
+          continue
+        }
+
         const [sx, sy] = [r.x + ((x + 0.5) / w) * r.width, r.y + ((y + 0.5) / h) * r.height]
-        if (sx < 8 || sy < 8 || sx > c.clientWidth - 8 || sy > c.clientHeight - 8) continue
-        if (sx > c.clientWidth - 180 && sy > c.clientHeight - 70) continue // the zoom buttons
-        if (offsets.every((d) => labels[(p + d) * 4] === index && labels[(p + d * w) * 4] === index)) inside.push({ x: sx, y: sy })
+
+        if (sx < 8 || sy < 8 || sx > c.clientWidth - 8 || sy > c.clientHeight - 8) {
+          continue
+        }
+
+        if (sx > c.clientWidth - 180 && sy > c.clientHeight - 70) {
+          continue // the zoom buttons
+        }
+
+        if (offsets.every((d) => labels[(p + d) * 4] === index && labels[(p + d * w) * 4] === index)) {
+          inside.push({ x: sx, y: sy })
+        }
       }
     }
-    if (inside.length === 0) return null
+
+    if (inside.length === 0) {
+      return null
+    }
+
     // The inside point nearest the middle of the others, so the click lands well inside the object.
     const [mx, my] = [inside.reduce((s, q) => s + q.x, 0) / inside.length, inside.reduce((s, q) => s + q.y, 0) / inside.length]
     const best = inside.reduce((a, q) => (Math.hypot(q.x - mx, q.y - my) < Math.hypot(a.x - mx, a.y - my) ? q : a))
+
     return { x: b.left + best.x, y: b.top + best.y }
   }, index, canvas)
-  if (!point) return false
+
+  if (!point) {
+    return false
+  }
+
   await page.mouse.click(point.x, point.y)
   await sleep(250)
+
   return true
 }
 
@@ -102,8 +142,13 @@ export async function shownObjects(page, canvas = 'main canvas[data-photo-rect]'
     const ctx = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d'); ctx.drawImage(bmp, 0, 0)
     const data = ctx.getImageData(0, 0, bmp.width, bmp.height).data
     const found = new Set()
-    for (let p = 0; p < data.length; p += 4) found.add(data[p])
+
+    for (let p = 0; p < data.length; p += 4) {
+      found.add(data[p])
+    }
+
     found.delete(0)
+
     return [...found]
   }, canvas))
 }

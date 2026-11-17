@@ -19,7 +19,11 @@ import { OUTLINE_BRUSH_MODE, STROKE_SHAPE } from "@/lib/constants"
 export function OutlinePanel({ room, stacked = false }: { room: Room; stacked?: boolean }) {
   const { selected, outlineTool, setOutlineTool, brushShape } = useEditorStore()
   const object = room.objects.find((o) => o.index === selected)
-  if (!object) return null
+
+  if (!object) {
+    return null
+  }
+
   const brush = brushShape === STROKE_SHAPE.Brush
 
   return (

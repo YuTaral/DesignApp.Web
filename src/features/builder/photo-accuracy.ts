@@ -76,20 +76,32 @@ export function scorePhoto(plan: Plan, objects: DetectedObject[], labels: LabelM
   const { ids, camera } = renderMasks(plan, width, height)
   const pixels = width * height
   const enough = pixels * BUILDER.accuracy.minShare
-
+  const measure = measurer(camera, width, height)
   // A part (a chair's seat) counts as its whole object.
   const byIndex = new Map(objects.map((o) => [o.index, o]))
   const root = (index: number) => {
     let o = byIndex.get(index)
-    while (o?.parentIndex != null && byIndex.has(o.parentIndex)) o = byIndex.get(o.parentIndex)
+
+    while (o?.parentIndex != null && byIndex.has(o.parentIndex)) {
+      o = byIndex.get(o.parentIndex)
+    }
+
     return o
   }
-
   const expected = new Map<number, Extent>()
   const actual = new Map<number, Extent>()
   const both = new Map<string, number>()
+  // Which photo object each plan object is paired with, and the plan objects paired with each photo object.
+  const groups = new Map<number, number[]>()
+  const groupOf = new Map<number, number>()
+  // Unmatched photo objects: room trim (skirting boards, moulding), decorations when most of them lies on a plan
+  // object's outline, else extras.
+  const extras: PhotoScore["extras"] = []
+  const decorations: string[] = []
+  const trim: string[] = []
   const add = (map: Map<number, Extent>, key: number, x: number, y: number) => {
     const e = map.get(key) ?? { count: 0, left: x, right: x, top: y, bottom: y }
+
     e.count++
     e.left = Math.min(e.left, x)
     e.right = Math.max(e.right, x)
@@ -97,17 +109,66 @@ export function scorePhoto(plan: Plan, objects: DetectedObject[], labels: LabelM
     e.bottom = Math.max(e.bottom, y)
     map.set(key, e)
   }
+  const shared = (item: number, object: number) => both.get(`${item}:${object}`) ?? 0
+  const join = (item: number, object: number) => {
+    groups.set(object, [...(groups.get(object) ?? []), item])
+    groupOf.set(item, object)
+  }
+  const overlap = (items: number[], object: number) => {
+    const common = items.reduce((sum, item) => sum + shared(item, object), 0)
+    const wanted = items.reduce((sum, item) => sum + expected.get(item)!.count, 0)
+
+    return common / (wanted + actual.get(object)!.count - common)
+  }
+  const pairUp = (least: number) => {
+    const pairs = [...both.keys()]
+      .map((key) => key.split(":").map(Number))
+      .filter(([item, object]) => !groupOf.has(item) && !groups.has(object) && expected.get(item)!.count >= enough)
+      .map(([item, object]) => ({ item, object, overlap: overlap([item], object) }))
+      .filter((pair) => pair.overlap >= least)
+      .sort((a, b) => b.overlap - a.overlap)
+
+    for (const pair of pairs) {
+      if (!groupOf.has(pair.item) && !groups.has(pair.object)) {
+        join(pair.item, pair.object)
+      }
+    }
+  }
+  /** The outline of several plan objects together. */
+  const together = (items: number[]): Extent => {
+    const parts = items.map((item) => expected.get(item)!)
+
+    return {
+      count: parts.reduce((sum, e) => sum + e.count, 0),
+      left: Math.min(...parts.map((e) => e.left)),
+      right: Math.max(...parts.map((e) => e.right)),
+      top: Math.min(...parts.map((e) => e.top)),
+      bottom: Math.max(...parts.map((e) => e.bottom)),
+    }
+  }
+  const average = (values: number[]) => (values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0)
   let [floorBoth, floorExpected, floorActual, wallBoth, wallExpected, wallActual] = [0, 0, 0, 0, 0, 0]
+
   for (let p = 0; p < pixels; p++) {
     const [x, y] = [p % width, Math.floor(p / width)]
     const id = ids[p]
     const found = labels.labels[p] ? root(labels.labels[p]) : undefined
     const item = id > 0 && id < MASK_ID.floor ? id - 1 : -1
-    if (item >= 0) add(expected, item, x, y)
     const object = found && !SURFACES.has(found.category) ? found.index : -1
-    if (object >= 0) add(actual, object, x, y)
-    if (item >= 0 && object >= 0) both.set(`${item}:${object}`, (both.get(`${item}:${object}`) ?? 0) + 1)
     const [isFloor, isWall] = [found?.category === OBJECT_CATEGORY.Floor, found?.category === OBJECT_CATEGORY.Wall]
+
+    if (item >= 0) {
+      add(expected, item, x, y)
+    }
+
+    if (object >= 0) {
+      add(actual, object, x, y)
+    }
+
+    if (item >= 0 && object >= 0) {
+      both.set(`${item}:${object}`, (both.get(`${item}:${object}`) ?? 0) + 1)
+    }
+
     floorExpected += Number(id === MASK_ID.floor)
     floorActual += Number(isFloor)
     floorBoth += Number(id === MASK_ID.floor && isFloor)
@@ -119,55 +180,35 @@ export function scorePhoto(plan: Plan, objects: DetectedObject[], labels: LabelM
   // Pair plan objects with photo objects: first the clear one-to-one pairs; then each plan object left over goes to the
   // photo object covering most of it, even one already paired (the analysis may see two cabinet runs as one counter,
   // and then they are measured together); then weaker one-to-one pairs. The rest is missing.
-  const shared = (item: number, object: number) => both.get(`${item}:${object}`) ?? 0
   const visible = [...expected.keys()].filter((item) => expected.get(item)!.count >= enough).sort((a, b) => a - b)
-  const groups = new Map<number, number[]>()
-  const groupOf = new Map<number, number>()
-  const join = (item: number, object: number) => {
-    groups.set(object, [...(groups.get(object) ?? []), item])
-    groupOf.set(item, object)
-  }
-  const overlap = (items: number[], object: number) => {
-    const common = items.reduce((sum, item) => sum + shared(item, object), 0)
-    const wanted = items.reduce((sum, item) => sum + expected.get(item)!.count, 0)
-    return common / (wanted + actual.get(object)!.count - common)
-  }
-  const pairUp = (least: number) => {
-    const pairs = [...both.keys()]
-      .map((key) => key.split(":").map(Number))
-      .filter(([item, object]) => !groupOf.has(item) && !groups.has(object) && expected.get(item)!.count >= enough)
-      .map(([item, object]) => ({ item, object, overlap: overlap([item], object) }))
-      .filter((pair) => pair.overlap >= least)
-      .sort((a, b) => b.overlap - a.overlap)
-    for (const pair of pairs) if (!groupOf.has(pair.item) && !groups.has(pair.object)) join(pair.item, pair.object)
-  }
-  pairUp(BUILDER.accuracy.clearOverlap)
-  for (const item of visible) {
-    if (groupOf.has(item)) continue
-    const best = [...actual.keys()].map((object) => ({ object, covered: shared(item, object) / expected.get(item)!.count })).sort((a, b) => b.covered - a.covered)[0]
-    if (best && best.covered >= BUILDER.accuracy.coveredShare) join(item, best.object)
-  }
-  pairUp(BUILDER.accuracy.minOverlap)
 
-  const measure = measurer(camera, width, height)
-  /** The outline of several plan objects together. */
-  const together = (items: number[]): Extent => {
-    const parts = items.map((item) => expected.get(item)!)
-    return {
-      count: parts.reduce((sum, e) => sum + e.count, 0),
-      left: Math.min(...parts.map((e) => e.left)),
-      right: Math.max(...parts.map((e) => e.right)),
-      top: Math.min(...parts.map((e) => e.top)),
-      bottom: Math.max(...parts.map((e) => e.bottom)),
+  pairUp(BUILDER.accuracy.clearOverlap)
+
+  for (const item of visible) {
+    if (groupOf.has(item)) {
+      continue
+    }
+
+    const best = [...actual.keys()].map((object) => ({ object, covered: shared(item, object) / expected.get(item)!.count })).sort((a, b) => b.covered - a.covered)[0]
+
+    if (best && best.covered >= BUILDER.accuracy.coveredShare) {
+      join(item, best.object)
     }
   }
+
+  pairUp(BUILDER.accuracy.minOverlap)
+
   const scores: ObjectScore[] = visible.map((index) => {
     const item = plan.items[index]
     const object = groupOf.get(index)
     const own = expected.get(index)!
     const cut = own.left === 0 || own.top === 0 || own.right === width - 1 || own.bottom === height - 1
     const empty = { index, label: item.label, matched: null, overlap: 0, widthError: null, heightError: null, offsetCm: null, cut, together: [] }
-    if (object === undefined) return empty
+
+    if (object === undefined) {
+      return empty
+    }
+
     const group = groups.get(object)!
     const e = together(group)
     const groupCut = e.left === 0 || e.top === 0 || e.right === width - 1 || e.bottom === height - 1
@@ -176,6 +217,7 @@ export function scorePhoto(plan: Plan, objects: DetectedObject[], labels: LabelM
     const onWall = isWallItem(item) ? wallPoint(plan, item.wall, item.x) : null
     const wanted = measure(e, onWall)
     const got = measure(a, onWall)
+
     return {
       ...empty,
       cut: groupCut,
@@ -188,22 +230,29 @@ export function scorePhoto(plan: Plan, objects: DetectedObject[], labels: LabelM
     }
   })
 
-  // Unmatched photo objects: room trim (skirting boards, moulding), decorations when most of them lies on a plan
-  // object's outline, else extras.
-  const extras: PhotoScore["extras"] = []
-  const decorations: string[] = []
-  const trim: string[] = []
   for (const [object, a] of actual) {
-    if (groups.has(object) || a.count < enough) continue
-    let onItems = 0
-    for (const [key, count] of both) if (key.endsWith(`:${object}`)) onItems += count
+    if (groups.has(object) || a.count < enough) {
+      continue
+    }
+
     const label = byIndex.get(object)!.label
-    if (BUILDER.accuracy.trimWords.some((word) => label.toLowerCase().includes(word))) trim.push(label)
-    else if (onItems / a.count >= BUILDER.accuracy.decorationShare) decorations.push(label)
-    else extras.push({ label, share: a.count / pixels })
+    let onItems = 0
+
+    for (const [key, count] of both) {
+      if (key.endsWith(`:${object}`)) {
+        onItems += count
+      }
+    }
+
+    if (BUILDER.accuracy.trimWords.some((word) => label.toLowerCase().includes(word))) {
+      trim.push(label)
+    } else if (onItems / a.count >= BUILDER.accuracy.decorationShare) {
+      decorations.push(label)
+    } else {
+      extras.push({ label, share: a.count / pixels })
+    }
   }
 
-  const average = (values: number[]) => (values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0)
   return {
     objects: scores,
     extras,
@@ -230,26 +279,39 @@ function measurer(camera: THREE.PerspectiveCamera, width: number, height: number
   /** The ray through a pixel. */
   const through = (x: number, y: number) => {
     ray.setFromCamera(new THREE.Vector2(((x + 0.5) / width) * 2 - 1, -((y + 0.5) / height) * 2 + 1), camera)
+
     return ray.ray.clone()
   }
   /** Where a pixel's ray meets the plane facing the camera at a depth. */
   const atDepth = (x: number, y: number, depth: number) => {
     const plane = new THREE.Plane(forward.clone().negate(), forward.dot(camera.position) + depth)
+
     return through(x, y).intersectPlane(plane, new THREE.Vector3())
   }
+
   return (e: Extent, onWall: { x: number; y: number } | null) => {
     const middle = (e.left + e.right) / 2
     let spot: THREE.Vector3 | null
+
     if (onWall) {
       spot = new THREE.Vector3(onWall.x / 100, 0, onWall.y / 100)
     } else {
       spot = through(middle, e.bottom).intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3())
     }
-    if (!spot) return null
+
+    if (!spot) {
+      return null
+    }
+
     const depth = spot.clone().sub(camera.position).dot(forward)
     const [left, right, top, bottom] = [atDepth(e.left, e.bottom, depth), atDepth(e.right + 1, e.bottom, depth), atDepth(middle, e.top, depth), atDepth(middle, e.bottom + 1, depth)]
-    if (!left || !right || !top || !bottom) return null
+
+    if (!left || !right || !top || !bottom) {
+      return null
+    }
+
     const centre = onWall ? atDepth(middle, (e.top + e.bottom) / 2, depth) ?? spot : spot
+
     return { x: centre.x, y: centre.y, z: centre.z, width: left.distanceTo(right), height: top.distanceTo(bottom) }
   }
 }

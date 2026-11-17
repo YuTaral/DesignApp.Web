@@ -34,28 +34,43 @@ export function litresFor(area: number, { coats, coverage }: PaintSettings) {
  * @param sizes - The tin sizes, in litres (multiples of half a litre).
  */
 export function tinsFor(litres: number, sizes: readonly number[] = PAINT.tins) {
-  if (litres <= 0) return []
+  if (litres <= 0) {
+    return []
+  }
+
   // Work in half litres, so every tin is a whole number of units.
   const units = sizes.map((size) => Math.round(size * 2))
   const target = Math.ceil(litres * 2 - 1e-9)
   const limit = target + Math.max(...units)
   // fewest[t]: the fewest tins that hold exactly t units, and the last tin added to get there.
   const fewest: { count: number; last: number }[] = [{ count: 0, last: -1 }]
+  const counts = new Map<number, number>()
+
   for (let total = 1; total <= limit; total++) {
     let best = { count: Infinity, last: -1 }
+
     units.forEach((unit, i) => {
       const before = fewest[total - unit]
-      if (total >= unit && before && before.count + 1 < best.count) best = { count: before.count + 1, last: i }
+
+      if (total >= unit && before && before.count + 1 < best.count) {
+        best = { count: before.count + 1, last: i }
+      }
     })
     fewest[total] = best
   }
+
   let total = target
-  while (!Number.isFinite(fewest[total].count)) total++
-  const counts = new Map<number, number>()
+
+  while (!Number.isFinite(fewest[total].count)) {
+    total++
+  }
+
   for (let t = total; t > 0; t -= units[fewest[t].last]) {
     const size = sizes[fewest[t].last]
+
     counts.set(size, (counts.get(size) ?? 0) + 1)
   }
+
   return [...counts].map(([size, count]) => ({ litres: size, count })).sort((a, b) => b.litres - a.litres)
 }
 
@@ -85,11 +100,16 @@ export function closestPaint(hex: string, paints: readonly Paint[]) {
   const target = hexToOklab(hex)
   let best: Paint | undefined
   let bestDistance = Infinity
+
   for (const paint of paints) {
     const color = hexToOklab(paint.color)
     const distance = (color.l - target.l) ** 2 + (color.a - target.a) ** 2 + (color.b - target.b) ** 2
-    if (distance < bestDistance) [best, bestDistance] = [paint, distance]
+
+    if (distance < bestDistance) {
+      [best, bestDistance] = [paint, distance]
+    }
   }
+
   return best
 }
 
@@ -101,5 +121,6 @@ export function closestPaint(hex: string, paints: readonly Paint[]) {
 export function matchesPaint(paint: Paint, query: string) {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const text = `${paint.code} ${paint.name}`.toLowerCase()
+
   return words.every((word) => text.includes(word))
 }

@@ -13,8 +13,14 @@ import { LIMITS, MESSAGES, MIME } from "@/lib/constants"
  * @returns A message for the user, or null when the file is fine.
  */
 function validate(file: File): string | null {
-  if (!(MIME.photos as readonly string[]).includes(file.type)) return MESSAGES.wrongFileType
-  if (file.size > LIMITS.photoBytes) return MESSAGES.fileTooLarge
+  if (!(MIME.photos as readonly string[]).includes(file.type)) {
+    return MESSAGES.wrongFileType
+  }
+
+  if (file.size > LIMITS.photoBytes) {
+    return MESSAGES.fileTooLarge
+  }
+
   return null
 }
 
@@ -41,12 +47,19 @@ export function PhotoDropzone({ onSelect, progress = null, onCancel }: PhotoDrop
    */
   function handleFiles(files: FileList | null) {
     const file = files?.[0]
-    if (!file || uploading) return
-    const error = validate(file)
-    if (error) {
-      toast.error(error)
+
+    if (!file || uploading) {
       return
     }
+
+    const error = validate(file)
+
+    if (error) {
+      toast.error(error)
+
+      return
+    }
+
     onSelect(file)
   }
 
@@ -54,7 +67,10 @@ export function PhotoDropzone({ onSelect, progress = null, onCancel }: PhotoDrop
     <div
       onDragOver={(event) => {
         event.preventDefault()
-        if (!uploading) setDragging(true)
+
+        if (!uploading) {
+          setDragging(true)
+        }
       }}
       onDragLeave={() => setDragging(false)}
       onDrop={(event) => {

@@ -92,9 +92,12 @@ function Section({ name, title, hint, children }: { name: string; title: string;
 
   const toggle = () => {
     const next = !open
+
     setOpen(next)
+
     try {
       const others = readCollapsed().filter((n) => n !== name)
+
       localStorage.setItem(STORAGE_KEYS.builderCollapsed, JSON.stringify(next ? others : [...others, name]))
     } catch {
       // Without storage the section just isn't remembered.
@@ -171,8 +174,10 @@ function DescribeObject({ plan, disabled }: { plan: Plan; disabled: boolean }) {
 
   const describe = async () => {
     setBusy(true)
+
     try {
       const object = await describeObject(plan.id, text.trim())
+
       add(object)
       setText("")
       toast.success(MESSAGES.objectDescribed(object.label))

@@ -49,16 +49,20 @@ export function LibraryPage() {
   const tryLayout = async (house: LibraryDesign, room: LibraryRoom, layout: LibraryLayout) => {
     try {
       const copy = await copyRoom.mutateAsync({ designId: house.id, roomId: room.id, layoutId: layout.id, ai })
+
       setChoosing(null)
+
       if (target) {
         try {
           await addRoom.mutateAsync({ designId: target.id, roomId: copy.id, edits: [] })
           void navigate({ to: ROUTES.room, params: { roomId: copy.id }, search: { design: target.id } })
+
           return
         } catch (error) {
           toast.error(errorMessage(error))
         }
       }
+
       void navigate({ to: ROUTES.room, params: { roomId: copy.id }, search: {} })
     } catch (error) {
       toast.error(errorMessage(error))
@@ -66,8 +70,11 @@ export function LibraryPage() {
   }
 
   const openRoom = (house: LibraryDesign, room: LibraryRoom) => {
-    if (room.layouts.length === 1) void tryLayout(house, room, room.layouts[0])
-    else setChoosing({ house, room })
+    if (room.layouts.length === 1) {
+      void tryLayout(house, room, room.layouts[0])
+    } else {
+      setChoosing({ house, room })
+    }
   }
 
   const saveHouse = (house: LibraryDesign) => {
@@ -160,6 +167,7 @@ export function LibraryPage() {
  */
 function HouseCard({ house, designId }: { house: LibraryDesign; designId: string | undefined }) {
   const layouts = house.rooms.reduce((count, room) => count + room.layouts.length, 0)
+
   return (
     <Link
       to={ROUTES.library}
@@ -240,6 +248,7 @@ function HouseSection({
   onUseHouse: () => void
 }) {
   const here = useRouterState({ select: (state) => state.location.href })
+
   return (
     <section className="mt-4" aria-labelledby={`house-${house.id}`}>
       <div className="flex flex-wrap items-end gap-3">

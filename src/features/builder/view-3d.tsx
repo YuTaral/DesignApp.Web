@@ -28,7 +28,11 @@ export function View3d({ plan }: { plan: Plan }) {
   const canvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     sceneRef.current?.dispose()
     sceneRef.current = null
-    if (!canvas) return
+
+    if (!canvas) {
+      return
+    }
+
     try {
       sceneRef.current = new PlanScene(canvas)
     } catch {
@@ -38,7 +42,11 @@ export function View3d({ plan }: { plan: Plan }) {
 
   useEffect(() => {
     const [container, controls] = [containerRef.current, controlsRef.current]
-    if (!container || !controls) return
+
+    if (!container || !controls) {
+      return
+    }
+
     const observer = new ResizeObserver(() => {
       // The photo's 4:3, as large as fits above the choices below it (measured, as they wrap on narrow screens and
       // grow with the blocked-view note), less the gap between them.
@@ -49,20 +57,26 @@ export function View3d({ plan }: { plan: Plan }) {
         clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - controls.offsetHeight - parseFloat(style.rowGap),
       ]
       const fitted = Math.min(width, (height * 4) / 3)
+
       setSize({ width: Math.max(0, Math.floor(fitted)), height: Math.max(0, Math.floor((fitted * 3) / 4)) })
     })
+
     observer.observe(container)
     observer.observe(controls)
+
     return () => observer.disconnect()
   }, [])
 
   useEffect(() => {
-    if (sceneRef.current && size.width > 0) sceneRef.current.render(plan, size.width, size.height)
+    if (sceneRef.current && size.width > 0) {
+      sceneRef.current.render(plan, size.width, size.height)
+    }
   }, [plan, size])
 
   // Whether something blocks the view (a cabinet in the corner the photo is taken from), checked once the room stops
   // changing, as each check draws the room again.
   const [blocking, setBlocking] = useState<PlanItem | null>(null)
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
@@ -71,6 +85,7 @@ export function View3d({ plan }: { plan: Plan }) {
         setBlocking(null)
       }
     }, BUILDER.blockedCheckMs)
+
     return () => window.clearTimeout(timer)
   }, [plan])
 
@@ -82,6 +97,7 @@ export function View3d({ plan }: { plan: Plan }) {
     const box = event.currentTarget.getBoundingClientRect()
     const x = ((event.clientX - box.left) / box.width) * 2 - 1
     const y = -(((event.clientY - box.top) / box.height) * 2 - 1)
+
     return sceneRef.current?.wallAt(plan, x, y) ?? null
   }
 
@@ -102,12 +118,16 @@ export function View3d({ plan }: { plan: Plan }) {
           style={{ width: size.width, height: size.height, cursor: hover ? "pointer" : "default" }}
           onMouseMove={(event) => {
             const wall = wallUnder(event)
+
             setHover(wall !== null && wall !== plan.view)
           }}
           onMouseLeave={() => setHover(false)}
           onClick={(event) => {
             const wall = wallUnder(event)
-            if (wall !== null && wall !== plan.view) setRoom({ view: wall })
+
+            if (wall !== null && wall !== plan.view) {
+              setRoom({ view: wall })
+            }
           }}
         />
       )}

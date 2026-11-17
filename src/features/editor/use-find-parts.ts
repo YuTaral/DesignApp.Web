@@ -26,19 +26,26 @@ export function useFindParts(room: Room) {
    * @returns Whether parts were found (otherwise the user sees why).
    */
   const find = async (whole: DetectedObject, instructions?: string): Promise<boolean> => {
-    if (revision === null) return false
+    if (revision === null) {
+      return false
+    }
+
     setFinding(true)
+
     try {
       const updated = await findRoomParts(room.id, whole.index, revision, instructions)
       const known = new Set(room.objects.map((o) => o.index))
       const parts = updated.objects.filter((o) => !known.has(o.index))
+
       // The editor first, as with outline fixes, so the version sync never sends the old version back.
       applyOutlineFix(updated.labelMapRevision, parts[0]?.index ?? whole.index)
       queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
       toast.success(MESSAGES.partsFound(parts.length, whole.label))
+
       return true
     } catch (error) {
       toast.error(errorMessage(error))
+
       return false
     } finally {
       setFinding(false)

@@ -27,7 +27,11 @@ import { AI_MODE, LIMITS, MESSAGES, TONES } from "@/lib/constants"
 export function PartsButton({ room }: { room: Room }) {
   const { selected, marking, openParts } = useEditorStore()
   const object = room.objects.find((o) => o.index === selected)
-  if (!object) return null
+
+  if (!object) {
+    return null
+  }
+
   const whole = room.objects.find((o) => o.index === object.parentIndex) ?? object
 
   return (
@@ -60,13 +64,22 @@ export function PartsDialog({ room }: { room: Room }) {
   // Splitting by color is what the dialog starts with: an object without colors of its own or parts is split once
   // when it opens (quietly, so one with a single main color just stays as it is).
   const opened = useRef<number | null>(null)
+
   useEffect(() => {
-    if (!whole || opened.current === whole.index) return
+    if (!whole || opened.current === whole.index) {
+      return
+    }
+
     opened.current = whole.index
-    if (!edits[whole.index]?.tones && parts.length === 0) void split(whole, TONES.min, true)
+
+    if (!edits[whole.index]?.tones && parts.length === 0) {
+      void split(whole, TONES.min, true)
+    }
   }, [whole, edits, parts.length, split])
   useEffect(() => {
-    if (!whole) opened.current = null
+    if (!whole) {
+      opened.current = null
+    }
   }, [whole])
 
   return (
@@ -130,13 +143,20 @@ function useSplit(room: Room) {
 
   const split: Split = async (object, count, quiet = false) => {
     setSplitting(true)
+
     try {
       const colors = await loadObjectColors(room, revision ?? room.labelMapRevision, object.index)
       const found = findTones(colors, count)
-      if (found.length > 0) splitObject(object.index, found)
-      else if (!quiet) toast.info(MESSAGES.oneMainColor(object.label))
+
+      if (found.length > 0) {
+        splitObject(object.index, found)
+      } else if (!quiet) {
+        toast.info(MESSAGES.oneMainColor(object.label))
+      }
     } catch {
-      if (!quiet) toast.error(MESSAGES.tonesFailed)
+      if (!quiet) {
+        toast.error(MESSAGES.tonesFailed)
+      }
     } finally {
       setSplitting(false)
     }
@@ -155,7 +175,11 @@ function useSplit(room: Room) {
 function ToneSection({ room, split, splitting }: { room: Room; split: Split; splitting: boolean }) {
   const { selected, selectedTone, edits, joinObject, selectTone, highlightTone } = useEditorStore()
   const object = room.objects.find((o) => o.index === selected)
-  if (!object) return null
+
+  if (!object) {
+    return null
+  }
+
   const tones = edits[object.index]?.tones
   const count = tones?.length ?? TONES.min
 

@@ -9,11 +9,14 @@ import { Button } from "@/components/ui/button"
 // focus, so this is still what opened it when it closes. Noted as focus moves, because a dialog with an autofocused
 // field has moved the focus inside before Radix would tell it what had it.
 let lastFocusOutside: HTMLElement | null = null
+
 if (typeof document !== "undefined") {
   document.addEventListener(
     "focusin",
     (event) => {
-      if (event.target instanceof HTMLElement && !event.target.closest('[data-slot="dialog-content"]')) lastFocusOutside = event.target
+      if (event.target instanceof HTMLElement && !event.target.closest('[data-slot="dialog-content"]')) {
+        lastFocusOutside = event.target
+      }
     },
     true
   )
@@ -63,8 +66,13 @@ function DialogContent({
         // Radix only gives the focus back to a DialogTrigger, and these dialogs are opened by state, without one.
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event)
-          if (event.defaultPrevented) return
+
+          if (event.defaultPrevented) {
+            return
+          }
+
           const target = returnFocusTo?.current ?? lastFocusOutside
+
           if (target?.isConnected && target !== document.body) {
             event.preventDefault()
             target.focus()

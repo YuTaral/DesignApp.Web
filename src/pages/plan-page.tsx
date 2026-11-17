@@ -34,12 +34,15 @@ export function PlanPage() {
   const { plan, load } = useBuilderStore()
 
   useEffect(() => {
-    if (query.data) load(query.data)
+    if (query.data) {
+      load(query.data)
+    }
   }, [query.data, load])
 
   if (query.isError) {
     return <p className="mx-auto max-w-md px-4 py-16 text-center text-muted-foreground">{MESSAGES.planLoadFailed}</p>
   }
+
   if (!plan || plan.id !== planId) {
     return (
       <div className="grid flex-1 place-items-center">
@@ -47,6 +50,7 @@ export function PlanPage() {
       </div>
     )
   }
+
   return <Builder plan={plan} />
 }
 
@@ -63,6 +67,7 @@ function Builder({ plan }: { plan: Plan }) {
   const make = usePhotoMaker(plan, flush)
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
+
   // Copy, paste, duplicate, delete and deselect by keyboard; off while the photo dialog is open.
   useBuilderShortcuts(asking)
   const { selected, select } = useBuilderStore()
@@ -72,8 +77,10 @@ function Builder({ plan }: { plan: Plan }) {
   // Choosing a window or door shows its wall, where it is placed exactly (adjusted while rendering, when the
   // selection changes).
   const [shownFor, setShownFor] = useState(selected)
+
   if (shownFor !== selected) {
     setShownFor(selected)
+
     if (openingWall !== null) {
       setWall(openingWall)
       setView("wall")
@@ -85,7 +92,10 @@ function Builder({ plan }: { plan: Plan }) {
    * @param next - The wall.
    */
   const showWall = (next: number) => {
-    if (openingWall !== null && openingWall !== next) select(-1)
+    if (openingWall !== null && openingWall !== next) {
+      select(-1)
+    }
+
     setWall(next)
   }
 
@@ -212,15 +222,22 @@ function useAutosave(plan: Plan) {
   const { unsaved, saved } = useBuilderStore()
   const [saving, setSaving] = useState(false)
   const latest = useRef(plan)
+
   latest.current = plan
 
   /** Saves the plan as shown now. */
   const flush = async () => {
     const changes = useBuilderStore.getState().unsaved
-    if (changes === 0) return
+
+    if (changes === 0) {
+      return
+    }
+
     setSaving(true)
+
     try {
       const result = await savePlan(latest.current)
+
       queryClient.setQueryData(QUERY_KEYS.plan(result.id), result)
       saved(changes)
     } catch (error) {
@@ -232,8 +249,12 @@ function useAutosave(plan: Plan) {
   }
 
   useEffect(() => {
-    if (unsaved === 0) return
+    if (unsaved === 0) {
+      return
+    }
+
     const timer = setTimeout(() => void flush().catch(() => {}), BUILDER.autosaveMs)
+
     return () => clearTimeout(timer)
     // flush reads the latest plan itself; only a new change restarts the wait.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,9 +272,11 @@ function useAutosave(plan: Plan) {
  */
 function usePhotoMaker(plan: Plan, flush: () => Promise<void>) {
   return async (shot: PlanShot, style: PhotoStyle, instructions: string) => {
-    await flush()
     const seen = { ...plan, ...shot }
+
+    await flush()
     const guide = await renderGuide(seen)
+
     // Each object's box in the view keeps the image model to the plan's layout (it kept sizes and places better so).
     return generateRoom(plan.id, guide, style, instructions, undefined, objectBoxes(seen), shot)
   }

@@ -44,8 +44,14 @@ export type CanvasStroke = { mode: OutlineBrushMode; shape: StrokeShape; radius:
  * @param action - What it does, such as "add to the selected object".
  */
 function gestureLabel(shape: StrokeShape, action: string) {
-  if (shape === STROKE_SHAPE.Box) return `Drag a box over the photo to ${action}.`
-  if (shape === STROKE_SHAPE.Lasso) return `Draw around an area of the photo to ${action}.`
+  if (shape === STROKE_SHAPE.Box) {
+    return `Drag a box over the photo to ${action}.`
+  }
+
+  if (shape === STROKE_SHAPE.Lasso) {
+    return `Draw around an area of the photo to ${action}.`
+  }
+
   return `Click or drag over the photo to ${action}.`
 }
 
@@ -118,19 +124,26 @@ export function RoomCanvas({
   useEffect(() => {
     const abort = new AbortController()
     const photo = new Image()
+
     photo.crossOrigin = "anonymous" // same mode as the <img> before it, so the cached copy is reused
     photo.src = apiUrl(firstPhotoSrc.current)
 
     Promise.all([photo.decode(), loadLabelMap(firstLabelsUrl.current, abort.signal)])
       .then(([, labelMap]) => {
-        if (abort.signal.aborted || !canvasRef.current) return
+        if (abort.signal.aborted || !canvasRef.current) {
+          return
+        }
+
         const renderer = new RoomRenderer(canvasRef.current)
+
         renderer.setRoom(photo, labelMap)
         rendererRef.current = renderer
         setMap({ url: firstLabelsUrl.current, ...labelMap })
       })
       .catch((reason: unknown) => {
-        if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : MESSAGES.editorFailed)
+        if (!abort.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : MESSAGES.editorFailed)
+        }
       })
 
     return () => {
@@ -143,38 +156,58 @@ export function RoomCanvas({
 
   // Swap in another photo version (after a removal, undo or redo) without restarting the editor.
   useEffect(() => {
-    if (!map || shownPhoto === photoSrc) return
+    if (!map || shownPhoto === photoSrc) {
+      return
+    }
+
     const abort = new AbortController()
     const photo = new Image()
+
     photo.crossOrigin = "anonymous"
     photo.src = apiUrl(photoSrc)
     photo
       .decode()
       .then(() => {
-        if (abort.signal.aborted || !rendererRef.current) return
+        if (abort.signal.aborted || !rendererRef.current) {
+          return
+        }
+
         rendererRef.current.setPhoto(photo)
         setShownPhoto(photoSrc)
       })
       .catch(() => {
-        if (!abort.signal.aborted) setError(MESSAGES.editorFailed)
+        if (!abort.signal.aborted) {
+          setError(MESSAGES.editorFailed)
+        }
       })
+
     return () => abort.abort()
   }, [map, photoSrc, shownPhoto])
 
   // Swap in another label map version (after a fix, undo or redo) without reloading the photo.
   // Until it arrives the previous outlines stay on screen.
   useEffect(() => {
-    if (!map || map.url === labelsUrl) return
+    if (!map || map.url === labelsUrl) {
+      return
+    }
+
     const abort = new AbortController()
+
     loadLabelMap(labelsUrl, abort.signal)
       .then((labelMap) => {
-        if (abort.signal.aborted || !rendererRef.current) return
+        if (abort.signal.aborted || !rendererRef.current) {
+          return
+        }
+
         rendererRef.current.setLabels(labelMap)
         setMap({ url: labelsUrl, ...labelMap })
       })
       .catch((reason: unknown) => {
-        if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : MESSAGES.outlinesFailed)
+        if (!abort.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : MESSAGES.outlinesFailed)
+        }
       })
+
     return () => abort.abort()
   }, [labelsUrl, map])
 
@@ -182,36 +215,57 @@ export function RoomCanvas({
   // and what each rests on (removing a table offers the vase on it).
   const shownRevision = revision ?? room.labelMapRevision
   const presentKnown = presentObjects?.revision === shownRevision
+
   useEffect(() => {
-    if (!map || map.url !== labelsUrl || presentKnown) return
+    if (!map || map.url !== labelsUrl || presentKnown) {
+      return
+    }
+
     const present = new Set<number>()
-    for (const label of map.labels) present.add(label)
+
+    for (const label of map.labels) {
+      present.add(label)
+    }
+
     present.delete(0)
     setPresentObjects(shownRevision, present, restingOn(map))
   }, [map, labelsUrl, shownRevision, presentKnown, setPresentObjects])
 
   // The mask of a new object being marked, one byte per label map pixel; dropped when marking ends.
   const markMask = useRef<Uint8Array | null>(null)
+
   useEffect(() => {
-    if (!map) return
+    if (!map) {
+      return
+    }
+
     if (marking && markMask.current?.length !== map.labels.length) {
       markMask.current = new Uint8Array(map.labels.length)
     } else if (!marking && markMask.current) {
       markMask.current = null
+
       // After a save the new outlines are on their way and replace the preview; otherwise show the outlines
       // again (the draw below runs next, since marking changed).
-      if (map.url === labelsUrl) rendererRef.current?.setLabels(map)
+      if (map.url === labelsUrl) {
+        rendererRef.current?.setLabels(map)
+      }
     }
   }, [marking, map, labelsUrl])
 
   // Track the container's size, so the canvas fills it at any width.
   useEffect(() => {
     const container = containerRef.current
-    if (!container) return
+
+    if (!container) {
+      return
+    }
+
     const observer = new ResizeObserver(([entry]) => {
       setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
     })
+
     observer.observe(container)
+
     return () => observer.disconnect()
   }, [])
 
@@ -219,15 +273,20 @@ export function RoomCanvas({
 
   // Zoom in on the focused box once the canvas has a size: the box with a margin fills the canvas.
   const focused = useRef(false)
+
   useEffect(() => {
-    if (!focus || focused.current || size.width === 0 || size.height === 0) return
-    focused.current = true
+    if (!focus || focused.current || size.width === 0 || size.height === 0) {
+      return
+    }
+
     const fitted = photoRect(size, room, { zoom: 1, x: 0, y: 0 })
     const zoom = clamp(
       Math.min(size.width / (fitted.width * focus.width * LIMITS.focusMargin), size.height / (fitted.height * focus.height * LIMITS.focusMargin)),
       1, LIMITS.zoom.max
     )
     const [cx, cy] = [focus.x + focus.width / 2, focus.y + focus.height / 2]
+
+    focused.current = true
     setView(clampView(size, room, { zoom, x: fitted.width * zoom * (0.5 - cx), y: fitted.height * zoom * (0.5 - cy) }))
   }, [focus, size, room])
 
@@ -246,9 +305,14 @@ export function RoomCanvas({
   const renderEdits = useMemo(() => {
     const byIndex = new Map(room.objects.map((o) => [o.index, o]))
     const result = new Map<number, RenderEdit>()
+
     for (const [index, edit] of Object.entries(edits)) {
       const object = byIndex.get(Number(index))
-      if (!object) continue
+
+      if (!object) {
+        continue
+      }
+
       result.set(object.index, {
         target: hexToOklab(edit.color),
         source: hexToOklab(object.dominantColor),
@@ -256,12 +320,20 @@ export function RoomCanvas({
         tones: edit.tones?.map((t) => ({ center: hexToOklab(t.center), target: t.color ? hexToOklab(t.color) : null, strength: t.strength })),
       })
     }
+
     // A part without a color of its own looks like the rest of its object.
     for (const [part, parent] of parents) {
       const inherited = result.get(parent)
-      if (!result.has(part) && inherited) result.set(part, inherited)
+
+      if (!result.has(part) && inherited) {
+        result.set(part, inherited)
+      }
     }
-    if (marking) result.set(markIndex, { target: hexToOklab(MARK_PREVIEW.color), source: hexToOklab(MARK_PREVIEW.source), strength: MARK_PREVIEW.strength })
+
+    if (marking) {
+      result.set(markIndex, { target: hexToOklab(MARK_PREVIEW.color), source: hexToOklab(MARK_PREVIEW.source), strength: MARK_PREVIEW.strength })
+    }
+
     return result
   }, [edits, room.objects, marking, markIndex, parents])
 
@@ -272,13 +344,18 @@ export function RoomCanvas({
   // Draw on the next frame whenever anything visible changes.
   useEffect(() => {
     const renderer = rendererRef.current
-    if (!renderer || !map || !active) return
+
+    if (!renderer || !map || !active) {
+      return
+    }
+
     const frame = requestAnimationFrame(() => {
       renderer.render({
         rect, edits: renderEdits, hovered: marking ? 0 : hovered, selected: marking ? markIndex : selected,
         split: comparing ? rect.x + rect.width * split : null, highlight: marking ? null : highlightedTone,
       })
     })
+
     return () => cancelAnimationFrame(frame)
   }, [map, rect, renderEdits, hovered, selected, comparing, split, previewTick, marking, markIndex, shownPhoto, active, highlightedTone])
 
@@ -290,6 +367,7 @@ export function RoomCanvas({
         // Keep the point under (cx, cy) fixed while zooming.
         const centerX = size.width / 2 + v.x
         const centerY = size.height / 2 + v.y
+
         return clampView(size, room, { zoom, x: v.x + (cx - centerX) * (1 - applied), y: v.y + (cy - centerY) * (1 - applied) })
       })
     },
@@ -299,13 +377,20 @@ export function RoomCanvas({
   // Wheel zoom needs a non-passive listener to stop the page from scrolling.
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+
+    if (!canvas) {
+      return
+    }
+
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
       const bounds = canvas.getBoundingClientRect()
+
       zoomAround(Math.exp(-event.deltaY * 0.0015), event.clientX - bounds.left, event.clientY - bounds.top)
     }
+
     canvas.addEventListener("wheel", onWheel, { passive: false })
+
     return () => canvas.removeEventListener("wheel", onWheel)
   }, [zoomAround])
 
@@ -317,10 +402,12 @@ export function RoomCanvas({
 
   const localPoint = (event: ReactPointerEvent) => {
     const bounds = canvasRef.current!.getBoundingClientRect()
+
     return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
   }
   const objectAt = (x: number, y: number) => {
     const index = map ? labelAt(map, (x - rect.x) / rect.width, (y - rect.y) / rect.height) : 0
+
     return only && !only.has(index) ? 0 : index
   }
   // A part's strokes only take its object's pixels, and erasing gives them back to it (as the API does).
@@ -336,18 +423,30 @@ export function RoomCanvas({
    */
   const markedLabels = (mask: Uint8Array, base: Uint8Array) => {
     const labels = base.slice()
-    for (let p = 0; p < labels.length; p++) if (mask[p]) labels[p] = markIndex
+
+    for (let p = 0; p < labels.length; p++) {
+      if (mask[p]) {
+        labels[p] = markIndex
+      }
+    }
+
     return labels
   }
 
   /** Shows the stroke's working copy (or the mark) on the next frame. */
   const showPreview = () => {
-    if (previewFrame.current) return
+    if (previewFrame.current) {
+      return
+    }
+
     previewFrame.current = requestAnimationFrame(() => {
-      previewFrame.current = 0
       const s = stroke.current
+
+      previewFrame.current = 0
+
       if (s && map && rendererRef.current) {
         const labels = s.maskBefore && markMask.current ? markedLabels(markMask.current, map.labels) : s.working
+
         rendererRef.current.setLabels({ width: map.width, height: map.height, labels })
         setPreviewTick((n) => n + 1)
       }
@@ -357,22 +456,37 @@ export function RoomCanvas({
   /** Drops the stroke being drawn and shows the saved outlines (and the mark so far) again. */
   const cancelStroke = () => {
     const s = stroke.current
-    if (!s) return
+
+    if (!s) {
+      return
+    }
+
     stroke.current = null
     setArea(null)
-    if (s.maskBefore && markMask.current) markMask.current.set(s.maskBefore)
+
+    if (s.maskBefore && markMask.current) {
+      markMask.current.set(s.maskBefore)
+    }
+
     if (map) {
       const mask = marking ? markMask.current : null
+
       rendererRef.current?.setLabels(mask ? { ...map, labels: markedLabels(mask, map.labels) } : map)
     }
+
     setPreviewTick((n) => n + 1)
   }
 
   const onPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId)
     const point = localPoint(event)
+
+    event.currentTarget.setPointerCapture(event.pointerId)
     pointers.current.set(event.pointerId, point)
-    if (pointers.current.size === 1) gesture.current = { startX: point.x, startY: point.y, moved: false, pinch: null }
+
+    if (pointers.current.size === 1) {
+      gesture.current = { startX: point.x, startY: point.y, moved: false, pinch: null }
+    }
+
     if (pointers.current.size === 2) {
       cancelStroke() // a second finger means zoom, not paint
       gesture.current.pinch = distance([...pointers.current.values()])
@@ -382,122 +496,189 @@ export function RoomCanvas({
       const radius = Math.max(0.5, (brushSize / 2 / rect.width) * map.width)
       const first = toPhoto(point.x, point.y)
       const mask = marking ? markMask.current : null
-      if (marking && markStrokes.length >= LIMITS.mark.maxStrokes) return
+
+      if (marking && markStrokes.length >= LIMITS.mark.maxStrokes) {
+        return
+      }
+
       const shape = brushShape
       const start = { pointerId: event.pointerId, shape, startScreen: point, points: [first], lastScreen: point, radius }
       // A box or lasso fills its area when it is let go; until then only its outline shows.
       const brush = shape === STROKE_SHAPE.Brush
+
       if (mask) {
         const maskBefore = mask.slice()
         const changed = brush ? stampMark(mask, map.width, map.height, [first], radius, tool!, shape) : 0
+
         stroke.current = { ...start, working: map.labels, maskBefore, changed }
       } else {
         const working = map.labels.slice()
         const changed = brush ? stampStroke(working, map.width, map.height, [first], radius, tool!, selected, shape, undefined, selectedParent) : 0
+
         stroke.current = { ...start, working, maskBefore: null, changed }
       }
-      if (brush) showPreview()
-      else setArea({ shape, points: [point] })
+
+      if (brush) {
+        showPreview()
+      } else {
+        setArea({ shape, points: [point] })
+      }
     }
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const point = localPoint(event)
-    if (brushing && event.pointerType !== "touch" && brushShape === STROKE_SHAPE.Brush) setCursor(point)
     const previous = pointers.current.get(event.pointerId)
+    const g = gesture.current
+    const s = stroke.current
+
+    if (brushing && event.pointerType !== "touch" && brushShape === STROKE_SHAPE.Brush) {
+      setCursor(point)
+    }
+
     if (!previous) {
-      if (event.pointerType === "mouse" && !brushing) hover(objectAt(point.x, point.y))
+      if (event.pointerType === "mouse" && !brushing) {
+        hover(objectAt(point.x, point.y))
+      }
+
       return
     }
-    pointers.current.set(event.pointerId, point)
-    const g = gesture.current
 
-    const s = stroke.current
+    pointers.current.set(event.pointerId, point)
+
     if (s && s.pointerId === event.pointerId && map) {
-      if (Math.hypot(point.x - s.lastScreen.x, point.y - s.lastScreen.y) < 1 || s.points.length >= LIMITS.maxStrokePoints) return
+      if (Math.hypot(point.x - s.lastScreen.x, point.y - s.lastScreen.y) < 1 || s.points.length >= LIMITS.maxStrokePoints) {
+        return
+      }
+
       const next = toPhoto(point.x, point.y)
+
       s.lastScreen = point
+
       if (s.shape === STROKE_SHAPE.Box) {
         s.points = [s.points[0], next]
         setArea({ shape: s.shape, points: [s.startScreen, point] })
+
         return
       }
+
       if (s.shape === STROKE_SHAPE.Lasso) {
         s.points.push(next)
         setArea((a) => (a ? { shape: a.shape, points: [...a.points, point] } : a))
+
         return
       }
+
       const last = s.points[s.points.length - 1]
+
       s.changed += s.maskBefore && markMask.current
         ? stampMark(markMask.current, map.width, map.height, [next], s.radius, tool!, s.shape, last)
         : stampStroke(s.working, map.width, map.height, [next], s.radius, tool!, selected, s.shape, last, selectedParent)
       s.points.push(next)
       showPreview()
+
       return
     }
 
     if (pointers.current.size === 2 && g.pinch) {
       const points = [...pointers.current.values()]
       const now = distance(points)
+
       zoomAround(now / g.pinch, (points[0].x + points[1].x) / 2, (points[0].y + points[1].y) / 2)
       g.pinch = now
       g.moved = true
+
       return
     }
-    if (!g.moved && Math.hypot(point.x - g.startX, point.y - g.startY) > LIMITS.tapSlop) g.moved = true
-    if (g.moved) setView((v) => clampView(size, room, { ...v, x: v.x + point.x - previous.x, y: v.y + point.y - previous.y }))
+
+    if (!g.moved && Math.hypot(point.x - g.startX, point.y - g.startY) > LIMITS.tapSlop) {
+      g.moved = true
+    }
+
+    if (g.moved) {
+      setView((v) => clampView(size, room, { ...v, x: v.x + point.x - previous.x, y: v.y + point.y - previous.y }))
+    }
   }
 
   const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const point = localPoint(event)
     const wasTap = pointers.current.size === 1 && !gesture.current.moved
+    const s = stroke.current
+
     pointers.current.delete(event.pointerId)
 
-    const s = stroke.current
     if (s && s.pointerId === event.pointerId) {
       if (s.shape !== STROKE_SHAPE.Brush) {
-        setArea(null)
         // A box too small to see, or a lasso without an inside, is a tap: nothing to fill.
         const big = s.shape === STROKE_SHAPE.Box
           ? s.points.length === 2 && Math.abs(point.x - s.startScreen.x) >= LIMITS.minAreaPx && Math.abs(point.y - s.startScreen.y) >= LIMITS.minAreaPx
           : s.points.length >= 3
+
+        setArea(null)
+
         if (event.type !== "pointercancel" && big && map) {
           s.changed = s.maskBefore && markMask.current
             ? stampMark(markMask.current, map.width, map.height, s.points, s.radius, tool!, s.shape)
             : stampStroke(s.working, map.width, map.height, s.points, s.radius, tool!, selected, s.shape, undefined, selectedParent)
-          if (!s.maskBefore) showPreview()
+
+          if (!s.maskBefore) {
+            showPreview()
+          }
         }
       }
+
       if (s.maskBefore) {
         if (event.type === "pointercancel" || s.changed === 0 || !markMask.current) {
           cancelStroke()
+
           return
         }
+
+        let pixels = 0
+
         // The whole mark is drawn now (a quick drag can end before the preview's next frame); it is saved with
         // the inspector's Save.
         stroke.current = null
-        if (map) rendererRef.current?.setLabels({ ...map, labels: markedLabels(markMask.current, map.labels) })
+
+        if (map) {
+          rendererRef.current?.setLabels({ ...map, labels: markedLabels(markMask.current, map.labels) })
+        }
+
         setPreviewTick((n) => n + 1)
-        let pixels = 0
-        for (const value of markMask.current) pixels += value
+
+        for (const value of markMask.current) {
+          pixels += value
+        }
+
         addMarkStroke({ mode: tool!, shape: s.shape, radius: s.radius, points: s.points }, pixels)
+
         return
       }
+
       if (event.type === "pointercancel" || s.changed === 0 || !onStroke) {
         cancelStroke()
+
         return
       }
+
       // Keep the preview on screen while it saves; the saved version replaces it, or it is undone.
       onStroke({ mode: tool!, shape: s.shape, radius: s.radius, points: s.points }).then((saved) => {
-        if (stroke.current === s) stroke.current = null
+        if (stroke.current === s) {
+          stroke.current = null
+        }
+
         if (!saved && map) {
           rendererRef.current?.setLabels(map)
           setPreviewTick((n) => n + 1)
         }
       })
+
       return
     }
-    if (wasTap && !brushing) select(objectAt(point.x, point.y) || fallbackSelect)
+
+    if (wasTap && !brushing) {
+      select(objectAt(point.x, point.y) || fallbackSelect)
+    }
   }
 
   const hoveredLabel = marking ? undefined : room.objects.find((o) => o.index === hovered)?.label
@@ -653,10 +834,15 @@ export function RoomCanvas({
  */
 function CompareHandle({ x, top, height, onMove }: { x: number; top: number; height: number; onMove: (x: number) => void }) {
   const drag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      return
+    }
+
     const bounds = event.currentTarget.parentElement!.getBoundingClientRect()
+
     onMove(event.clientX - bounds.left)
   }
+
   return (
     <div
       role="separator"
@@ -685,6 +871,7 @@ function photoRect(size: { width: number; height: number }, room: Room, view: Vi
   const fit = Math.min(size.width / room.width, size.height / room.height) || 0
   const width = room.width * fit * view.zoom
   const height = room.height * fit * view.zoom
+
   return { x: size.width / 2 - width / 2 + view.x, y: size.height / 2 - height / 2 + view.y, width, height }
 }
 
@@ -698,6 +885,7 @@ function clampView(size: { width: number; height: number }, room: Room, view: Vi
   const rect = photoRect(size, room, { ...view, x: 0, y: 0 })
   const maxX = Math.max(0, (rect.width - size.width) / 2)
   const maxY = Math.max(0, (rect.height - size.height) / 2)
+
   return { zoom: view.zoom, x: clamp(view.x, -maxX, maxX), y: clamp(view.y, -maxY, maxY) }
 }
 

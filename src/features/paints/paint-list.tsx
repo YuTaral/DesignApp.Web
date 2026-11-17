@@ -29,7 +29,11 @@ export function PaintListButton({ room }: { room: Room }) {
   const { selected, edits, sizes, setSize } = useEditorStore()
   const [open, setOpen] = useState(false)
   const object = room.objects.find((o) => o.index === selected)
-  if (!object || !isPaintable(object.category)) return null
+
+  if (!object || !isPaintable(object.category)) {
+    return null
+  }
+
   const count = room.objects.filter((o) => edits[o.index] && isPaintable(o.category)).length
 
   return (
@@ -117,17 +121,23 @@ function PaintList({
       const lines: Line[] = edit.tones
         ? edit.tones.flatMap((t, i) => (t.color ? [{ color: t.color, paint: t.paint ? paints.get(t.paint) : undefined, share: t.share, tone: i }] : []))
         : [{ color: edit.color, paint: edit.paint ? paints.get(edit.paint) : undefined, share: 1, tone: null }]
+
       return { object, area: size ? size.width * size.height : null, lines }
     })
     .filter((row) => row.lines.length > 0)
 
   // The same paint (or the same free color) on several surfaces is bought once.
   const totals = new Map<string, Total>()
+
   for (const row of rows) {
-    if (row.area === null) continue
+    if (row.area === null) {
+      continue
+    }
+
     for (const line of row.lines) {
       const key = line.paint?.ref ?? line.color.toUpperCase()
       const total = totals.get(key) ?? { key, color: line.color, title: paintTitle(line), area: 0 }
+
       totals.set(key, { ...total, area: total.area + row.area * line.share })
     }
   }
@@ -225,6 +235,7 @@ function PaintList({
           <ul className="grid grid-cols-[minmax(0,1fr)] gap-2">
             {[...totals.values()].map((total) => {
               const litres = litresFor(total.area, settings)
+
               return (
                 <li key={total.key} data-paint-total={total.key} className="flex items-center gap-3 rounded-xl bg-muted/50 p-3 text-sm">
                   <span className="size-6 shrink-0 rounded-md border" style={{ backgroundColor: total.color }} aria-hidden />
@@ -285,6 +296,7 @@ function SizeInputs({ object, size, onSize }: { object: DetectedObject; size: Su
     setHeight(nextHeight)
     const [w, h] = [Number(nextWidth), Number(nextHeight)]
     const valid = [w, h].every((side) => nextWidth !== "" && nextHeight !== "" && side >= PAINT.minMetres && side <= PAINT.maxMetres)
+
     onSize(object.index, valid ? { width: w, height: h } : null)
   }
 
@@ -338,20 +350,28 @@ function paintTitle(line: Pick<Line, "paint" | "color">) {
  */
 function listText(rows: Row[], totals: Total[], settings: PaintSettings) {
   const lines = ["Paint list", ""]
+  const unsized = rows.filter((row) => row.area === null)
+
   for (const total of totals) {
     const litres = litresFor(total.area, settings)
+
     lines.push(`${total.title}: ${formatNumber(total.area)} m², ${formatNumber(litres)} L for ${settings.coats} coats → ${formatTins(tinsFor(litres))}`)
   }
-  const unsized = rows.filter((row) => row.area === null)
+
   if (unsized.length > 0) {
-    if (totals.length > 0) lines.push("")
+    if (totals.length > 0) {
+      lines.push("")
+    }
+
     for (const row of unsized) {
       for (const line of row.lines) {
         lines.push(`${row.object.label}${line.tone === null ? "" : ` (color ${line.tone + 1}, ${Math.round(line.share * 100)}%)`}: ${paintTitle(line)}`)
       }
     }
   }
+
   lines.push("", MESSAGES.paintApproximate)
+
   return lines.join("\n")
 }
 
@@ -361,8 +381,13 @@ function listText(rows: Row[], totals: Total[], settings: PaintSettings) {
  */
 function printList(text: string) {
   const page = window.open("", "_blank", "width=640,height=720")
-  if (!page) return
+
+  if (!page) {
+    return
+  }
+
   const pre = page.document.createElement("pre")
+
   pre.style.font = "14px/1.6 system-ui, sans-serif"
   pre.style.whiteSpace = "pre-wrap"
   pre.textContent = text

@@ -87,5 +87,6 @@ export function labelMapUrl(roomId: string, revision: number) {
  */
 export function photoUrlFor(room: Room, revision: number) {
   const version = room.photoVersions?.[revision] ?? 0
+
   return version === 0 ? API.roomPhoto(room.id) : API.roomPhotoVersion(room.id, version)
 }

@@ -73,6 +73,7 @@ export function DesignPage() {
 
   if (design.isError || !design.data) {
     const notFound = design.error instanceof ApiError && design.error.status === HTTP_STATUS.notFound
+
     return (
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
         <EmptyState

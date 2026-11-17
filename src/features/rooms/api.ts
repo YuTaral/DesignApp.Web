@@ -61,25 +61,37 @@ type UploadOptions = {
 export function uploadRoom(file: File, { onProgress, signal, scope, ai }: UploadOptions = {}): Promise<Room> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()
+    const form = new FormData()
+
     request.open("POST", apiUrl(API.rooms))
     request.responseType = "json"
     request.setRequestHeader("Accept", MIME.json)
 
     request.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress?.(event.loaded / event.total)
+      if (event.lengthComputable) {
+        onProgress?.(event.loaded / event.total)
+      }
     }
     request.onload = () => {
-      if (request.status === HTTP_STATUS.created) resolve(request.response as Room)
-      else reject(toApiError(request.status, request.response))
+      if (request.status === HTTP_STATUS.created) {
+        resolve(request.response as Room)
+      } else {
+        reject(toApiError(request.status, request.response))
+      }
     }
     request.onerror = () => reject(toApiError(HTTP_STATUS.network, undefined))
     request.onabort = () => reject(new DOMException(MESSAGES.uploadCancelled, "AbortError"))
     signal?.addEventListener("abort", () => request.abort(), { once: true })
-
-    const form = new FormData()
     form.append(UPLOAD_FIELDS.photo, file)
-    if (scope) form.append(UPLOAD_FIELDS.scope, scope)
-    if (ai) form.append(UPLOAD_FIELDS.ai, ai)
+
+    if (scope) {
+      form.append(UPLOAD_FIELDS.scope, scope)
+    }
+
+    if (ai) {
+      form.append(UPLOAD_FIELDS.ai, ai)
+    }
+
     request.send(form)
   })
 }

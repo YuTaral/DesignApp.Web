@@ -15,8 +15,13 @@ const shown = 4
  */
 export function SampleStrip({ designId }: { designId?: string }) {
   const houses = useLibrary().data ?? []
-  if (houses.length === 0) return null
+
+  if (houses.length === 0) {
+    return null
+  }
+
   const rooms = houses.reduce((count, house) => count + house.rooms.length, 0)
+
   return (
     <Link
       to={ROUTES.library}

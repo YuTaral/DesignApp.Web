@@ -178,6 +178,7 @@ export function createPlan(plan: NewPlan, ai?: string): Promise<Plan> {
  */
 export function savePlan(plan: Plan): Promise<Plan> {
   const { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline } = plan
+
   return sendJson<Plan>("PUT", API.plan(plan.id), { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline })
 }
 
@@ -214,14 +215,26 @@ export function generateRoom(
   shot?: PlanShot
 ): Promise<Room> {
   const form = new FormData()
+
   if (shot) {
     form.append("view", String(shot.view))
     form.append("corner", shot.corner)
   }
-  if (seed !== undefined) form.append("seed", String(seed))
-  if (boxes) form.append("boxes", JSON.stringify(boxes))
+
+  if (seed !== undefined) {
+    form.append("seed", String(seed))
+  }
+
+  if (boxes) {
+    form.append("boxes", JSON.stringify(boxes))
+  }
+
   form.append("guide", guide, "guide.png")
   form.append("style", style)
-  if (instructions.trim()) form.append("instructions", instructions.trim())
+
+  if (instructions.trim()) {
+    form.append("instructions", instructions.trim())
+  }
+
   return sendForm<Room>(API.planGenerate(planId), form)
 }

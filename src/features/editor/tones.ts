@@ -21,25 +21,42 @@ export type FoundTone = {
  */
 export async function loadObjectColors(room: Room, revision: number, index: number, signal?: AbortSignal): Promise<Oklab[]> {
   const photo = new Image()
+  const colors: Oklab[] = []
+  let count = 0
+  let seen = 0
+
   photo.crossOrigin = "anonymous" // same mode as the editor's photo, so the cached copy is reused
   photo.src = apiUrl(photoUrlFor(room, revision))
   const [map] = await Promise.all([loadLabelMap(labelMapUrl(room.id, revision), signal), photo.decode()])
   const canvas = new OffscreenCanvas(map.width, map.height)
   const context = canvas.getContext("2d", { willReadFrequently: true })
-  if (!context) throw new Error(MESSAGES.labelMapUnreadable)
+
+  if (!context) {
+    throw new Error(MESSAGES.labelMapUnreadable)
+  }
+
   context.drawImage(photo, 0, 0, map.width, map.height)
   const rgba = context.getImageData(0, 0, map.width, map.height).data
 
-  let count = 0
-  for (const label of map.labels) if (label === index) count++
+  for (const label of map.labels) {
+    if (label === index) {
+      count++
+    }
+  }
+
   // Every pixel of a small object; an even spread of a large one.
   const step = Math.max(1, Math.floor(count / TONES.sample))
-  const colors: Oklab[] = []
-  let seen = 0
+
   for (let p = 0; p < map.labels.length; p++) {
-    if (map.labels[p] !== index) continue
-    if (seen++ % step === 0) colors.push(rgbToOklab(rgba[p * 4], rgba[p * 4 + 1], rgba[p * 4 + 2]))
+    if (map.labels[p] !== index) {
+      continue
+    }
+
+    if (seen++ % step === 0) {
+      colors.push(rgbToOklab(rgba[p * 4], rgba[p * 4 + 1], rgba[p * 4 + 2]))
+    }
   }
+
   return colors
 }
 
@@ -51,17 +68,23 @@ export async function loadObjectColors(room: Room, revision: number, index: numb
  * @returns The tones, largest first; empty when the object has one main color.
  */
 export function findTones(colors: readonly Oklab[], count: number): FoundTone[] {
-  if (colors.length === 0) return []
+  if (colors.length === 0) {
+    return []
+  }
+
   const sorted = [...colors].sort((x, y) => x.l - y.l)
   let centers = Array.from({ length: count }, (_, i) => sorted[Math.floor(((i + 0.5) / count) * sorted.length)])
   const assigned = new Uint8Array(colors.length)
+  const kept: { center: Oklab; size: number }[] = []
 
   for (let iteration = 0; iteration < TONES.iterations; iteration++) {
     const sums = centers.map(() => ({ l: 0, a: 0, b: 0, n: 0 }))
+
     colors.forEach((color, i) => {
       const nearest = nearestCenter(color, centers)
-      assigned[i] = nearest
       const sum = sums[nearest]
+
+      assigned[i] = nearest
       sum.l += color.l
       sum.a += color.a
       sum.b += color.b
@@ -73,14 +96,25 @@ export function findTones(colors: readonly Oklab[], count: number): FoundTone[] 
   // Merge tones closer than the eye tells apart (or that round to the same hex), keeping the larger one.
   const sizes = centers.map((_, i) => assigned.filter((a) => a === i).length)
   const order = centers.map((_, i) => i).sort((x, y) => sizes[y] - sizes[x])
-  const kept: { center: Oklab; size: number }[] = []
+
   for (const i of order) {
-    if (sizes[i] === 0) continue
+    if (sizes[i] === 0) {
+      continue
+    }
+
     const close = kept.find((k) => distance(k.center, centers[i]) < TONES.mergeDistance || oklabToHex(k.center) === oklabToHex(centers[i]))
-    if (close) close.size += sizes[i]
-    else kept.push({ center: centers[i], size: sizes[i] })
+
+    if (close) {
+      close.size += sizes[i]
+    } else {
+      kept.push({ center: centers[i], size: sizes[i] })
+    }
   }
-  if (kept.length < TONES.min) return []
+
+  if (kept.length < TONES.min) {
+    return []
+  }
+
   return kept.map((k) => ({ center: oklabToHex(k.center), share: Math.round((k.size / colors.length) * 1000) / 1000 }))
 }
 
@@ -100,7 +134,13 @@ export function toneOf(color: string | Oklab, centers: readonly string[]) {
  */
 function nearestCenter(color: Oklab, centers: readonly Oklab[]) {
   let best = 0
-  for (let i = 1; i < centers.length; i++) if (distance(color, centers[i]) < distance(color, centers[best])) best = i
+
+  for (let i = 1; i < centers.length; i++) {
+    if (distance(color, centers[i]) < distance(color, centers[best])) {
+      best = i
+    }
+  }
+
   return best
 }
 

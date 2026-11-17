@@ -23,13 +23,21 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   roomId: null,
   setFile: (file) => {
     const previous = get().previewUrl
-    if (previous) URL.revokeObjectURL(previous)
+
+    if (previous) {
+      URL.revokeObjectURL(previous)
+    }
+
     set({ previewUrl: URL.createObjectURL(file), roomId: null })
   },
   attachRoom: (roomId) => set({ roomId }),
   clear: () => {
     const previous = get().previewUrl
-    if (previous) URL.revokeObjectURL(previous)
+
+    if (previous) {
+      URL.revokeObjectURL(previous)
+    }
+
     set({ previewUrl: null, roomId: null })
   },
 }))

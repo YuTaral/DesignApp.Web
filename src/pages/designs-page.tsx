@@ -135,7 +135,10 @@ function DesignCard({ design }: { design: Design }) {
           <DropdownMenuContent
             align="end"
             onCloseAutoFocus={(event) => {
-              if (!openingDialog.current) return
+              if (!openingDialog.current) {
+                return
+              }
+
               openingDialog.current = false
               event.preventDefault()
             }}

@@ -20,10 +20,14 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 function readStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.theme)
-    if (isEnumValue(THEME, stored)) return stored
+
+    if (isEnumValue(THEME, stored)) {
+      return stored
+    }
   } catch {
     // Storage can be blocked (private mode); fall back to the system theme.
   }
+
   return THEME.system
 }
 
@@ -32,7 +36,10 @@ function readStoredTheme(): Theme {
  * @param theme - The user's choice.
  */
 function resolve(theme: Theme): Exclude<Theme, typeof THEME.system> {
-  if (theme !== THEME.system) return theme
+  if (theme !== THEME.system) {
+    return theme
+  }
+
   return matchMedia(darkQuery).matches ? THEME.dark : THEME.light
 }
 
@@ -47,18 +54,27 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const apply = () => {
       const next = resolve(theme)
+
       setResolvedTheme(next)
       document.documentElement.classList.toggle("dark", next === THEME.dark)
     }
+
     apply()
-    if (theme !== THEME.system) return
+
+    if (theme !== THEME.system) {
+      return
+    }
+
     const media = matchMedia(darkQuery)
+
     media.addEventListener("change", apply)
+
     return () => media.removeEventListener("change", apply)
   }, [theme])
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
+
     try {
       localStorage.setItem(STORAGE_KEYS.theme, next)
     } catch {
@@ -76,6 +92,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
   const context = useContext(ThemeContext)
-  if (!context) throw new Error("useTheme must be used inside ThemeProvider")
+
+  if (!context) {
+    throw new Error("useTheme must be used inside ThemeProvider")
+  }
+
   return context
 }

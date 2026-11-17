@@ -38,6 +38,7 @@ export function AiSwitch({
       <div role="radiogroup" aria-label="Which AI analyzes the photo" className="flex rounded-xl border bg-card p-1 shadow-soft">
         {MODES.map(({ value: mode, title, note, icon: Icon }) => {
           const unavailable = mode === AI_MODE.Real && !availability.realAvailable
+
           return (
             <button
               key={mode}

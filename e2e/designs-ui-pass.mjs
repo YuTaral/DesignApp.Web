@@ -20,6 +20,7 @@ const editorReady = () => until(page, () => !!document.querySelector('canvas[dat
 // Waits for the element first: a dialog's buttons can appear a moment after the dialog does.
 const clickText = async (selector, text) => {
   const find = `[...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.trim() === ${JSON.stringify(text)})`
+
   await until(page, new Function(`return !!${find}`), { timeout: 5000, label: `"${text}"` })
   await page.evaluate(new Function(`${find}.click()`))
 }
@@ -33,6 +34,7 @@ const typeInto = async (selector, value) => {
 }
 const upload = async (file) => {
   const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click('::-p-text(Choose photo)')])
+
   await chooser.accept([path.join(ROOMS, file)])
   await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'editor page' })
   await editorReady()
@@ -42,14 +44,25 @@ const upload = async (file) => {
 const recolor = async (count, offset = 0) => {
   const room = await page.evaluate(() => fetch(`/api/rooms/${location.pathname.split('/').at(-1)}`).then((r) => r.json()))
   let [seen, done] = [0, 0]
+
   for (const object of room.objects) {
-    if (done === count) break
-    if (!(await selectObject(page, object.index))) continue
-    if (seen++ < offset) continue
+    if (done === count) {
+      break
+    }
+
+    if (!(await selectObject(page, object.index))) {
+      continue
+    }
+
+    if (seen++ < offset) {
+      continue
+    }
+
     await page.click('[role=radiogroup][aria-label^="Color for"] button')
     await sleep(120)
     done++
   }
+
   await page.keyboard.press('Escape')
 }
 const designId = () => new URL(page.url()).searchParams.get('design')
@@ -63,6 +76,7 @@ try {
   await recolor(2)
   step('Guest sees "Sign in to save" and the one-day note', (await saveText()) === 'Sign in to save' && (await hasText('deleted after a day')))
   const firstRoom = roomOf()
+
   await page.click('::-p-text(Sign in to save)')
   await until(page, () => location.pathname === '/sign-in', { label: 'sign-in' })
   await page.click('::-p-text(Create an account)')
@@ -85,6 +99,7 @@ try {
   await noDialog()
   await until(page, () => [...document.querySelectorAll('aside button')].some((b) => b.textContent.trim() === 'Saved'), { label: 'Saved' })
   const design = designId()
+
   step('New design saved: in the address, "Saved", name in the header', !!design && (await hasText('Whole flat')))
 
   // 3. Change a color, save the change.
@@ -99,6 +114,7 @@ try {
   await until(page, () => location.pathname === `/designs/${new URLSearchParams(location.search).get('x') ?? ''}` || location.pathname.startsWith('/designs/'), { label: 'design page' })
   await until(page, () => document.body.innerText.includes('Calm greens'), { label: 'design details' })
   const onlyRemove = await page.evaluate(() => document.querySelector('[aria-label="Remove Room 1"]')?.disabled)
+
   step('Design page shows name, description, 1 room; its only room can\'t be removed', (await hasText('Whole flat')) && (await hasText('1 room')) && onlyRemove === true)
   await shot('designs-page-1')
 
@@ -119,6 +135,7 @@ try {
   await upload('bathroom.png')
   await recolor(1)
   const thirdRoom = roomOf()
+
   await page.click('::-p-text(Save design)')
   await page.waitForSelector('[role=dialog]')
   await clickText('[role=dialog] [role=radio]', 'Add to a design')
@@ -133,6 +150,7 @@ try {
   await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
   await until(page, () => document.body.innerText.includes('3 rooms'), { label: '3 rooms' })
   const dots = await page.evaluate(() => [...document.querySelectorAll('main li [aria-label$="recolored objects"], main li [aria-label$="recolored object"]')].map((e) => e.getAttribute('aria-label')))
+
   step('Design page shows 3 rooms with their own colors', dots.length === 3, dots.join(' | '))
   await page.click('::-p-text(Edit details)')
   await page.waitForSelector('[role=dialog] input')
@@ -142,6 +160,7 @@ try {
   await noDialog()
   await until(page, () => document.body.innerText.includes('Flat, final') && document.body.innerText.includes('Greens and oak'), { label: 'details saved' })
   const saved = await page.evaluate(async (id) => (await (await fetch(`/api/designs/${id}`)).json()), design)
+
   step('Edit details saves the name and description exactly', saved.name === 'Flat, final' && saved.description === 'Greens and oak', `${saved.name} / ${saved.description}`)
 
   // 8. Remove the third room: it's gone, the rest stays.
@@ -151,6 +170,7 @@ try {
   await noDialog()
   await until(page, () => document.body.innerText.includes('2 rooms'), { label: '2 rooms' })
   const gone = await page.evaluate(async (id) => (await fetch(`/api/rooms/${id}`)).status, thirdRoom)
+
   step('Removing a room deletes it; the design keeps the others', gone === 404, `room answers ${gone}`)
   await shot('designs-page-2')
 
@@ -167,12 +187,15 @@ try {
   step('My designs shows the card with description and room count', (await hasText('Greens and oak')) && (await hasText('2 rooms')))
   await shot('designs-list')
   await page.setViewport({ width: 390, height: 844 })
+
   for (const p of ['/designs', `/designs/${design}`]) {
     await page.goto(`${WEB}${p}`, { waitUntil: 'networkidle0' })
     await sleep(300)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+
     step(`Phone width: ${p.replace(design, '$id')} has no sideways scroll`, overflow <= 0, `overflow ${overflow}px`)
   }
+
   await shot('designs-phone')
   await page.setViewport({ width: 1280, height: 860 })
 
@@ -185,6 +208,7 @@ try {
   await noDialog()
   await until(page, () => document.body.innerText.includes('No designs yet'), { label: 'deleted' })
   const roomsGone = await page.evaluate(async (ids) => Promise.all(ids.map(async (id) => (await fetch(`/api/rooms/${id}`)).status)), [firstRoom, secondRoom])
+
   step('Deleting the design deletes its rooms', roomsGone.every((s) => s === 404), roomsGone.join(', '))
 
   // 12. Sign out.

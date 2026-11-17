@@ -29,6 +29,7 @@ export function useAccount() {
  */
 function useAccountChange() {
   const queryClient = useQueryClient()
+
   return (account: Account) => {
     queryClient.setQueryData(QUERY_KEYS.account, account)
     void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] !== QUERY_KEYS.account[0] })
@@ -38,6 +39,7 @@ function useAccountChange() {
 /** Creates an account and signs in. Fails with the API's message (email taken, password too short). */
 export function useSignUp() {
   const changed = useAccountChange()
+
   return useMutation({
     mutationFn: (credentials: Credentials) => sendJson<Account>("POST", API.signUp, credentials),
     onSuccess: changed,
@@ -47,6 +49,7 @@ export function useSignUp() {
 /** Signs in. Fails with the API's message (wrong email or password, locked for a few minutes). */
 export function useSignIn() {
   const changed = useAccountChange()
+
   return useMutation({
     mutationFn: (credentials: Credentials) => sendJson<Account>("POST", API.signIn, credentials),
     onSuccess: changed,
@@ -56,6 +59,7 @@ export function useSignIn() {
 /** Signs out; the browser continues as a new guest. */
 export function useSignOut() {
   const changed = useAccountChange()
+
   return useMutation({
     mutationFn: () => sendJson<void>("POST", API.signOut),
     onSuccess: () => changed({ signedIn: false, email: null }),

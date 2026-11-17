@@ -88,10 +88,13 @@ function AccountMenu() {
   const navigate = useNavigate()
   const here = useRouterState({ select: (state) => state.location.href })
 
-  if (!account) return <div className="size-8" aria-hidden />
+  if (!account) {
+    return <div className="size-8" aria-hidden />
+  }
 
   if (!account.signedIn) {
     const onAuthPage = here.startsWith("/sign-in") || here.startsWith("/sign-up")
+
     return (
       <Button variant="ghost" size="sm" asChild>
         <Link to={ROUTES.signIn} search={onAuthPage ? {} : { redirect: here }}>

@@ -19,7 +19,10 @@ export type LabelMap = {
  */
 export async function loadLabelMap(url: string, signal?: AbortSignal): Promise<LabelMap> {
   const response = await fetch(apiUrl(url), { signal })
-  if (!response.ok) throw new Error(MESSAGES.labelMapFailed(response.status))
+
+  if (!response.ok) {
+    throw new Error(MESSAGES.labelMapFailed(response.status))
+  }
 
   const bitmap = await createImageBitmap(await response.blob(), {
     colorSpaceConversion: "none",
@@ -27,13 +30,22 @@ export async function loadLabelMap(url: string, signal?: AbortSignal): Promise<L
   })
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
   const context = canvas.getContext("2d", { willReadFrequently: true })
-  if (!context) throw new Error(MESSAGES.labelMapUnreadable)
+
+  if (!context) {
+    throw new Error(MESSAGES.labelMapUnreadable)
+  }
+
   context.drawImage(bitmap, 0, 0)
   const rgba = context.getImageData(0, 0, bitmap.width, bitmap.height).data
+
   bitmap.close()
 
   const labels = new Uint8Array(rgba.length / 4)
-  for (let i = 0; i < labels.length; i++) labels[i] = rgba[i * 4]
+
+  for (let i = 0; i < labels.length; i++) {
+    labels[i] = rgba[i * 4]
+  }
+
   return { width: canvas.width, height: canvas.height, labels }
 }
 
@@ -45,7 +57,10 @@ export async function loadLabelMap(url: string, signal?: AbortSignal): Promise<L
  * @returns The object's index, or 0 when the point has no object or is outside the photo.
  */
 export function labelAt(map: LabelMap, u: number, v: number): number {
-  if (u < 0 || v < 0 || u >= 1 || v >= 1) return 0
+  if (u < 0 || v < 0 || u >= 1 || v >= 1) {
+    return 0
+  }
+
   return map.labels[Math.floor(v * map.height) * map.width + Math.floor(u * map.width)]
 }
 
@@ -60,35 +75,54 @@ export function restingOn(map: LabelMap): Map<number, number> {
   const { width, height, labels } = map
   // The lowest row of each object in each column (-1 where the object isn't in that column).
   const bottom = new Int32Array(256 * width).fill(-1)
+  const result = new Map<number, number>()
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const label = labels[y * width + x]
-      if (label) bottom[label * width + x] = y
+
+      if (label) {
+        bottom[label * width + x] = y
+      }
     }
   }
-  const result = new Map<number, number>()
+
   for (let label = 1; label < 256; label++) {
     const votes = new Map<number, number>()
     let columns = 0
+    let best = 0
+    let bestVotes = 0
+
     for (let x = 0; x < width; x++) {
       const y = bottom[label * width + x]
-      if (y < 0) continue
+
+      if (y < 0) {
+        continue
+      }
+
       columns++
+
       // The first other object within a few pixels below the edge (the outlines can leave a thin gap).
       for (let dy = 1; dy <= LIMITS.removal.restingGap && y + dy < height; dy++) {
         const below = labels[(y + dy) * width + x]
+
         if (below && below !== label) {
           votes.set(below, (votes.get(below) ?? 0) + 1)
           break
         }
       }
     }
-    let best = 0
-    let bestVotes = 0
+
     for (const [below, count] of votes) {
-      if (count > bestVotes) [best, bestVotes] = [below, count]
+      if (count > bestVotes) {
+        [best, bestVotes] = [below, count]
+      }
     }
-    if (best && bestVotes >= columns * LIMITS.removal.restingShare) result.set(label, best)
+
+    if (best && bestVotes >= columns * LIMITS.removal.restingShare) {
+      result.set(label, best)
+    }
   }
+
   return result
 }

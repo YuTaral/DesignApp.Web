@@ -57,24 +57,8 @@ export function GenerateDialog({
   const [made, setMade] = useState<Made[] | null>(null)
   const making = made?.some((m) => m.state === "making") ?? false
   const shots = walls(plan).flatMap((wall) => Object.values(VIEW_CORNER).map((corner) => ({ view: wall.index, corner })))
-
-  // The pictures are drawn one by one when the dialog opens (from the room as it is then, so it opens at once and fills
-  // in), and the room's own view is picked.
-  useEffect(() => {
-    if (!open || made) return
-    let stopped = false
-    setPictures([])
-    setDrawn(false)
-    setChosen(new Set([keyOf(plan)]))
-    drawViewPictures(plan, shots, BUILDER.viewPictureWidth, (picture) => setPictures((all) => [...all, picture]), () => stopped)
-      .catch(() => {})
-      .finally(() => !stopped && setDrawn(true))
-    return () => {
-      stopped = true
-    }
-    // Drawn once per opening: the room can't change while the dialog is open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  const count = chosen.size
+  const real = plan.aiMode === AI_MODE.Real
 
   /**
    * Picks or unpicks a view.
@@ -82,19 +66,23 @@ export function GenerateDialog({
    */
   const toggle = (key: string) => {
     const next = new Set(chosen)
-    if (!next.delete(key)) next.add(key)
+
+    if (!next.delete(key)) {
+      next.add(key)
+    }
+
     setChosen(next)
   }
 
   /** Makes a photo of every picked view, a few at a time. */
   const start = async () => {
     const picked = pictures.filter((p) => chosen.has(keyOf(p.shot)))
-    setMade(picked.map((picture) => ({ picture, state: "making" })))
     const update = (key: string, result: Made) => setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? result : m)) ?? null)
     let next = 0
     const worker = async () => {
       while (next < picked.length) {
         const picture = picked[next++]
+
         try {
           update(keyOf(picture.shot), { picture, state: "done", room: await make(picture.shot, style, instructions) })
         } catch (error) {
@@ -102,6 +90,8 @@ export function GenerateDialog({
         }
       }
     }
+
+    setMade(picked.map((picture) => ({ picture, state: "making" })))
     await Promise.all(Array.from({ length: Math.min(BUILDER.photosAtOnce, picked.length) }, worker))
   }
 
@@ -111,9 +101,12 @@ export function GenerateDialog({
    */
   const retry = async (picture: Picture) => {
     const key = keyOf(picture.shot)
+
     setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? { picture, state: "making" } : m)) ?? null)
+
     try {
       const room = await make(picture.shot, style, instructions)
+
       setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? { picture, state: "done", room } : m)) ?? null)
     } catch (error) {
       setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? { picture, state: "failed", error: errorMessage(error) } : m)) ?? null)
@@ -122,14 +115,37 @@ export function GenerateDialog({
 
   /** Closes the dialog (not while photos are made); the next opening starts from the views again. */
   const close = () => {
-    if (making) return
+    if (making) {
+      return
+    }
+
     setMade(null)
     setPictures([])
     onClose()
   }
 
-  const count = chosen.size
-  const real = plan.aiMode === AI_MODE.Real
+  // The pictures are drawn one by one when the dialog opens (from the room as it is then, so it opens at once and fills
+  // in), and the room's own view is picked.
+  useEffect(() => {
+    if (!open || made) {
+      return
+    }
+
+    let stopped = false
+
+    setPictures([])
+    setDrawn(false)
+    setChosen(new Set([keyOf(plan)]))
+    drawViewPictures(plan, shots, BUILDER.viewPictureWidth, (picture) => setPictures((all) => [...all, picture]), () => stopped)
+      .catch(() => {})
+      .finally(() => !stopped && setDrawn(true))
+
+    return () => {
+      stopped = true
+    }
+    // Drawn once per opening: the room can't change while the dialog is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
@@ -230,6 +246,7 @@ export function GenerateDialog({
                         .map((shot) => {
                           const key = keyOf(shot)
                           const p = pictures.find((picture) => keyOf(picture.shot) === key)
+
                           // Not drawn yet: a placeholder of the same size, so nothing moves as the pictures come in.
                           if (!p) {
                             return (
@@ -239,7 +256,9 @@ export function GenerateDialog({
                               </div>
                             )
                           }
+
                           const on = chosen.has(key)
+
                           return (
                               <button
                                 key={key}

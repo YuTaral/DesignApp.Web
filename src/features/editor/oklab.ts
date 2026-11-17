@@ -11,6 +11,7 @@ export type Oklab = { l: number; a: number; b: number }
  */
 export function hexToOklab(hex: string): Oklab {
   const n = Number.parseInt(hex.slice(1), 16)
+
   return rgbToOklab((n >> 16) & 255, (n >> 8) & 255, n & 255)
 }
 
@@ -48,6 +49,7 @@ export function oklabToHex({ l, a, b }: Oklab): string {
     -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
     -0.0041960863 * l_ - 0.7034186147 * m_ + 1.707614701 * s_,
   ]
+
   return `#${rgb.map((c) => Math.round(Math.min(1, Math.max(0, toGamma(c))) * 255).toString(16).padStart(2, "0")).join("")}`.toUpperCase()
 }
 

@@ -38,11 +38,13 @@ export function BuildPage() {
 
   const start = async () => {
     setBusy(true)
+
     try {
       const plan = await createPlan(
         { name: name.trim(), roomType, ...walls, wallColor, floorColor: floor.color, floorType: floor.type, furnish },
         availability?.canChoose ? ai : undefined
       )
+
       await navigate({ to: ROUTES.plan, params: { planId: plan.id } })
     } catch (error) {
       toast.error(errorMessage(error))
@@ -61,8 +63,12 @@ export function BuildPage() {
         data-build-step={step}
         onSubmit={(event) => {
           event.preventDefault()
-          if (step === "walls") setStep("floor")
-          else void start()
+
+          if (step === "walls") {
+            setStep("floor")
+          } else {
+            void start()
+          }
         }}
       >
         <div>

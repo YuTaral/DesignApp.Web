@@ -22,17 +22,24 @@ export function useRemoveObject(room: Room) {
    * @returns Whether they were removed (on failure the user sees why).
    */
   const remove = async (objects: DetectedObject[]): Promise<boolean> => {
-    if (revision === null || objects.length === 0 || removing.length > 0) return false
+    if (revision === null || objects.length === 0 || removing.length > 0) {
+      return false
+    }
+
     setRemoving(objects.map((o) => o.label))
+
     try {
       const updated = await removeRoomObjects(room.id, objects.map((o) => o.index), revision)
+
       // The editor first, as with outline fixes, so the version sync never sends the old version back.
       applyOutlineFix(updated.labelMapRevision, 0)
       queryClient.setQueryData(QUERY_KEYS.room(room.id), updated)
       toast.success(MESSAGES.objectRemoved(objects[0].label, objects.length - 1))
+
       return true
     } catch (error) {
       toast.error(errorMessage(error))
+
       return false
     } finally {
       setRemoving([])

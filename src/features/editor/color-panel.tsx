@@ -222,8 +222,10 @@ function PaintPicker({
   const [query, setQuery] = useState("")
   const paints = palettes.flatMap((p) => p.paints).filter((paint) => matchesPaint(paint, query))
   const families = new Map<string, Paint[]>()
+
   for (const paint of paints) {
     const family = paint.code.replace(/\D/g, "").charAt(0)
+
     families.set(family, [...(families.get(family) ?? []), paint])
   }
 

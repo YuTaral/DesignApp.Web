@@ -17,8 +17,12 @@ import { LIMITS, MESSAGES } from "@/lib/constants"
  * @param props.edits - The room's colors.
  */
 export function Swatches({ edits }: { edits: DesignEdit[] }) {
-  if (edits.length === 0) return <p className="text-xs text-muted-foreground">No colors yet</p>
+  if (edits.length === 0) {
+    return <p className="text-xs text-muted-foreground">No colors yet</p>
+  }
+
   const shown = edits.slice(0, 8)
+
   return (
     <div className="flex items-center gap-1" aria-label={`${edits.length} recolored ${edits.length === 1 ? "object" : "objects"}`}>
       {shown.map((edit) => (
@@ -40,6 +44,7 @@ export function Swatches({ edits }: { edits: DesignEdit[] }) {
  */
 export function DesignCover({ design }: { design: Design }) {
   const photos = design.rooms.slice(0, 4)
+
   return (
     <div className={photos.length > 1 ? "grid aspect-[4/3] grid-cols-2 grid-rows-2 gap-0.5 bg-border" : "aspect-[4/3]"}>
       {photos.map((room, i) => (
@@ -183,6 +188,7 @@ export function DeleteDesignDialog({
   returnFocusTo?: RefObject<HTMLElement | null>
 }) {
   const remove = useDeleteDesign()
+
   return (
     <ConfirmDialog
       open={open}

@@ -10,6 +10,7 @@ import { AI_MODE, type AiMode, isEnumValue, STORAGE_KEYS } from "@/lib/constants
 function remembered(): AiMode | null {
   try {
     const saved = sessionStorage.getItem(STORAGE_KEYS.ai)
+
     return isEnumValue(AI_MODE, saved) ? saved : null
   } catch {
     return null
@@ -26,13 +27,19 @@ export function useAiChoice(availability: AiAvailability | undefined) {
   const [picked, setPicked] = useState<AiMode | null>(remembered)
   const choose = (mode: AiMode) => {
     setPicked(mode)
+
     try {
       sessionStorage.setItem(STORAGE_KEYS.ai, mode)
     } catch {
       // Not remembered; the choice still applies to this upload.
     }
   }
-  if (!availability?.canChoose) return [undefined, choose] as const
+
+  if (!availability?.canChoose) {
+    return [undefined, choose] as const
+  }
+
   const usable = picked === AI_MODE.Real && !availability.realAvailable ? null : picked
+
   return [usable ?? availability.default, choose] as const
 }

@@ -20,16 +20,24 @@ export function DecorationChoice({ suggestions, value, onChange }: { suggestions
   const full = value.length >= BUILDER.maxDecorations
 
   const toggle = (name: string) => {
-    if (chosen.has(name.toLowerCase())) onChange(value.filter((v) => v.toLowerCase() !== name.toLowerCase()))
-    else if (!full) onChange([...value, name])
+    if (chosen.has(name.toLowerCase())) {
+      onChange(value.filter((v) => v.toLowerCase() !== name.toLowerCase()))
+    } else if (!full) {
+      onChange([...value, name])
+    }
   }
 
   const addOther = () => {
     const next = [...value]
+
     for (const part of other.split(",")) {
       const name = part.trim().slice(0, BUILDER.decorationLength)
-      if (name && next.length < BUILDER.maxDecorations && !next.some((v) => v.toLowerCase() === name.toLowerCase())) next.push(name)
+
+      if (name && next.length < BUILDER.maxDecorations && !next.some((v) => v.toLowerCase() === name.toLowerCase())) {
+        next.push(name)
+      }
     }
+
     onChange(next)
     setOther("")
   }
@@ -41,6 +49,7 @@ export function DecorationChoice({ suggestions, value, onChange }: { suggestions
       <div className="flex flex-wrap gap-1.5">
         {[...suggestions, ...typed].map((name) => {
           const on = chosen.has(name.toLowerCase())
+
           return (
             <button
               key={name}
@@ -70,7 +79,10 @@ export function DecorationChoice({ suggestions, value, onChange }: { suggestions
           data-decoration-other
           onChange={(event) => setOther(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key !== "Enter") return
+            if (event.key !== "Enter") {
+              return
+            }
+
             event.preventDefault()
             addOther()
           }}

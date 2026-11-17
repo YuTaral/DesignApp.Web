@@ -8,12 +8,14 @@ import { WEB } from './ff.mjs'
 const PASSES = ['editor-pass', 'designs-ui-pass', 'library-pass', 'paint-pass', 'parts-pass', 'builder-pass', 'shape-pass', 'focus-check', 'account-check', 'abort-check']
 
 const up = await fetch(`${WEB}/api/status`).then((r) => r.ok).catch(() => false)
+
 if (!up) {
   console.error(`The app isn't answering at ${WEB}. Start it with F5 on DesignApp.AppHost first.`)
   process.exit(1)
 }
 
 let failed = 0
+
 for (const pass of PASSES) {
   const run = spawnSync(process.execPath, [path.join(import.meta.dirname, `${pass}.mjs`), WEB], { encoding: 'utf8' })
   const out = `${run.stdout}${run.stderr}`
@@ -21,9 +23,17 @@ for (const pass of PASSES) {
   const fails = out.split('\n').filter((l) => l.startsWith('FAIL'))
   const problems = out.split('\n').find((l) => /problems:/.test(l)) ?? ''
   const ok = run.status === 0 && fails.length === 0 && passes > 0
-  if (!ok) failed++
+
+  if (!ok) {
+    failed++
+  }
+
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${pass}: ${passes} passed, ${fails.length} failed${problems ? ` | ${problems.trim()}` : ''}`)
-  for (const f of fails) console.log(`     ${f}`)
+
+  for (const f of fails) {
+    console.log(`     ${f}`)
+  }
 }
+
 console.log(failed ? `${failed} of ${PASSES.length} passes failed.` : `All ${PASSES.length} passes passed.`)
 process.exit(failed ? 1 : 0)

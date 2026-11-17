@@ -72,10 +72,13 @@ export function EditorPage() {
   const { roomId } = useParams({ from: "/rooms/$roomId" })
   const room = useRoom(roomId)
 
-  if (room.isPending) return <EditorSkeleton />
+  if (room.isPending) {
+    return <EditorSkeleton />
+  }
 
   if (room.isError) {
     const notFound = room.error instanceof ApiError && room.error.status === HTTP_STATUS.notFound
+
     return (
       <CenteredMessage
         icon={notFound ? ImageOffIcon : TriangleAlertIcon}
@@ -108,9 +111,11 @@ export function EditorPage() {
 function Editor({ room }: { room: Room }) {
   const finished = isAnalysisFinished(room.status)
   const editable = room.status === ROOM_STATUS.Ready && room.labelMapUrl !== null
+
   useLiveRoom(room.id, finished)
   const open = useEditorStore((state) => state.open)
   const marking = useEditorStore((state) => state.marking)
+
   useEffect(() => open(room.id), [open, room.id])
   const openDesign = useOpenDesign(room)
 
@@ -233,7 +238,9 @@ function RoomPhoto({ room }: { room: Room }) {
         height={room.height}
         // A photo already in the browser cache can finish before onLoad is attached.
         ref={(image) => {
-          if (image?.complete && image.naturalWidth > 0) setLoaded(true)
+          if (image?.complete && image.naturalWidth > 0) {
+            setLoaded(true)
+          }
         }}
         onLoad={() => setLoaded(true)}
         onTransitionEnd={() => setShown(true)}
@@ -249,7 +256,11 @@ function RoomPhoto({ room }: { room: Room }) {
  */
 function AiBadge({ room }: { room: Room }) {
   const canChoose = useAiAvailability().data?.canChoose
-  if (!canChoose) return null
+
+  if (!canChoose) {
+    return null
+  }
+
   return (
     <Badge variant="outline" className="gap-1">
       {room.aiMode === AI_MODE.Real ? <SparklesIcon className="size-3" aria-hidden /> : <FlaskConicalIcon className="size-3" aria-hidden />}
@@ -265,6 +276,7 @@ function AiBadge({ room }: { room: Room }) {
 function ReadyCanvas({ room }: { room: Room }) {
   const { save, saving } = useOutlineFixes(room)
   const partsObject = useEditorStore((state) => state.partsObject)
+
   return <RoomCanvas room={room} onStroke={save} saving={saving} active={partsObject === null} />
 }
 
@@ -272,8 +284,9 @@ function ReadyCanvas({ room }: { room: Room }) {
 function EditorToolbar() {
   const { history, position, comparing, edits, marking, removing, undo, redo, toggleCompare, resetAll } = useEditorStore()
   const busy = marking || removing.length > 0
-  useEditorShortcuts()
   const edited = Object.keys(edits).length > 0
+
+  useEditorShortcuts()
 
   return (
     <div className="flex items-center gap-1">
@@ -321,12 +334,18 @@ function useOpenDesign(room: Room): Design | null {
   const ready = room.status === ROOM_STATUS.Ready
 
   useEffect(() => {
-    if (ready && design.data && entry) loadDesign(room.id, design.data.id, toEditorEdits(entry.edits), toEditorSizes(entry.sizes))
+    if (ready && design.data && entry) {
+      loadDesign(room.id, design.data.id, toEditorEdits(entry.edits), toEditorSizes(entry.sizes))
+    }
   }, [ready, design.data, entry, room.id, loadDesign])
 
   const failed = requested !== undefined && (design.isError || (design.data !== undefined && !entry))
+
   useEffect(() => {
-    if (!failed) return
+    if (!failed) {
+      return
+    }
+
     toast.error(MESSAGES.designOpenFailed)
     void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: {}, replace: true })
   }, [failed, navigate, room.id])
@@ -383,6 +402,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
   if (design) {
     const save = () => {
       const [snapshot, sizesSnapshot] = [edits, sizes]
+
       saveColors.mutate(
         { designId: design.id, roomId: room.id, edits: toDesignEdits(snapshot), sizes: toDesignSizes(sizesSnapshot) },
         {
@@ -394,6 +414,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
         },
       )
     }
+
     return (
       <div className="space-y-2">
         <Button size="lg" className="w-full" disabled={!editable || !dirty || saveColors.isPending} onClick={save}>
@@ -460,8 +481,10 @@ function SaveToDesignForm({ room, edits, sizes, onDone }: { room: Room; edits: E
   }
 
   const onSubmit = (event: FormEvent) => {
-    event.preventDefault()
     const [snapshot, sizesSnapshot] = [edits, sizes]
+
+    event.preventDefault()
+
     if (mode === "new") {
       create.mutate(
         { roomId: room.id, name: name.trim(), description: description.trim(), edits: toDesignEdits(snapshot), sizes: toDesignSizes(sizesSnapshot) },
@@ -533,6 +556,7 @@ function SaveToDesignForm({ room, edits, sizes, onDone }: { room: Room; edits: E
         <div role="radiogroup" aria-label="Design" className="grid max-h-64 gap-1 overflow-y-auto">
           {existing.map((design) => {
             const full = design.rooms.length >= LIMITS.design.rooms
+
             return (
               <button
                 key={design.id}

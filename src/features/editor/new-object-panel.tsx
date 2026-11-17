@@ -32,7 +32,10 @@ export function NewObjectPanel({ room }: { room: Room }) {
       aria-label="New object"
       onSubmit={(event) => {
         event.preventDefault()
-        if (canSave) void save(name.trim(), category)
+
+        if (canSave) {
+          void save(name.trim(), category)
+        }
       }}
     >
       <div>
