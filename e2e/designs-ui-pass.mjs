@@ -169,6 +169,7 @@ try {
 
   // 9. Opening a room shows its saved colors.
   await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[aria-label="Open Room 1"]')
   await page.click('[aria-label="Open Room 1"]')
   await editorReady()
   await until(page, () => document.querySelector('aside [data-recolored]')?.dataset.recolored === '3', { timeout: 10000, label: '3 colors' }).catch(() => {})

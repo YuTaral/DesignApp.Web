@@ -172,7 +172,8 @@ function Builder({ plan }: { plan: Plan }) {
             </Button>
           </div>
         </div>
-        <div className="relative min-h-80 flex-1 overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft lg:min-h-0">
+        {/* The 3D view needs room for its 4:3 picture and the choices under it, which wrap on a phone. */}
+        <div className={cn("relative min-h-80 flex-1 overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft lg:min-h-0", view === "3d" && "min-h-[28rem]")}>
           {view === "plan" ? (
             <PlanCanvas
               plan={plan}

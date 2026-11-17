@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 
 import { BUILDER, MESSAGES } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
@@ -39,14 +39,15 @@ export function View3d({ plan }: { plan: Plan }) {
     }
   }, [])
 
-  useEffect(() => {
+  // Measured before the first paint, so the room shows at once rather than a frame later, then again on every resize.
+  useLayoutEffect(() => {
     const [container, controls] = [containerRef.current, controlsRef.current]
 
     if (!container || !controls) {
       return
     }
 
-    const observer = new ResizeObserver(() => {
+    const measure = () => {
       // The photo's 4:3, as large as fits above the choices below it (measured, as they wrap on narrow screens and
       // grow with the blocked-view note), less the gap between them.
       const { clientWidth, clientHeight } = container
@@ -58,15 +59,17 @@ export function View3d({ plan }: { plan: Plan }) {
       const fitted = Math.min(width, (height * 4) / 3)
 
       setSize({ width: Math.max(0, Math.floor(fitted)), height: Math.max(0, Math.floor((fitted * 3) / 4)) })
-    })
+    }
+    const observer = new ResizeObserver(measure)
 
+    measure()
     observer.observe(container)
     observer.observe(controls)
 
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (sceneRef.current && size.width > 0) {
       sceneRef.current.render(plan, size.width, size.height)
     }
@@ -101,8 +104,9 @@ export function View3d({ plan }: { plan: Plan }) {
   }
 
   return (
-    // Padded so the picture and the choices keep clear of the frame around the view.
-    <div ref={containerRef} className="flex size-full min-h-64 flex-col items-center justify-center gap-3 px-2 py-4">
+    // Filling the box's padded inside (its height can come from a minimum alone, which a percentage height can't use),
+    // and padded so the picture and the choices keep clear of the frame around the view.
+    <div ref={containerRef} className="absolute inset-2 flex flex-col items-center justify-center gap-3 px-2 py-4">
       {failed ? (
         <p className="text-sm text-muted-foreground">{MESSAGES.guideFailed}</p>
       ) : (
