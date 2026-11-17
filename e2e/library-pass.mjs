@@ -3,7 +3,7 @@
 // Ready at once (no upload, no analysis) with its objects and a "Sample room" badge; recolors, fixes an outline with
 // a box and removes an object (the fake eraser); signs up and saves it; then, signed in, saves the whole house as a
 // design and opens one of its rooms; phone layout. Usage: node e2e/library-pass.mjs [web url]
-import { launch, sleep, until, WEB, selectObject, shownObjects, recoloredCount } from './ff.mjs'
+import { launch, sleep, until, WEB, selectObject, shownObjects, recoloredCount, signUpFromEditor, saveNewDesign } from './ff.mjs'
 
 const email = `lib-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -172,20 +172,9 @@ try {
   // 6. Sign up from the editor and save the room as a design.
   const roomId = new URL(page.url()).pathname.split('/').at(-1)
 
-  await page.click('::-p-text(Sign in to save)')
-  await until(page, () => location.pathname === '/sign-in', { label: 'sign-in' })
-  await page.click('::-p-text(Create an account)')
-  await until(page, () => location.pathname === '/sign-up', { label: 'sign-up' })
-  await page.type('input[type=email]', email)
-  await page.type('input[autocomplete=new-password]', password)
-  await page.click('button[type=submit]')
-  await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'back in editor' })
+  await signUpFromEditor(page, email, password)
   await editorReady()
-  await page.click('::-p-text(Save design)')
-  await page.waitForSelector('[role=dialog] input')
-  await page.type('[role=dialog] input', 'From a sample')
-  await page.click('[role=dialog] button[type=submit]')
-  await until(page, () => !!new URL(location.href).searchParams.get('design'), { label: 'saved design' })
+  await saveNewDesign(page, 'From a sample')
   step('A sample room is saved as a design after signing up', new URL(page.url()).pathname.endsWith(roomId))
 
   // 7. Signed in, save the whole house.

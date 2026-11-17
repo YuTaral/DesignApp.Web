@@ -157,3 +157,85 @@ export async function shownObjects(page, canvas = 'main canvas[data-photo-rect]'
 export async function recoloredCount(page) {
   return page.evaluate(() => Number(document.querySelector('aside [data-recolored]')?.dataset.recolored ?? 0))
 }
+
+/** The RGB of a canvas's pixel at a photo-relative point (the canvas carries the photo's place in `data-photo-rect`). */
+export async function canvasPixel(page, canvas, u, v) {
+  return page.evaluate((selector, u, v) => {
+    const element = document.querySelector(selector)
+    const r = JSON.parse(element.dataset.photoRect)
+    const ratio = element.width / element.clientWidth
+    const c = document.createElement('canvas'); c.width = element.width; c.height = element.height
+    const ctx = c.getContext('2d'); ctx.drawImage(element, 0, 0)
+    const d = ctx.getImageData(Math.round((r.x + u * r.width) * ratio), Math.round((r.y + v * r.height) * ratio), 1, 1).data
+
+    return [d[0], d[1], d[2]]
+  }, canvas, u, v)
+}
+
+/** The object index at a photo-relative point in the outlines a canvas shows (its `data-label-map`). */
+export async function labelAtPoint(page, canvas, u, v) {
+  return page.evaluate(async (selector, u, v) => {
+    const url = document.querySelector(selector).dataset.labelMap
+    const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
+    const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
+
+    return ctx.getImageData(Math.floor(u * bmp.width), Math.floor(v * bmp.height), 1, 1).data[0]
+  }, canvas, u, v)
+}
+
+/** How many colors a sample of a canvas has (a blank one has one). */
+export async function canvasVariety(page, canvas) {
+  return page.evaluate((selector) => {
+    const element = document.querySelector(selector)
+    const c = document.createElement('canvas'); c.width = element.width; c.height = element.height
+    const ctx = c.getContext('2d'); ctx.drawImage(element, 0, 0)
+    const data = ctx.getImageData(0, 0, c.width, c.height).data
+    const colors = new Set()
+
+    for (let p = 0; p < data.length; p += 4 * 97) {
+      colors.add(`${data[p] >> 4},${data[p + 1] >> 4},${data[p + 2] >> 4}`)
+    }
+
+    return colors.size
+  }, canvas)
+}
+
+/** Drops a builder catalog object on an element at a page point, as dragging it from the catalog does. */
+export async function dropCatalogObject(page, target, object, point) {
+  await page.evaluate((selector, object, point) => {
+    const element = document.querySelector(selector)
+    const data = new DataTransfer()
+
+    data.setData('application/x-designapp-object', JSON.stringify(object))
+
+    for (const kind of ['dragover', 'drop']) {
+      element.dispatchEvent(new DragEvent(kind, { dataTransfer: data, clientX: point.x, clientY: point.y, bubbles: true, cancelable: true }))
+    }
+  }, target, object, point)
+}
+
+/** Clicks the button with this exact text inside a scope. */
+export async function clickButton(page, scope, label) {
+  await page.evaluate((s, t) => [...document.querySelectorAll(`${s} button`)].find((b) => b.textContent.trim() === t).click(), scope, label)
+}
+
+/** From the editor's "Sign in to save": creates an account, then waits until the editor is back. */
+export async function signUpFromEditor(page, email, password) {
+  await page.click('::-p-text(Sign in to save)')
+  await until(page, () => location.pathname === '/sign-in', { label: 'sign-in' })
+  await page.click('::-p-text(Create an account)')
+  await until(page, () => location.pathname === '/sign-up', { label: 'sign-up' })
+  await page.type('input[type=email]', email)
+  await page.type('input[autocomplete=new-password]', password)
+  await page.click('button[type=submit]')
+  await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'back in editor' })
+}
+
+/** Saves the open room as a new design with this name, and waits until the editor shows it. */
+export async function saveNewDesign(page, name) {
+  await page.click('::-p-text(Save design)')
+  await page.waitForSelector('[role=dialog] input')
+  await page.type('[role=dialog] input', name)
+  await page.click('[role=dialog] button[type=submit]')
+  await until(page, () => !!new URL(location.href).searchParams.get('design'), { label: 'saved design' })
+}

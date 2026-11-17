@@ -3,7 +3,7 @@
 // 4 × 2.5 m wall (10 m², 2.2 L for 2 coats with 10% spare, one 2.5 L tin) and covers only walls and ceilings; signing up
 // and saving keeps the paint and the size after a reload, and the design page shows the list; phone layout.
 // Usage: node e2e/paint-pass.mjs [web url]
-import { launch, sleep, until, WEB, selectObject, recoloredCount } from './ff.mjs'
+import { launch, sleep, until, WEB, selectObject, recoloredCount, clickButton } from './ff.mjs'
 
 const email = `paint-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -14,7 +14,7 @@ const { browser, page, log, shot } = await launch()
 const frame = () => sleep(250)
 const editorReady = () => until(page, () => !!document.querySelector('canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
 const text = (selector) => page.evaluate((s) => document.querySelector(s)?.innerText.replace(/\s+/g, ' ').trim() ?? null, selector)
-const clickText = (scope, label) => page.evaluate((s, t) => [...document.querySelectorAll(`${s} button`)].find((b) => b.textContent.trim() === t).click(), scope, label)
+const clickText = (scope, label) => clickButton(page, scope, label)
 const select = async (index) => {
   if (!(await selectObject(page, index))) {
     throw new Error(`Object ${index} can't be clicked on the photo`)

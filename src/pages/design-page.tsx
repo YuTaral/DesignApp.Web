@@ -15,11 +15,12 @@ import {
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccount } from "@/features/account/api"
 import { toEditorEdits, toEditorSizes, useDesign, useRemoveDesignRoom, type Design, type DesignRoom } from "@/features/designs/api"
-import { ConfirmDialog, DeleteDesignDialog, DesignDetailsDialog, EmptyState, Swatches } from "@/features/designs/components"
+import { ConfirmDialog, DeleteDesignDialog, DesignDetailsDialog, Swatches } from "@/features/designs/components"
 import { dateFormat, roomCount } from "@/features/designs/format"
 import { PaintListDialog } from "@/features/paints/paint-list"
 import { isPaintable } from "@/features/paints/paint-math"

@@ -3,7 +3,7 @@
 // Usage: node e2e/editor-pass.mjs [web url] [photo name ...]
 import fs from 'node:fs'
 import path from 'node:path'
-import { launch, sleep, until, SHOTS, WEB, ROOMS, ARGS, recoloredCount, shownObjects } from './ff.mjs'
+import { launch, sleep, until, SHOTS, WEB, ROOMS, ARGS, recoloredCount, shownObjects, canvasPixel, labelAtPoint } from './ff.mjs'
 
 /** In-page code: whether an object has pixels in the outlines the photo shows (for `until`). */
 const shownCode = (index) => `return (async () => {
@@ -40,27 +40,12 @@ async function toPage(u, v) {
 
 /** The canvas pixel (RGB) at a photo-relative point. */
 async function pixel(u, v) {
-  return page.evaluate((u, v) => {
-    const canvas = document.querySelector('canvas[data-photo-rect]')
-    const r = JSON.parse(canvas.dataset.photoRect)
-    const ratio = canvas.width / canvas.clientWidth
-    const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height
-    const ctx = c.getContext('2d'); ctx.drawImage(canvas, 0, 0)
-    const d = ctx.getImageData(Math.round((r.x + u * r.width) * ratio), Math.round((r.y + v * r.height) * ratio), 1, 1).data
-
-    return [d[0], d[1], d[2]]
-  }, u, v)
+  return canvasPixel(page, 'canvas[data-photo-rect]', u, v)
 }
 
 /** The object index at a photo-relative point in the outlines the canvas shows. */
 async function labelAt(u, v) {
-  return page.evaluate(async (u, v) => {
-    const url = document.querySelector('canvas[data-photo-rect]').dataset.labelMap
-    const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
-    const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
-
-    return ctx.getImageData(Math.floor(u * bmp.width), Math.floor(v * bmp.height), 1, 1).data[0]
-  }, u, v)
+  return labelAtPoint(page, 'canvas[data-photo-rect]', u, v)
 }
 
 const heading = () => page.evaluate(() => document.querySelector('aside h2.truncate')?.textContent?.trim() ?? null)

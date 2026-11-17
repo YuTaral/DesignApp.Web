@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
 
-import { BUILDER, MESSAGES, VIEW_CORNER } from "@/lib/constants"
+import { BUILDER, MESSAGES } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { useBuilderStore } from "./builder-store"
 import { wallName } from "./room-outline"
 import { blockingItem, PlanScene } from "./scene-3d"
-import { CornerChoice } from "./corner-choice"
-import { WallChoice } from "./wall-choice"
+import { ViewChoice } from "./view-choice"
 
 /**
  * The room in 3D, from where the photo will be taken: the middle of the wall opposite the one in view, at a
@@ -134,16 +133,7 @@ export function View3d({ plan }: { plan: Plan }) {
       {/* The choices and the blocked-view note, measured together to size the picture above them. */}
       <div ref={controlsRef} className="flex flex-col items-center gap-3">
         {/* Each choice has its caption above it; the two sit side by side when there is room, else one above the other. */}
-        <div className="flex flex-wrap items-end justify-center gap-x-6 gap-y-3 text-sm">
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-xs text-muted-foreground">Looking at</span>
-            <WallChoice plan={plan} value={plan.view} label="Wall in view" onPick={(view) => setRoom({ view })} />
-          </div>
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-xs text-muted-foreground">Taken from</span>
-            <CornerChoice value={plan.corner ?? VIEW_CORNER.None} label="Where the camera stands" onPick={(corner) => setRoom({ corner })} />
-          </div>
-        </div>
+        <ViewChoice plan={plan} place="view" />
         {blocking && (
           <p className="max-w-md text-center text-xs text-amber-600 dark:text-amber-400" role="status" data-view-blocked>
             The {blocking.label} stands in front of the camera and fills much of the photo. Try another corner or wall, or move it.

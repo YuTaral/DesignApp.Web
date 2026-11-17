@@ -5,13 +5,13 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, ROOM_TYPE_NAMES, SWATCHES, VIEW_CORNER } from "@/lib/constants"
+import { BUILDER, ITEM_FORM, ITEM_SHAPE, ROOM_TYPE_NAMES, SWATCHES } from "@/lib/constants"
 import { useCatalog, type Plan } from "./api"
 import { DecorationChoice } from "./decoration-choice"
 import { hasParts, isMountedShape, isWallItem, partsOf, toVariation, useBuilderStore, variationOf } from "./builder-store"
 import { wallLength } from "./room-outline"
 import { FloorChoice } from "./floor-choice"
-import { CornerChoice } from "./corner-choice"
+import { ViewChoice } from "./view-choice"
 import { WallChoice } from "./wall-choice"
 
 /**
@@ -46,12 +46,7 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
 
   return (
     <div className="space-y-5" data-inspector-item={index} data-inspector-opening>
-      <div className="space-y-1.5">
-        <Label htmlFor="item-label">Name</Label>
-        <Input id="item-label" value={item.label} maxLength={BUILDER.labelLength} onChange={(event) => update(index, { label: event.target.value })} />
-      </div>
-      <VariationChoice plan={plan} index={index} />
-      <ItemDecorations plan={plan} index={index} />
+      <ItemBasics plan={plan} index={index} />
       <div className="space-y-2">
         <p className="text-sm font-medium">On the wall</p>
         <WallChoice plan={plan} value={wall} label="Wall" onPick={(next) => update(index, { wall: next, x: Math.min(item.x, wallLength(plan, next) - item.width / 2) })} />
@@ -100,6 +95,27 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
 }
 
 /**
+ * What every object's settings start with: its name, its variation and its decorations.
+ * @param props.plan - The room.
+ * @param props.index - The object's position in the plan's objects.
+ */
+function ItemBasics({ plan, index }: { plan: Plan; index: number }) {
+  const update = useBuilderStore((state) => state.update)
+  const item = plan.items[index]
+
+  return (
+    <>
+      <div className="space-y-1.5">
+        <Label htmlFor="item-label">Name</Label>
+        <Input id="item-label" value={item.label} maxLength={BUILDER.labelLength} onChange={(event) => update(index, { label: event.target.value })} />
+      </div>
+      <VariationChoice plan={plan} index={index} />
+      <ItemDecorations plan={plan} index={index} />
+    </>
+  )
+}
+
+/**
  * The selected object's settings.
  * @param props.plan - The room.
  * @param props.index - The object's position in the plan's objects.
@@ -110,12 +126,7 @@ function ItemInspector({ plan, index }: { plan: Plan; index: number }) {
 
   return (
     <div className="space-y-5" data-inspector-item={index}>
-      <div className="space-y-1.5">
-        <Label htmlFor="item-label">Name</Label>
-        <Input id="item-label" value={item.label} maxLength={BUILDER.labelLength} onChange={(event) => update(index, { label: event.target.value })} />
-      </div>
-      <VariationChoice plan={plan} index={index} />
-      <ItemDecorations plan={plan} index={index} />
+      <ItemBasics plan={plan} index={index} />
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Size (cm)</legend>
         <div className="grid grid-cols-3 gap-2">
@@ -269,14 +280,7 @@ function RoomInspector({ plan }: { plan: Plan }) {
         <FloorChoice value={plan.floorType} color={plan.floorColor} onPick={(floorType) => setRoom({ floorType })} />
       </div>
       <ColorChoice label="Floor color" value={plan.floorColor} colors={BUILDER.floorColors} onPick={(floorColor) => setRoom({ floorColor })} />
-      <div className="space-y-2">
-        <p className="text-sm font-medium">The photo looks at</p>
-        <WallChoice plan={plan} value={plan.view} label="Wall the photo looks at" onPick={(view) => setRoom({ view })} />
-      </div>
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Taken from</p>
-        <CornerChoice value={plan.corner ?? VIEW_CORNER.None} label="Where the photo is taken from" onPick={(corner) => setRoom({ corner })} />
-      </div>
+      <ViewChoice plan={plan} place="panel" />
     </div>
   )
 }

@@ -422,13 +422,7 @@ function opening(plan: Plan, item: PlanItem & { wall: number }) {
   const [w, h, bottom] = [item.width / 100, item.height / 100, item.elevation / 100]
   const paint = material(item.color)
   const group = new THREE.Group()
-  const block = (bw: number, bh: number, bd: number, x: number, y: number, z: number, look = paint) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), look)
-
-    mesh.position.set(x, y, z)
-    mesh.castShadow = mesh.receiveShadow = true
-    group.add(mesh)
-  }
+  const block = blockAdder(group, paint)
   const frame = 0.06
   const at = wallPoint(plan, item.wall, item.x)
 
@@ -479,6 +473,25 @@ function opening(plan: Plan, item: PlanItem & { wall: number }) {
 }
 
 /**
+ * A function that adds a box to a group, casting and receiving shadows: its width, height and depth, where its middle
+ * is, its look (the group's paint when missing) and, in place of the box, another shape scaled afterwards.
+ * @param group - The group the boxes go in.
+ * @param paint - Their usual look.
+ * @returns The function, which returns the mesh it added.
+ */
+function blockAdder(group: THREE.Group, paint: THREE.Material) {
+  return (bw: number, bh: number, bd: number, x: number, y: number, z: number, look: THREE.Material = paint, geometry?: THREE.BufferGeometry) => {
+    const mesh = new THREE.Mesh(geometry ?? new THREE.BoxGeometry(bw, bh, bd), look)
+
+    mesh.position.set(x, y, z)
+    mesh.castShadow = mesh.receiveShadow = true
+    group.add(mesh)
+
+    return mesh
+  }
+}
+
+/**
  * A thing hung on its wall: a picture in its frame (a mirror's glass, a TV's dark screen, or a plain mid-tone face for
  * a painting, which the photo fills with art), or a wall box (a cabinet with a seam per door, a shelf, or a cooker hood with its canopy
  * and a chimney up to the ceiling).
@@ -489,13 +502,7 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
   const [w, h, d, bottom] = [item.width / 100, item.height / 100, Math.max(item.depth, 1) / 100, item.elevation / 100]
   const paint = material(item.color)
   const group = new THREE.Group()
-  const block = (bw: number, bh: number, bd: number, x: number, y: number, z: number, look: THREE.Material = paint) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), look)
-
-    mesh.position.set(x, y, z)
-    mesh.castShadow = mesh.receiveShadow = true
-    group.add(mesh)
-  }
+  const block = blockAdder(group, paint)
   const name = item.label.toLowerCase()
   const at = wallPoint(plan, item.wall, item.x)
 
@@ -590,15 +597,7 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
   const darker = material(shade(item.color, 0.78))
   const group = new THREE.Group()
   /** Adds a block of the object, by its size and the position of its middle. */
-  const block = (bw: number, bh: number, bd: number, x: number, y: number, z: number, look: THREE.Material = paint, geometry?: THREE.BufferGeometry) => {
-    const mesh = new THREE.Mesh(geometry ?? new THREE.BoxGeometry(bw, bh, bd), look)
-
-    mesh.position.set(x, y, z)
-    mesh.castShadow = mesh.receiveShadow = true
-    group.add(mesh)
-
-    return mesh
-  }
+  const block = blockAdder(group, paint)
   /** Adds a soft block, with rounded edges. */
   const soft = (bw: number, bh: number, bd: number, x: number, y: number, z: number, look: THREE.Material = paint) =>
     block(bw, bh, bd, x, y, z, look, new RoundedBoxGeometry(bw, bh, bd, 3, Math.min(bw, bh, bd) * 0.25))

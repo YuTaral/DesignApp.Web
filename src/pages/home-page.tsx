@@ -1,13 +1,12 @@
 import { useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { LayoutGridIcon, MousePointerClickIcon, PaletteIcon, ScanSearchIcon } from "lucide-react"
+import { useSearch } from "@tanstack/react-router"
+import { MousePointerClickIcon, PaletteIcon, ScanSearchIcon } from "lucide-react"
 import { motion } from "motion/react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { useAccount } from "@/features/account/api"
-import { useAddDesignRoom, useDesign } from "@/features/designs/api"
+import { TargetBanner } from "@/features/designs/target-banner"
+import { useTargetDesign } from "@/features/designs/use-target-design"
 import { SampleStrip } from "@/features/library/sample-strip"
 import { uploadRoom, useAiAvailability } from "@/features/rooms/api"
 import { AiSwitch } from "@/features/upload/ai-switch"
@@ -17,7 +16,7 @@ import { ScopePicker } from "@/features/upload/scope-picker"
 import { useScopeChoice } from "@/features/upload/use-scope-choice"
 import { errorMessage } from "@/lib/api"
 import { useUploadStore } from "@/stores/upload-store"
-import { QUERY_KEYS, ROUTES } from "@/lib/constants"
+import { QUERY_KEYS } from "@/lib/constants"
 
 /** The "How it works" cards. */
 const steps = [
@@ -43,11 +42,8 @@ const steps = [
  * design's page) the photo goes straight into that design.
  */
 export function HomePage() {
-  const navigate = useNavigate()
   const { design: designId } = useSearch({ from: "/" })
-  const signedIn = useAccount().data?.signedIn === true
-  const target = useDesign(signedIn ? designId : undefined).data
-  const addRoom = useAddDesignRoom()
+  const { target, openRoom } = useTargetDesign(designId)
   const queryClient = useQueryClient()
   const { setFile, attachRoom, clear } = useUploadStore()
   const [progress, setProgress] = useState<number | null>(null)
@@ -69,19 +65,7 @@ export function HomePage() {
     onSuccess: async (room) => {
       queryClient.setQueryData(QUERY_KEYS.room(room.id), room)
       attachRoom(room.id)
-
-      if (target) {
-        try {
-          await addRoom.mutateAsync({ designId: target.id, roomId: room.id, edits: [] })
-          void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: { design: target.id } })
-
-          return
-        } catch (error) {
-          toast.error(errorMessage(error))
-        }
-      }
-
-      void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: {} })
+      await openRoom(room.id)
     },
     onError: (error) => {
       clear()
@@ -118,19 +102,7 @@ export function HomePage() {
         transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
         className="mx-auto mt-10 max-w-2xl space-y-5"
       >
-        {target && (
-          <div className="flex items-center gap-3 rounded-2xl border bg-accent/40 p-4" role="status">
-            <LayoutGridIcon className="size-5 shrink-0 text-primary" aria-hidden />
-            <p className="min-w-0 flex-1 text-sm">
-              The photo will be added to <span className="font-medium">{target.name}</span>.
-            </p>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to={ROUTES.design} params={{ designId: target.id }}>
-                Cancel
-              </Link>
-            </Button>
-          </div>
-        )}
+        {target && <TargetBanner design={target} what="photo" />}
         <ScopePicker value={scope} onChange={setScope} disabled={progress !== null} />
         {availability?.canChoose && ai && (
           <AiSwitch availability={availability} value={ai} onChange={setAi} disabled={progress !== null} />

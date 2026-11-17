@@ -4,13 +4,11 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { apiUrl, errorMessage } from "@/lib/api"
 import { useDeleteDesign, useEditDesign, type Design, type DesignEdit } from "./api"
+import { DesignFields } from "./design-fields"
 import { roomCount } from "./format"
-import { LIMITS, MESSAGES } from "@/lib/constants"
+import { MESSAGES } from "@/lib/constants"
 
 /**
  * A room's colors as small dots, or a note when it has none.
@@ -122,32 +120,16 @@ function DesignDetailsForm({ design, onDone }: { design: Design; onDone: () => v
       <DialogHeader>
         <DialogTitle>Edit design</DialogTitle>
       </DialogHeader>
-      <div className="space-y-2">
-        <Label htmlFor={`${id}-name`}>Name</Label>
-        <Input
-          id={`${id}-name`}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={LIMITS.design.name}
-          autoFocus
-          aria-invalid={edit.isError}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${id}-description`}>
-          Description <span className="font-normal text-muted-foreground">(optional)</span>
-        </Label>
-        <Textarea
-          id={`${id}-description`}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          maxLength={LIMITS.design.description}
-          rows={3}
-        />
-        <p className="text-right text-xs text-muted-foreground tabular-nums">
-          {description.length}/{LIMITS.design.description}
-        </p>
-      </div>
+      <DesignFields
+        id={id}
+        name={name}
+        description={description}
+        onName={setName}
+        onDescription={setDescription}
+        rows={3}
+        invalid={edit.isError}
+        counted
+      />
       {edit.isError && (
         <p role="alert" className="text-sm text-destructive">
           {errorMessage(edit.error)}
@@ -260,37 +242,5 @@ export function ConfirmDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/**
- * A centered icon, title, text and button, for empty and error states.
- * @param props.icon - The icon.
- * @param props.title - The headline.
- * @param props.text - The explanation.
- * @param props.action - The button to offer.
- */
-export function EmptyState({
-  icon: Icon,
-  title,
-  text,
-  action,
-}: {
-  icon: typeof LoaderCircleIcon
-  title: string
-  text: string
-  action: ReactNode
-}) {
-  return (
-    <div className="mt-8 flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed px-6 py-16 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-        <Icon className="size-5" />
-      </div>
-      <div className="space-y-1">
-        <p className="font-medium">{title}</p>
-        <p className="text-sm text-muted-foreground">{text}</p>
-      </div>
-      {action}
-    </div>
   )
 }

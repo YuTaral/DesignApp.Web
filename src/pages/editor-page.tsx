@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type CSSProperties, type FormEvent, type ReactNode } from "react"
+import { useEffect, useId, useState, type CSSProperties, type FormEvent } from "react"
 import { Link, useNavigate, useParams, useRouterState, useSearch } from "@tanstack/react-router"
 import {
   ArrowLeftIcon,
@@ -16,16 +16,15 @@ import {
 } from "lucide-react"
 import { cn } from "cn"
 
+import { EmptyState } from "@/components/empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAccount } from "@/features/account/api"
+import { DesignFields } from "@/features/designs/design-fields"
 import {
   toDesignEdits,
   toDesignSizes,
@@ -80,7 +79,8 @@ export function EditorPage() {
     const notFound = room.error instanceof ApiError && room.error.status === HTTP_STATUS.notFound
 
     return (
-      <CenteredMessage
+      <EmptyState
+        look="page"
         icon={notFound ? ImageOffIcon : TriangleAlertIcon}
         title={notFound ? MESSAGES.roomNotFound : MESSAGES.roomLoadFailed}
         text={notFound ? MESSAGES.roomMaybeRemoved : errorMessage(room.error)}
@@ -526,32 +526,15 @@ function SaveToDesignForm({ room, edits, sizes, onDone }: { room: Room; edits: E
       )}
 
       {mode === "new" ? (
-        <>
-          <div className="space-y-2">
-            <Label htmlFor={`${id}-name`}>Name</Label>
-            <Input
-              id={`${id}-name`}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={LIMITS.design.name}
-              placeholder="Sage walls, oak floor"
-              autoFocus
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`${id}-description`}>
-              Description <span className="font-normal text-muted-foreground">(optional)</span>
-            </Label>
-            <Textarea
-              id={`${id}-description`}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={LIMITS.design.description}
-              placeholder="Calm greens for the whole flat"
-              rows={2}
-            />
-          </div>
-        </>
+        <DesignFields
+          id={id}
+          name={name}
+          description={description}
+          onName={setName}
+          onDescription={setDescription}
+          rows={2}
+          placeholders={{ name: "Sage walls, oak floor", description: "Calm greens for the whole flat" }}
+        />
       ) : (
         <div role="radiogroup" aria-label="Design" className="grid max-h-64 gap-1 overflow-y-auto">
           {existing.map((design) => {
@@ -607,38 +590,6 @@ function EditorSkeleton() {
         <Skeleton className="min-h-80 flex-1 rounded-2xl" />
       </section>
       <Skeleton className="h-96 w-full rounded-2xl lg:w-80" />
-    </div>
-  )
-}
-
-/**
- * A centered icon, title, text and button, for not-found and error states.
- * @param props.icon - The icon to show.
- * @param props.title - The headline.
- * @param props.text - The explanation.
- * @param props.action - The button to offer.
- */
-function CenteredMessage({
-  icon: Icon,
-  title,
-  text,
-  action,
-}: {
-  icon: typeof ImageOffIcon
-  title: string
-  text: string
-  action: ReactNode
-}) {
-  return (
-    <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
-        <Icon className="size-5" />
-      </div>
-      <div className="space-y-1">
-        <p className="font-medium">{title}</p>
-        <p className="text-sm text-muted-foreground">{text}</p>
-      </div>
-      {action}
     </div>
   )
 }

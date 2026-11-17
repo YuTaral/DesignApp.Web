@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useAccount } from "@/features/account/api"
-import { useAddDesignRoom, useDesign, type Design } from "@/features/designs/api"
+import { TargetBanner } from "@/features/designs/target-banner"
+import { useTargetDesign } from "@/features/designs/use-target-design"
 import {
   useCopyLibraryDesign,
   useCopyLibraryRoom,
@@ -34,36 +34,22 @@ type Choosing = { house: LibraryDesign; room: LibraryRoom }
 export function LibraryPage() {
   const navigate = useNavigate()
   const { design: designId, house: houseId } = useSearch({ from: "/library" })
-  const signedIn = useAccount().data?.signedIn === true
-  const target = useDesign(signedIn ? designId : undefined).data
+  const { signedIn, target, openRoom: openNewRoom, adding } = useTargetDesign(designId)
   const library = useLibrary()
   const availability = useAiAvailability().data
   // Where the AI can be chosen (Development), copies use the one picked for uploads: it only matters for removing objects.
   const [ai] = useAiChoice(availability)
   const copyRoom = useCopyLibraryRoom()
   const copyDesign = useCopyLibraryDesign()
-  const addRoom = useAddDesignRoom()
   const [choosing, setChoosing] = useState<Choosing | null>(null)
-  const busy = copyRoom.isPending || copyDesign.isPending || addRoom.isPending
+  const busy = copyRoom.isPending || copyDesign.isPending || adding
 
   const tryLayout = async (house: LibraryDesign, room: LibraryRoom, layout: LibraryLayout) => {
     try {
       const copy = await copyRoom.mutateAsync({ designId: house.id, roomId: room.id, layoutId: layout.id, ai })
 
       setChoosing(null)
-
-      if (target) {
-        try {
-          await addRoom.mutateAsync({ designId: target.id, roomId: copy.id, edits: [] })
-          void navigate({ to: ROUTES.room, params: { roomId: copy.id }, search: { design: target.id } })
-
-          return
-        } catch (error) {
-          toast.error(errorMessage(error))
-        }
-      }
-
-      void navigate({ to: ROUTES.room, params: { roomId: copy.id }, search: {} })
+      await openNewRoom(copy.id)
     } catch (error) {
       toast.error(errorMessage(error))
     }
@@ -103,7 +89,7 @@ export function LibraryPage() {
         </p>
       </div>
 
-      {target && <TargetBanner design={target} />}
+      {target && <TargetBanner design={target} what="room" className="mt-6 max-w-2xl" />}
 
       {library.isPending && (
         <div className="mt-8 grid gap-5 md:grid-cols-2">
@@ -194,26 +180,6 @@ function HouseCard({ house, designId }: { house: LibraryDesign; designId: string
         </p>
       </div>
     </Link>
-  )
-}
-
-/**
- * Says which design a tried room is added to, with a way back.
- * @param props.design - The design.
- */
-function TargetBanner({ design }: { design: Design }) {
-  return (
-    <div className="mt-6 flex max-w-2xl items-center gap-3 rounded-2xl border bg-accent/40 p-4" role="status">
-      <LayoutGridIcon className="size-5 shrink-0 text-primary" aria-hidden />
-      <p className="min-w-0 flex-1 text-sm">
-        The room will be added to <span className="font-medium">{design.name}</span>.
-      </p>
-      <Button variant="ghost" size="sm" asChild>
-        <Link to={ROUTES.design} params={{ designId: design.id }}>
-          Cancel
-        </Link>
-      </Button>
-    </div>
   )
 }
 

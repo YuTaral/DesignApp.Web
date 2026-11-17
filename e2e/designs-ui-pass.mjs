@@ -4,7 +4,7 @@
 // with its colors, finds the design in My designs, deletes it, signs out; no My rooms anywhere;
 // phone layouts. Usage: node e2e/designs-ui-pass.mjs [web url]
 import path from 'node:path'
-import { launch, sleep, until, WEB, ROOMS, selectObject, recoloredCount } from './ff.mjs'
+import { launch, sleep, until, WEB, ROOMS, selectObject, recoloredCount, signUpFromEditor } from './ff.mjs'
 
 const email = `dz-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -77,14 +77,7 @@ try {
   step('Guest sees "Sign in to save" and the one-day note', (await saveText()) === 'Sign in to save' && (await hasText('deleted after a day')))
   const firstRoom = roomOf()
 
-  await page.click('::-p-text(Sign in to save)')
-  await until(page, () => location.pathname === '/sign-in', { label: 'sign-in' })
-  await page.click('::-p-text(Create an account)')
-  await until(page, () => location.pathname === '/sign-up', { label: 'sign-up' })
-  await page.type('input[type=email]', email)
-  await page.type('input[autocomplete=new-password]', password)
-  await page.click('button[type=submit]')
-  await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'back in editor' })
+  await signUpFromEditor(page, email, password)
   await editorReady()
   await sleep(300)
   step('Back in the room with both colors after signing up', roomOf() === firstRoom && (await recolored()) === 2, `${await recolored()} colors`)

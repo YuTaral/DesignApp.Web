@@ -4,7 +4,7 @@
 // dragging a corner moves it; the room's walls are numbered and named by side; Reset to rectangle undoes it all; a wall
 // pulled through the room stops at the smallest room.
 // Usage: node e2e/shape-pass.mjs [web url]
-import { launch, sleep, until, WEB } from './ff.mjs'
+import { launch, sleep, until, WEB, canvasVariety } from './ff.mjs'
 
 const results = []
 const step = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
@@ -35,19 +35,7 @@ const dragPlan = async (from, to, steps = 10) => {
 }
 
 /** How many colors a sample of the 3D view has (a blank canvas has one). */
-const variety = () => page.evaluate(() => {
-  const canvas = document.querySelector('[data-view-3d]')
-  const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height
-  const ctx = c.getContext('2d'); ctx.drawImage(canvas, 0, 0)
-  const data = ctx.getImageData(0, 0, c.width, c.height).data
-  const colors = new Set()
-
-  for (let p = 0; p < data.length; p += 4 * 97) {
-    colors.add(`${data[p] >> 4},${data[p + 1] >> 4},${data[p + 2] >> 4}`)
-  }
-
-  return colors.size
-})
+const variety = () => canvasVariety(page, '[data-view-3d]')
 
 try {
   // 1. An empty 4 × 5 m living room with two windows on its right wall (wall 1): one 200 cm along it, one 400 cm.

@@ -7,7 +7,7 @@
 // view draws the room, and clicking a wall turns it to look at that wall; Generate photo asks for a style and extra
 // instructions, then (the fake AI) opens the new room in the editor; phone layout.
 // Usage: node e2e/builder-pass.mjs [web url]
-import { launch, sleep, until, WEB } from './ff.mjs'
+import { launch, sleep, until, WEB, canvasVariety, dropCatalogObject } from './ff.mjs'
 
 const results = []
 const step = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
@@ -76,16 +76,7 @@ try {
   const sofa = await page.evaluate(() => fetch('/api/builder/catalog/LivingRoom').then((r) => r.json()).then((list) => list.find((o) => o.key === 'sofa')))
   const target = await toPage(200, 80)
 
-  await page.evaluate((object, point, type) => {
-    const svg = document.querySelector('[data-plan-canvas]')
-    const data = new DataTransfer()
-
-    data.setData(type, JSON.stringify(object))
-
-    for (const kind of ['dragover', 'drop']) {
-      svg.dispatchEvent(new DragEvent(kind, { dataTransfer: data, clientX: point.x, clientY: point.y, bubbles: true, cancelable: true }))
-    }
-  }, sofa, target, 'application/x-designapp-object')
+  await dropCatalogObject(page, '[data-plan-canvas]', sofa, target)
   await frame()
   await saved()
   const afterDrop = (await stored()).items[0]
@@ -373,16 +364,7 @@ try {
   const door = await page.evaluate(() => fetch('/api/builder/catalog/LivingRoom').then((r) => r.json()).then((list) => list.find((o) => o.key === 'door')))
   const nearLeft = await onWall(250, 100)
 
-  await page.evaluate((object, point, type) => {
-    const svg = document.querySelector('[data-wall-view] svg')
-    const data = new DataTransfer()
-
-    data.setData(type, JSON.stringify(object))
-
-    for (const kind of ['dragover', 'drop']) {
-      svg.dispatchEvent(new DragEvent(kind, { dataTransfer: data, clientX: point.x, clientY: point.y, bubbles: true, cancelable: true }))
-    }
-  }, door, nearLeft, 'application/x-designapp-object')
+  await dropCatalogObject(page, '[data-wall-view] svg', door, nearLeft)
   await page.waitForSelector('[data-wall-view="3"] [data-opening=Door]')
   await saved()
   const placedDoor = (await stored()).items[4]
@@ -429,19 +411,7 @@ try {
   await page.click('::-p-text(3D view)')
   await page.waitForSelector('[data-view-3d]')
   await sleep(800)
-  const variety = await page.evaluate(() => {
-    const canvas = document.querySelector('[data-view-3d]')
-    const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height
-    const ctx = c.getContext('2d'); ctx.drawImage(canvas, 0, 0)
-    const data = ctx.getImageData(0, 0, c.width, c.height).data
-    const colors = new Set()
-
-    for (let p = 0; p < data.length; p += 4 * 97) {
-      colors.add(`${data[p] >> 4},${data[p + 1] >> 4},${data[p + 2] >> 4}`)
-    }
-
-    return colors.size
-  })
+  const variety = await canvasVariety(page, '[data-view-3d]')
 
   await shot('builder-3d')
   step('The 3D view draws the room', variety > 20, `${variety} colors`)

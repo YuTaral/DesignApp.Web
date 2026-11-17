@@ -2,8 +2,10 @@ import { useRef, useState, type DragEvent, type PointerEvent as ReactPointerEven
 import { cn } from "cn"
 
 import { BUILDER, ITEM_FORM, ITEM_SHAPE } from "@/lib/constants"
-import type { CatalogObject, Plan, PlanItem } from "./api"
+import type { Plan, PlanItem } from "./api"
+import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { cornerOutline, footprint, hasParts, isMountedShape, isWallItem, isWallShape, partsOf, overlaps, toGrid, useBuilderStore } from "./builder-store"
+import { ResizeHandle } from "./resize-handle"
 import { cameraStand, fromWall, moveCorner, moveWall, pushSection, wallName, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 
 /** Room around the walls in the drawing, in centimetres (for the walls' thickness and the handles). */
@@ -241,16 +243,10 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
   }
 
   const drop = (event: DragEvent) => {
-    const data = event.dataTransfer.getData(BUILDER.dragType)
-
-    if (!data) {
-      return
-    }
-
-    const object = JSON.parse(data) as CatalogObject
+    const object = droppedObject(event)
 
     // Windows, doors and hung things are placed on a wall seen straight on, in the Wall tab.
-    if (isWallShape(object.shape)) {
+    if (!object || isWallShape(object.shape)) {
       return
     }
 
@@ -278,11 +274,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
       onPointerMove={move}
       onPointerUp={end}
       onPointerCancel={end}
-      onDragOver={(event) => {
-        if (event.dataTransfer.types.includes(BUILDER.dragType)) {
-          event.preventDefault()
-        }
-      }}
+      onDragOver={allowCatalogDrop}
       onDrop={drop}
     >
       <defs>
@@ -376,17 +368,12 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
             {!SIDELESS.has(item.shape) && item.form !== ITEM_FORM.Round && <FacingMarks item={item} width={width} depth={depth} text={text} />}
             {chosen &&
               CORNERS.map((corner) => (
-                <rect
+                <ResizeHandle
                   key={corner.name}
-                  x={(corner.x * width) / 2 - 9}
-                  y={(corner.y * depth) / 2 - 9}
-                  width={18}
-                  height={18}
-                  rx={4}
-                  className={`${corner.cursor} fill-primary stroke-background`}
-                  strokeWidth={2}
-                  data-resize={corner.name}
-                  onPointerDown={(event) => start(event, index, "resize", corner)}
+                  corner={corner}
+                  x={(corner.x * width) / 2}
+                  y={(corner.y * depth) / 2}
+                  onStart={(event) => start(event, index, "resize", corner)}
                 />
               ))}
             {chosen && hasParts(item) && <PartHandles item={item} onStart={(event, part) => start(event, index, part)} />}

@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { LayoutGridIcon, LogInIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react"
 
+import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -12,7 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccount } from "@/features/account/api"
 import { useDesigns, type Design } from "@/features/designs/api"
-import { DeleteDesignDialog, DesignCover, DesignDetailsDialog, EmptyState } from "@/features/designs/components"
+import { DeleteDesignDialog, DesignCover, DesignDetailsDialog } from "@/features/designs/components"
 import { dateFormat, roomCount } from "@/features/designs/format"
 import { errorMessage } from "@/lib/api"
 import { MESSAGES, ROUTES } from "@/lib/constants"

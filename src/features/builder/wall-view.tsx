@@ -1,8 +1,10 @@
 import { useRef, type DragEvent, type PointerEvent as ReactPointerEvent } from "react"
 
 import { BUILDER, ITEM_SHAPE } from "@/lib/constants"
-import type { CatalogObject, Plan, PlanItem } from "./api"
+import type { Plan, PlanItem } from "./api"
+import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { footprint, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
+import { ResizeHandle } from "./resize-handle"
 import { fromWall, seenFrom, wallLength, wallName, wallOf } from "./room-outline"
 import { WallChoice } from "./wall-choice"
 
@@ -123,15 +125,9 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
   }
 
   const drop = (event: DragEvent) => {
-    const data = event.dataTransfer.getData(BUILDER.dragType)
+    const object = droppedObject(event)
 
-    if (!data) {
-      return
-    }
-
-    const object = JSON.parse(data) as CatalogObject
-
-    if (!isWallShape(object.shape)) {
+    if (!object || !isWallShape(object.shape)) {
       return
     }
 
@@ -162,11 +158,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
-        onDragOver={(event) => {
-          if (event.dataTransfer.types.includes(BUILDER.dragType)) {
-            event.preventDefault()
-          }
-        }}
+        onDragOver={allowCatalogDrop}
         onDrop={drop}
       >
         <rect x={0} y={0} width={length} height={height} fill={plan.wallColor} stroke="currentColor" strokeOpacity="0.35" strokeWidth="2" />
@@ -233,17 +225,12 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
               className="pointer-events-none stroke-primary"
             />
             {CORNERS.filter((corner) => corner.y > 0 || chosen.shape !== ITEM_SHAPE.Door).map((corner) => (
-              <rect
+              <ResizeHandle
                 key={corner.name}
-                x={chosen.x + (corner.x * chosen.width) / 2 - 9}
-                y={height - chosen.elevation - (corner.y > 0 ? chosen.height : 0) - 9}
-                width={18}
-                height={18}
-                rx={4}
-                className={`${corner.cursor} fill-primary stroke-background`}
-                strokeWidth={2}
-                data-resize={corner.name}
-                onPointerDown={(event) => start(event, selected, "resize", corner)}
+                corner={corner}
+                x={chosen.x + (corner.x * chosen.width) / 2}
+                y={height - chosen.elevation - (corner.y > 0 ? chosen.height : 0)}
+                onStart={(event) => start(event, selected, "resize", corner)}
               />
             ))}
           </g>

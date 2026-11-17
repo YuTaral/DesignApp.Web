@@ -4,7 +4,7 @@
 // fake one here) finds; they follow the chair's color until one gets its own. Both are kept after saving and reopening;
 // a part merges back; Erase in the dialog gives a part's pixels back to the chair; phone layout.
 // Usage: node e2e/parts-pass.mjs [web url]
-import { launch, sleep, until, WEB, selectObject } from './ff.mjs'
+import { launch, sleep, until, WEB, selectObject, signUpFromEditor, saveNewDesign, labelAtPoint, canvasPixel, clickButton } from './ff.mjs'
 
 const email = `parts-${Date.now()}@example.com`
 const password = 'correct horse battery'
@@ -16,7 +16,7 @@ const frame = () => sleep(300)
 const dialog = '[role=dialog]'
 const editorReady = () => until(page, () => !!document.querySelector('main canvas[data-label-map]'), { timeout: 30000, label: 'editor' })
 const dialogReady = () => until(page, () => !!document.querySelector('[role=dialog] [data-parts-canvas] canvas[data-label-map]'), { timeout: 30000, label: 'dialog canvas' })
-const clickText = (scope, label) => page.evaluate((s, t) => [...document.querySelectorAll(`${s} button`)].find((b) => b.textContent.trim() === t).click(), scope, label)
+const clickText = (scope, label) => clickButton(page, scope, label)
 const select = async (index) => {
   if (!(await selectObject(page, index))) {
     throw new Error(`Object ${index} can't be clicked on the photo`)
@@ -42,26 +42,11 @@ const reopen = async () => {
 const tones = () => page.evaluate(() => [...document.querySelectorAll('[role=dialog] [data-tone]')].map((b) => ({ center: b.dataset.center, text: b.innerText.replace(/\s+/g, ' ').trim() })))
 const partButtons = () => page.evaluate(() => [...document.querySelectorAll('[role=dialog] [data-part]')].map((b) => ({ index: Number(b.dataset.part), text: b.innerText.trim() })))
 /** The object at a photo-relative point in the outlines the dialog's canvas shows. */
-const labelAt = (u, v) => page.evaluate(async (u, v) => {
-  const url = document.querySelector('[role=dialog] [data-parts-canvas] canvas[data-label-map]').dataset.labelMap
-  const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
-  const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
-
-  return ctx.getImageData(Math.floor(u * bmp.width), Math.floor(v * bmp.height), 1, 1).data[0]
-}, u, v)
+const labelAt = (u, v) => labelAtPoint(page, '[role=dialog] [data-parts-canvas] canvas[data-label-map]', u, v)
 const swatch = (color) => page.click(`${dialog} [role=radiogroup][aria-label^="Color for"] [aria-label="Color ${color}"]`)
 
 /** The dialog canvas's pixel (RGB) at a photo-relative point. */
-const pixel = (u, v) => page.evaluate((u, v) => {
-  const canvas = document.querySelector('[role=dialog] [data-parts-canvas] canvas[data-photo-rect]')
-  const r = JSON.parse(canvas.dataset.photoRect)
-  const ratio = canvas.width / canvas.clientWidth
-  const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height
-  const ctx = c.getContext('2d'); ctx.drawImage(canvas, 0, 0)
-  const d = ctx.getImageData(Math.round((r.x + u * r.width) * ratio), Math.round((r.y + v * r.height) * ratio), 1, 1).data
-
-  return [d[0], d[1], d[2]]
-}, u, v)
+const pixel = (u, v) => canvasPixel(page, '[role=dialog] [data-parts-canvas] canvas[data-photo-rect]', u, v)
 const diff = (a, b) => a.reduce((sum, c, i) => sum + Math.abs(c - b[i]), 0)
 /** The pixel once it differs from `before` (the canvas redraws on the next frame; in software that can take a while). */
 const changed = async (u, v, before) => {
@@ -272,20 +257,9 @@ try {
   await closeParts()
 
   // 7. Sign up, save, reopen: the wall's colors and the chair's parts are kept.
-  await page.click('::-p-text(Sign in to save)')
-  await until(page, () => location.pathname === '/sign-in', { label: 'sign-in' })
-  await page.click('::-p-text(Create an account)')
-  await until(page, () => location.pathname === '/sign-up', { label: 'sign-up' })
-  await page.type('input[type=email]', email)
-  await page.type('input[autocomplete=new-password]', password)
-  await page.click('button[type=submit]')
-  await until(page, () => location.pathname.startsWith('/rooms/'), { label: 'back in editor' })
+  await signUpFromEditor(page, email, password)
   await editorReady()
-  await page.click('::-p-text(Save design)')
-  await page.waitForSelector(`${dialog} input`)
-  await page.type(`${dialog} input`, 'Bricks and chair')
-  await page.click(`${dialog} button[type=submit]`)
-  await until(page, () => !!new URL(location.href).searchParams.get('design'), { label: 'saved design' })
+  await saveNewDesign(page, 'Bricks and chair')
   await reopen()
   await select(wall.index)
   await openParts()

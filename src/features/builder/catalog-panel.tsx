@@ -11,6 +11,7 @@ import { AI_MODE, BUILDER, MESSAGES, ROOM_TYPE_NAMES, STORAGE_KEYS } from "@/lib
 import { describeObject, useCatalog, type CatalogObject, type Plan } from "./api"
 import { AddObjectDialog } from "./add-object-dialog"
 import { isMountedShape, isOpeningShape, isWallShape, useBuilderStore } from "./builder-store"
+import { startCatalogDrag } from "./catalog-drag"
 
 /**
  * The objects to add, in three sections the user can collapse (remembered in this browser): windows and doors, things
@@ -143,7 +144,7 @@ function ObjectList({ objects, disabled, onChoose }: { objects: CatalogObject[];
             disabled={disabled}
             data-catalog={object.key}
             onDragStart={(event) => {
-              event.dataTransfer.setData(BUILDER.dragType, JSON.stringify(object))
+              startCatalogDrag(event, object)
               event.dataTransfer.effectAllowed = "copy"
             }}
             onClick={() => onChoose(object)}
