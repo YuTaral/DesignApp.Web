@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { Room } from "@/features/rooms/types"
 import { apiUrl, errorMessage } from "@/lib/api"
-import { AI_MODE, BUILDER, PHOTO_STYLE, PHOTO_STYLE_NAMES, VIEW_CORNER, VIEW_CORNER_NAMES, type PhotoStyle } from "@/lib/constants"
+import { AI_MODE, BUILDER, MESSAGES, PHOTO_STYLE, PHOTO_STYLE_NAMES, VIEW_CORNER, VIEW_CORNER_NAMES, type PhotoStyle } from "@/lib/constants"
 import type { Plan, PlanItem, PlanShot } from "./api"
 import { wallName, walls } from "./room-outline"
 import { drawViewPictures } from "./scene-3d"
@@ -50,9 +50,11 @@ export function GenerateDialog({
 }) {
   const [style, setStyle] = useState<PhotoStyle>(PHOTO_STYLE.AsBuilt)
   const [instructions, setInstructions] = useState("")
-  // The pictures drawn so far, and whether they all are (a failed drawing leaves the rest out).
+  // The pictures drawn so far, whether they all are, and whether drawing them failed (no WebGL, say: then no photo can
+  // be made either, as each is made from the same 3D view).
   const [pictures, setPictures] = useState<Picture[]>([])
   const [drawn, setDrawn] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [made, setMade] = useState<Made[] | null>(null)
   const making = made?.some((m) => m.state === "making") ?? false
@@ -135,9 +137,10 @@ export function GenerateDialog({
 
     setPictures([])
     setDrawn(false)
+    setFailed(false)
     setChosen(new Set([keyOf(plan)]))
     drawViewPictures(plan, shots, BUILDER.viewPictureWidth, (picture) => setPictures((all) => [...all, picture]), () => stopped)
-      .catch(() => {})
+      .catch(() => !stopped && setFailed(true))
       .finally(() => !stopped && setDrawn(true))
 
     return () => {
@@ -228,15 +231,20 @@ export function GenerateDialog({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-medium">Views</h3>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="xs" disabled={!drawn} onClick={() => setChosen(new Set(pictures.filter((p) => !p.blocking).map((p) => keyOf(p.shot))))}>
+                  <Button variant="ghost" size="xs" disabled={!drawn || failed} onClick={() => setChosen(new Set(pictures.filter((p) => !p.blocking).map((p) => keyOf(p.shot))))}>
                     All open views
                   </Button>
-                  <Button variant="ghost" size="xs" disabled={count === 0} onClick={() => setChosen(new Set())}>
+                  <Button variant="ghost" size="xs" disabled={count === 0 || failed} onClick={() => setChosen(new Set())}>
                     None
                   </Button>
                 </div>
               </div>
-              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+              {failed && (
+                <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert" data-views-failed>
+                  {MESSAGES.guideFailed} Photos can't be made in this browser.
+                </p>
+              )}
+              <div className={cn("grid gap-x-4 gap-y-3 sm:grid-cols-2", failed && "hidden")}>
                 {walls(plan).map((wall) => (
                   <div key={wall.index} className="space-y-1.5" data-view-wall={wall.index}>
                     <p className="text-xs font-medium text-muted-foreground">Looking at the {wallName(plan, wall.index).toLowerCase()}</p>
@@ -346,7 +354,7 @@ export function GenerateDialog({
                 <Button variant="outline" onClick={close}>
                   Cancel
                 </Button>
-                <Button disabled={count === 0 || !drawn} onClick={() => void start()} data-generate-confirm>
+                <Button disabled={count === 0 || !drawn || failed} onClick={() => void start()} data-generate-confirm>
                   <ImageIcon data-icon="inline-start" />
                   {count <= 1 ? "Generate photo" : `Generate ${count} photos`}
                 </Button>
