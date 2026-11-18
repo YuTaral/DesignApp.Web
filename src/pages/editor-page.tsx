@@ -7,6 +7,7 @@ import {
   ColumnsIcon,
   FlaskConicalIcon,
   ImageOffIcon,
+  ImagesIcon,
   LoaderCircleIcon,
   Redo2Icon,
   SaveIcon,
@@ -139,6 +140,15 @@ function Editor({ room }: { room: Room }) {
               </Link>
             )}
           </Button>
+          {/* A room of a plan's photos: back to all of them, to pick or change another. */}
+          {room.planId && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link to={ROUTES.photos} params={{ roomId: room.id }} data-all-photos>
+                <ImagesIcon data-icon="inline-start" />
+                All photos
+              </Link>
+            </Button>
+          )}
           {openDesign && (
             <h1 className="min-w-0 truncate text-sm font-medium" title={openDesign.name}>
               {openDesign.name}

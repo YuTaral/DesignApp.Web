@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { ApiError, apiUrl, getJson, sendJson, toApiError } from "@/lib/api"
-import { isAnalysisFinished, type Room } from "./types"
+import { isAnalysisFinished, type PhotoTake, type Room } from "./types"
 import { type AiMode, type AnalysisScope, API, HTTP_STATUS, LIMITS, MESSAGES, MIME, type ObjectCategory, type OutlineBrushMode, QUERY_KEYS, type StrokeShape, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
 
 /** Which AI uploads use, and whether each upload may choose (mirrors AiAvailabilityResponse). */
@@ -111,6 +111,34 @@ export type OutlineStroke = {
   points: { x: number; y: number }[]
 }
 
+/** The last change sent for each room, so the next one waits for it (see `inTurn`). */
+const roomWrites = new Map<string, Promise<unknown>>()
+
+/**
+ * Sends a change to a room after the changes sent before it have been answered, so each starts from the room as the
+ * one before left it. The editor switches outline versions at once (undo, redo) and tells the API in the background;
+ * without this, a removal sent right after could reach the API while that switch is still being saved, and the two
+ * would change the same fields at the same time.
+ * @param roomId - The room.
+ * @param write - Sends the change.
+ * @returns The change's answer.
+ */
+function inTurn<T>(roomId: string, write: () => Promise<T>): Promise<T> {
+  const before = roomWrites.get(roomId) ?? Promise.resolve()
+  const next = before.catch(() => undefined).then(write)
+
+  roomWrites.set(roomId, next)
+  next
+    .catch(() => undefined)
+    .finally(() => {
+      if (roomWrites.get(roomId) === next) {
+        roomWrites.delete(roomId)
+      }
+    })
+
+  return next
+}
+
 /**
  * Saves a brush stroke on one object's outline. The API stores the result as a new label map
  * version and makes it current.
@@ -120,7 +148,7 @@ export type OutlineStroke = {
  * @throws ApiError with a message for the user when the stroke can't be saved (such as one that changes nothing).
  */
 export function saveOutlineStroke(roomId: string, stroke: OutlineStroke): Promise<Room> {
-  return sendJson<Room>("POST", API.roomOutline(roomId), stroke)
+  return inTurn(roomId, () => sendJson<Room>("POST", API.roomOutline(roomId), stroke))
 }
 
 /** An object the user marked by hand, as sent to the API. */
@@ -143,7 +171,7 @@ export type NewObject = {
  * @throws ApiError with a message for the user when it can't be added (such as a missing name).
  */
 export function addRoomObject(roomId: string, object: NewObject): Promise<Room> {
-  return sendJson<Room>("POST", API.roomObjects(roomId), object)
+  return inTurn(roomId, () => sendJson<Room>("POST", API.roomObjects(roomId), object))
 }
 
 /**
@@ -156,7 +184,7 @@ export function addRoomObject(roomId: string, object: NewObject): Promise<Room> 
  * @throws ApiError with a message for the user when they can't be removed (such as a wall).
  */
 export function removeRoomObjects(roomId: string, objectIndexes: number[], baseRevision: number): Promise<Room> {
-  return sendJson<Room>("POST", API.roomRemovals(roomId), { baseRevision, objectIndexes })
+  return inTurn(roomId, () => sendJson<Room>("POST", API.roomRemovals(roomId), { baseRevision, objectIndexes }))
 }
 
 /**
@@ -170,7 +198,55 @@ export function removeRoomObjects(roomId: string, objectIndexes: number[], baseR
  * @throws ApiError with a message for the user when no parts can be found.
  */
 export function findRoomParts(roomId: string, objectIndex: number, baseRevision: number, instructions?: string): Promise<Room> {
-  return sendJson<Room>("POST", API.roomParts(roomId), { baseRevision, objectIndex, instructions: instructions?.trim() || undefined })
+  return inTurn(roomId, () => sendJson<Room>("POST", API.roomParts(roomId), { baseRevision, objectIndex, instructions: instructions?.trim() || undefined }))
+}
+
+/**
+ * A room's photos to choose from (a room builder run's photos and their AI changes), oldest first.
+ * @param roomId - The room.
+ */
+export function useRoomTakes(roomId: string) {
+  return useQuery({
+    queryKey: QUERY_KEYS.roomTakes(roomId),
+    queryFn: ({ signal }) => getJson<PhotoTake[]>(API.roomTakes(roomId), signal),
+  })
+}
+
+/**
+ * Has the room's AI make a new version of one of its photos with a change in the user's words; the new photo is added
+ * to the room's photos.
+ * @param roomId - The room.
+ */
+export function useChangeTake(roomId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ takeId, instructions }: { takeId: string; instructions: string }) => {
+      return sendJson<PhotoTake>("POST", API.roomTakeChange(roomId, takeId), { instructions })
+    },
+    onSuccess: (take) => {
+      queryClient.setQueryData<PhotoTake[]>(QUERY_KEYS.roomTakes(roomId), (takes) => [...(takes ?? []), take])
+    },
+  })
+}
+
+/**
+ * Makes one of a room's photos the room's photo, the one its analysis uses (an analyzed room waits for it again).
+ * @param roomId - The room.
+ * @param takeId - The photo.
+ * @returns The room.
+ */
+export function chooseRoomTake(roomId: string, takeId: string): Promise<Room> {
+  return inTurn(roomId, () => sendJson<Room>("POST", API.roomTakeChoice(roomId, takeId)))
+}
+
+/**
+ * Puts a room of a room plan's photos into the plan's own design (made when it has none). Needs an account.
+ * @param roomId - The room.
+ * @returns The design's id.
+ */
+export function saveRoomToPlanDesign(roomId: string): Promise<{ designId: string }> {
+  return sendJson<{ designId: string }>("POST", API.roomPlanDesign(roomId))
 }
 
 /**
@@ -180,7 +256,7 @@ export function findRoomParts(roomId: string, objectIndex: number, baseRevision:
  * @throws ApiError with a message for the user when it can't be started.
  */
 export function startRoomAnalysis(roomId: string): Promise<Room> {
-  return sendJson<Room>("POST", API.roomAnalysis(roomId))
+  return inTurn(roomId, () => sendJson<Room>("POST", API.roomAnalysis(roomId)))
 }
 
 /**
@@ -192,7 +268,7 @@ export function startRoomAnalysis(roomId: string): Promise<Room> {
  * @throws ApiError with a message for the user when it can't be merged.
  */
 export function mergeRoomPart(roomId: string, objectIndex: number, baseRevision: number): Promise<Room> {
-  return sendJson<Room>("POST", API.roomMerges(roomId), { baseRevision, objectIndex })
+  return inTurn(roomId, () => sendJson<Room>("POST", API.roomMerges(roomId), { baseRevision, objectIndex }))
 }
 
 /**
@@ -202,5 +278,5 @@ export function mergeRoomPart(roomId: string, objectIndex: number, baseRevision:
  * @returns The room.
  */
 export function selectLabelMapRevision(roomId: string, revision: number): Promise<Room> {
-  return sendJson<Room>("PUT", API.roomCurrentLabels(roomId), { revision })
+  return inTurn(roomId, () => sendJson<Room>("PUT", API.roomCurrentLabels(roomId), { revision }))
 }

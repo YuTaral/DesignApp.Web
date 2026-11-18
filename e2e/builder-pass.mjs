@@ -5,7 +5,7 @@
 // a reload; the catalog's sections collapse, and a click opens a dialog to choose an object's type, color and size;
 // a P-shaped sofa's parts resize one by one; a window is placed exactly on its wall in the wall view, and a door dropped near a wall lands on it; the 3D
 // view draws the room, and clicking a wall turns it to look at that wall; Generate photo asks for a style and extra
-// instructions, then (the fake AI) opens the new room in the editor; phone layout.
+// instructions, then (the fake AI) makes the picked views' photos one room and opens its photo page; phone layout.
 // Usage: node e2e/builder-pass.mjs [web url]
 import { launch, sleep, until, WEB, canvasVariety, dropCatalogObject } from './ff.mjs'
 
@@ -502,9 +502,12 @@ try {
     JSON.stringify(backMarker))
 
   // 11. Generate photo (the fake AI) shows a small picture of every view (each wall from the middle and both near
-  //    corners), the room's own picked; with one more picked it makes two photos, each sent with its view, the style,
-  //    the instructions and every object box, and the room keeps its own view. Each opens in the editor, where it
-  //    isn't analyzed until the user clicks Analyze photo (with the real AI the analysis costs money), and then it is.
+  //    corners), the room's own picked, and the style closed at "As planned"; with one more picked it makes two photos,
+  //    each sent with its view, the style, the instructions, every object box and its note, the second into the
+  //    first's room, and the room keeps its own view. The photo page opens with both; the room isn't analyzed until
+  //    the user clicks Analyze this photo (with the real AI the analysis costs money), and then the editor analyzes it.
+  const builderUrl = page.url()
+
   await page.click('::-p-text(Generate photo)')
   // The views are drawn one by one, each in its place as it is ready.
   await until(page, () => document.querySelectorAll('[data-generate-dialog] [data-view-pick]').length === 12, { timeout: 20000, label: 'every view drawn' })
@@ -513,7 +516,14 @@ try {
     on: [...document.querySelectorAll('[data-generate-dialog] [data-view-pick][aria-checked=true]')].map((b) => b.dataset.viewPick),
   }))
 
+  const styleShut = await page.evaluate(() => ({
+    heading: document.querySelector('[data-style-toggle]')?.textContent.trim(),
+    cards: document.querySelectorAll('[data-photo-style]').length,
+  }))
+
   await page.click('[data-view-pick="0:Left"]')
+  await page.click('[data-style-toggle]')
+  await page.waitForSelector('[data-photo-style=Boho]')
   await page.click('[data-photo-style=Boho]')
   const noDecorateChoice = await page.evaluate(() => !document.querySelector('[data-generate-dialog] [data-decorate]'))
 
@@ -530,38 +540,45 @@ try {
       if (String(input).endsWith('/generate') && init?.body instanceof FormData) {
         const b = init.body
 
-        window.__sent.push({ view: b.get('view'), corner: b.get('corner'), style: b.get('style'), instructions: b.get('instructions'), decorate: b.get('decorate'), boxes: JSON.parse(b.get('boxes') ?? '[]').length })
+        window.__sent.push({
+          view: b.get('view'), corner: b.get('corner'), style: b.get('style'), instructions: b.get('instructions'), decorate: b.get('decorate'),
+          boxes: JSON.parse(b.get('boxes') ?? '[]').length, roomId: b.get('roomId'), note: b.get('note'),
+        })
       }
 
       return original(input, init)
     }
   })
   await page.click('[data-generate-confirm]')
-  await until(page, () => document.querySelectorAll('[data-generate-dialog] [data-result=done]').length === 2, { timeout: 30000, label: 'two photos' })
-  await shot('builder-generate-results')
-  const forms = await page.evaluate(() => window.__sent.sort((a, b) => a.view.localeCompare(b.view)))
-  const keptView = await stored()
+  await until(page, () => location.pathname.endsWith('/photos'), { timeout: 30000, label: 'photo page' })
+  await page.waitForSelector('[data-photo-shown]')
+  await shot('builder-generate-photos')
+  const sent = await page.evaluate(() => window.__sent)
+  const forms = [...sent].sort((a, b) => a.view.localeCompare(b.view))
+  // The plan, read by its own id (the page is the photo page now).
+  const keptView = await page.evaluate(async (id) => (await fetch(`/api/plans/${id}`)).json(), builderUrl.split('/').at(-1))
+  const roomId = new URL(page.url()).pathname.split('/').at(-2)
+  const thumbs = await page.evaluate(() => document.querySelectorAll('[data-photo-thumb]').length)
 
-  step('Generate photo offers every view, the room\u2019s own picked, and makes a photo of each picked one with its view, style, instructions and boxes',
-    picks.all === 12 && picks.on.join() === '3:None' && confirmText === 'Generate 2 photos' && forms.length === 2
+  step('Generate photo offers every view, the room\u2019s own picked and the style closed at As planned, and makes one room of a photo of each picked one with its view, style, instructions, boxes and note',
+    picks.all === 12 && picks.on.join() === '3:None' && styleShut.heading === 'Style: As planned' && styleShut.cards === 0
+      && confirmText === 'Generate 2 photos' && forms.length === 2
       && forms[0].view === '0' && forms[0].corner === 'Left' && forms[1].view === '3' && forms[1].corner === 'None'
-      && forms.every((f) => f.style === 'Boho' && f.instructions === 'warm evening light' && f.decorate === null && f.boxes > 0) && noDecorateChoice
+      && forms.every((f) => f.style === 'Boho' && f.instructions === 'warm evening light' && f.decorate === null && f.boxes > 0 && /wall/.test(f.note)) && noDecorateChoice
+      && sent[0].roomId === null && sent[1].roomId === roomId && thumbs === 2
       && keptView.view === 3 && keptView.corner === 'None',
-    JSON.stringify({ picks, confirmText, forms }))
-  await page.click('[data-generate-dialog] [data-open-photo]')
-  await until(page, () => location.pathname.startsWith('/rooms/'), { timeout: 30000, label: 'editor' })
-  await until(page, () => !!document.querySelector('[data-analysis-waiting]'), { timeout: 30000, label: 'waiting room' })
-  await new Promise((resolve) => setTimeout(resolve, 1500))
-  const stillWaiting = await page.evaluate(() => !!document.querySelector('[data-analysis-waiting]') && !document.querySelector('main canvas[data-label-map]'))
+    JSON.stringify({ picks, styleShut, confirmText, forms, roomId, thumbs }))
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  const stillWaiting = await page.evaluate(async (id) => (await (await fetch(`/api/rooms/${id}`)).json()).status === 'Waiting', roomId)
 
-  await page.click('::-p-text(Analyze photo)')
+  await page.click('[data-photo-option=analyze] button')
+  await until(page, () => /^\/rooms\/[^/]+$/.test(location.pathname), { timeout: 30000, label: 'editor' })
   await until(page, () => !!document.querySelector('main canvas[data-label-map]'), { timeout: 60000, label: 'analyzed room' })
-  step('A photo opens in the editor unanalyzed, and Analyze photo analyzes it', stillWaiting, page.url())
+  step('The photos wait unanalyzed, and Analyze this photo opens the editor, which analyzes it', stillWaiting, page.url())
 
   // 12. Phone layout: the builder fits.
-  await page.goBack({ waitUntil: 'networkidle0' })
   await page.setViewport({ width: 390, height: 844 })
-  await page.goto(page.url(), { waitUntil: 'networkidle0' })
+  await page.goto(builderUrl, { waitUntil: 'networkidle0' })
   await page.waitForSelector('[data-plan-canvas], [data-view-3d]')
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
 

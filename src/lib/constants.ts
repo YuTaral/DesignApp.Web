@@ -27,6 +27,10 @@ export const API = {
   roomPhotoVersion: (id: string, version: number) => `/api/rooms/${id}/photo/${version}`,
   roomCurrentLabels: (id: string) => `/api/rooms/${id}/labels/current`,
   roomLabelMap: (id: string, revision: number) => `/api/rooms/${id}/labels/${revision}`,
+  roomTakes: (id: string) => `/api/rooms/${id}/takes`,
+  roomTakeChange: (id: string, takeId: string) => `/api/rooms/${id}/takes/${takeId}/change`,
+  roomTakeChoice: (id: string, takeId: string) => `/api/rooms/${id}/takes/${takeId}/choose`,
+  roomPlanDesign: (id: string) => `/api/rooms/${id}/plan-design`,
   palettes: "/api/palettes",
   builderCatalog: (roomType: string) => `/api/builder/catalog/${roomType}`,
   plans: "/api/plans",
@@ -62,10 +66,14 @@ export const HTTP_STATUS = {
   gatewayTimeout: 504,
 } as const
 
+/** The query parameter that names a room's photo set in its photo and outline addresses (API Constants.Routes.PhotoSetQuery). */
+export const PHOTO_SET_QUERY = "set"
+
 /** The app's pages. */
 export const ROUTES = {
   home: "/",
   room: "/rooms/$roomId",
+  photos: "/rooms/$roomId/photos",
   designs: "/designs",
   design: "/designs/$designId",
   library: "/library",
@@ -87,6 +95,7 @@ export const QUERY_KEYS = {
   designs: ["designs"] as const,
   design: (id: string) => ["designs", id] as const,
   room: (id: string) => ["rooms", id] as const,
+  roomTakes: (id: string) => ["rooms", id, "takes"] as const,
   library: ["library"] as const,
   palettes: ["palettes"] as const,
   plan: (id: string) => ["plans", id] as const,
@@ -541,6 +550,10 @@ export const MESSAGES = {
   signedOut: "Signed out",
   designSaved: "Design saved",
   addedTo: (name: string) => `Added to ${name}`,
+  photoChanged: "The changed photo is ready.",
+  photosFailed: (count: number, why: string) => `${count === 1 ? "One photo" : `${count} photos`} couldn't be made: ${why}`,
+  savedToPlanDesign: "Saved to the room's design.",
+  replaceAnalysis: "Analyze this photo instead? The outlines and colors made for the other photo are replaced.",
   colorsSaved: "Colors saved",
   tonesFailed: "Couldn't read this object's colors. Try again.",
   oneMainColor: (label: string) => `The ${label} has one main color, so there is nothing to split.`,

@@ -213,7 +213,13 @@ function Builder({ plan }: { plan: Plan }) {
         plan={plan}
         onClose={() => setAsking(false)}
         make={make}
-        onOpen={(room) => void navigate({ to: ROUTES.room, params: { roomId: room.id }, search: {} })}
+        onDone={(roomId, failures) => {
+          if (failures.length > 0) {
+            toast.error(MESSAGES.photosFailed(failures.length, failures[0]))
+          }
+
+          void navigate({ to: ROUTES.photos, params: { roomId } })
+        }}
       />
 
       <aside aria-label="Inspector" className="rounded-2xl border bg-card p-4 shadow-soft lg:w-80 lg:shrink-0 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
@@ -238,8 +244,6 @@ function useAutosave(plan: Plan) {
   // A new number after each failure, so the wait for the next try starts again.
   const [attempt, setAttempt] = useState(0)
   const latest = useRef(plan)
-
-  latest.current = plan
 
   /**
    * Says that the room couldn't be saved, and why.
@@ -285,6 +289,9 @@ function useAutosave(plan: Plan) {
       setSaving(false)
     }
   }
+
+  // The plan as shown now, for the saves to send.
+  latest.current = plan
 
   useEffect(() => {
     if (unsaved === 0) {
@@ -332,13 +339,13 @@ function useAutosave(plan: Plan) {
  * @returns The function that makes a photo of one view.
  */
 function usePhotoMaker(plan: Plan, flush: () => Promise<void>) {
-  return async (shot: PlanShot, style: PhotoStyle, instructions: string) => {
+  return async (shot: PlanShot, style: PhotoStyle, instructions: string, photos: { roomId?: string; note: string }) => {
     const seen = { ...plan, ...shot }
 
     await flush()
     const guide = await renderGuide(seen)
 
     // Each object's box in the view keeps the image model to the plan's layout (it kept sizes and places better so).
-    return generateRoom(plan.id, guide, style, instructions, undefined, objectBoxes(seen), shot)
+    return generateRoom(plan.id, guide, style, instructions, undefined, objectBoxes(seen), shot, photos)
   }
 }

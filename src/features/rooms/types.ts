@@ -1,4 +1,4 @@
-import { type AiMode, type AnalysisScope, API, type ObjectCategory, ROOM_STATUS, type RoomStatus } from "@/lib/constants"
+import { type AiMode, type AnalysisScope, API, type ObjectCategory, ROOM_STATUS, type RoomStatus, PHOTO_SET_QUERY } from "@/lib/constants"
 
 // Mirrors RoomResponse in DesignApp.Api (src/DesignApp.Api/Rooms/RoomResponse.cs).
 // The full contract is in the API docs at /scalar.
@@ -67,16 +67,45 @@ export type Room = {
   photoVersions: number[]
   /** The built-in library layout it was copied from, such as "minimalist/kitchen/2"; null for an uploaded photo. */
   libraryRoom: string | null
+  /** The room plan whose photos it holds; null for an upload or a library room. */
+  planId: string | null
+  /** Which of its photos to choose from is its photo; null when it has none. */
+  chosenTakeId: string | null
+  /** Named in its photo and outline addresses, new each time a photo is chosen; null when it has none. */
+  photoSetId: string | null
+}
+
+/** One of a room's photos to choose from (API PhotoTakeResponse): a Generate photo, or an AI change of one. */
+export type PhotoTake = {
+  id: string
+  photoUrl: string
+  width: number
+  height: number
+  /** Its view's name, or the change asked for. */
+  note: string
+  /** The photo it was changed from, if any. */
+  changedFrom: string | null
+  createdAt: string
+}
+
+/**
+ * A room file's address with the room's photo set in it: choosing a photo gives the room a new photo and new outlines
+ * under the same paths, which the browser keeps for good (API Constants.Routes.RoomPhotoUrl).
+ * @param room - The room.
+ * @param path - The file's path.
+ */
+function withSet(room: Pick<Room, "photoSetId">, path: string) {
+  return room.photoSetId ? `${path}?${PHOTO_SET_QUERY}=${room.photoSetId}` : path
 }
 
 /**
  * Where a stored label map version is (relative, like photoUrl). Every version stays the same
  * forever, so the browser can cache each one.
- * @param roomId - The room's id.
+ * @param room - The room (its id, and its photo set when it has photos to choose from).
  * @param revision - The version.
  */
-export function labelMapUrl(roomId: string, revision: number) {
-  return API.roomLabelMap(roomId, revision)
+export function labelMapUrl(room: Pick<Room, "id" | "photoSetId">, revision: number) {
+  return withSet(room, API.roomLabelMap(room.id, revision))
 }
 
 /**
@@ -88,5 +117,5 @@ export function labelMapUrl(roomId: string, revision: number) {
 export function photoUrlFor(room: Room, revision: number) {
   const version = room.photoVersions?.[revision] ?? 0
 
-  return version === 0 ? API.roomPhoto(room.id) : API.roomPhotoVersion(room.id, version)
+  return withSet(room, version === 0 ? API.roomPhoto(room.id) : API.roomPhotoVersion(room.id, version))
 }

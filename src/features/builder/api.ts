@@ -89,6 +89,8 @@ export type Plan = {
   view: number
   /** Where the camera stands to look at the wall in view: across from its middle, or in a near corner. */
   corner: ViewCorner
+  /** The plan's own design, which its photos' rooms go into; null until there is one. */
+  designId?: string | null
   /** The walls' corners, clockwise from the top-left one at 0, 0, in cm; `width` and `length` are their extent. */
   outline: OutlinePoint[]
   aiMode: string
@@ -142,10 +144,10 @@ export type NewPlan = Pick<Plan, "name" | "roomType" | "width" | "length" | "hei
 
 /**
  * Loads a built room.
- * @param id - The plan's id.
+ * @param id - The plan's id; nothing is loaded without one.
  */
-export function usePlan(id: string) {
-  return useQuery({ queryKey: QUERY_KEYS.plan(id), queryFn: ({ signal }) => getJson<Plan>(API.plan(id), signal) })
+export function usePlan(id: string | undefined) {
+  return useQuery({ queryKey: QUERY_KEYS.plan(id ?? ""), queryFn: ({ signal }) => getJson<Plan>(API.plan(id ?? ""), signal), enabled: id !== undefined })
 }
 
 /**
@@ -193,7 +195,8 @@ export function describeObject(planId: string, description: string): Promise<Cat
 }
 
 /**
- * Makes a realistic photo of the built room from its 3D view, as a new room to open in the editor.
+ * Makes a realistic photo of the built room from its 3D view. A Generate run's first photo makes a room; the others
+ * go into it (`photos.roomId`), to choose from.
  * @param planId - The plan.
  * @param guide - The room's 3D view as a PNG.
  * @param style - The photo's interior style.
@@ -203,7 +206,8 @@ export function describeObject(planId: string, description: string): Promise<Cat
  * @param boxes - Where each object is in the 3D view (`objectBoxes`), which the image model keeps them in; missing for none.
  * @param shot - The view the guide was drawn from, when it isn't the plan's own (the plan keeps its own); missing for
  *   the plan's own view.
- * @returns The new room (waiting for the user to start its analysis).
+ * @param photos - The room of the run's earlier photos (missing for its first) and what this photo is (its view's name).
+ * @returns The room (waiting for the user to start its analysis).
  */
 export function generateRoom(
   planId: string,
@@ -212,9 +216,19 @@ export function generateRoom(
   instructions: string,
   seed?: number,
   boxes?: ItemBox[],
-  shot?: PlanShot
+  shot?: PlanShot,
+  photos?: { roomId?: string; note?: string }
 ): Promise<Room> {
   const form = new FormData()
+
+  // A run's later photos go into the room its first one made, to choose from.
+  if (photos?.roomId) {
+    form.append("roomId", photos.roomId)
+  }
+
+  if (photos?.note) {
+    form.append("note", photos.note)
+  }
 
   if (shot) {
     form.append("view", String(shot.view))

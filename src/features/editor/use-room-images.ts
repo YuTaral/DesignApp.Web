@@ -19,7 +19,7 @@ export function useRoomImages(room: Room, shownRevision: number, canvasRef: RefO
   const rendererRef = useRef<RoomRenderer | null>(null)
   const [map, setMap] = useState<(LabelMap & { url: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const labelsUrl = labelMapUrl(room.id, shownRevision)
+  const labelsUrl = labelMapUrl(room, shownRevision)
   const photoSrc = photoUrlFor(room, shownRevision)
   const firstLabelsUrl = useRef(labelsUrl)
   const firstPhotoSrc = useRef(photoSrc)

@@ -27,7 +27,7 @@ export async function loadObjectColors(room: Room, revision: number, index: numb
 
   photo.crossOrigin = "anonymous" // same mode as the editor's photo, so the cached copy is reused
   photo.src = apiUrl(photoUrlFor(room, revision))
-  const [map] = await Promise.all([loadLabelMap(labelMapUrl(room.id, revision), signal), photo.decode()])
+  const [map] = await Promise.all([loadLabelMap(labelMapUrl(room, revision), signal), photo.decode()])
   const canvas = new OffscreenCanvas(map.width, map.height)
   const context = canvas.getContext("2d", { willReadFrequently: true })
 

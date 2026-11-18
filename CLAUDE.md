@@ -10,7 +10,7 @@ secrets, paid AI). They apply here too.
 npx tsc -b          # type check
 npx oxlint          # lint; the two react(only-export-components) warnings in components/ui are known
 npx vite build      # production build
-npm run e2e         # the ten Firefox passes against the running app (Visual Studio F5), with a summary
+npm run e2e         # the eleven Firefox passes against the running app (Visual Studio F5), with a summary
 ```
 
 `npm run e2e` takes an optional URL (`npm run e2e -- http://localhost:5173`); `DESIGNAPP_ROOMS` points

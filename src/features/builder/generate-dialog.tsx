@@ -7,9 +7,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { Room } from "@/features/rooms/types"
 import { errorMessage } from "@/lib/api"
-import { AI_MODE, BUILDER, PHOTO_STYLE, VIEW_CORNER, type PhotoStyle } from "@/lib/constants"
+import { AI_MODE, BUILDER, PHOTO_STYLE, PHOTO_STYLE_NAMES, VIEW_CORNER, type PhotoStyle } from "@/lib/constants"
 import type { Plan, PlanShot } from "./api"
-import { keyOf, type Made, type Picture } from "./generate-views"
+import { keyOf, viewName, type Made, type Picture } from "./generate-views"
 import { PhotoResults } from "./photo-results"
 import { PhotoStyleChoice } from "./photo-style-choice"
 import { walls } from "./room-outline"
@@ -19,28 +19,29 @@ import { ViewPicker } from "./view-picker"
 /**
  * Generate photo: a small picture of every view of the room (each wall seen from the middle and from both near
  * corners, a blocked view marked), of which the user picks one or more, and the interior style (it changes materials
- * and finishes, never the layout, sizes or colors) and their own words for the AI. Then the photos are made, a few at a
- * time, each shown as it is ready with a button that opens it in the editor; each is saved as its own room. The dialog
- * stays open while they are made, as each prompt is written from the room as saved. The last choices are kept while the
- * page is open.
+ * and finishes, never the layout, sizes or colors; "As planned" unless another is picked) and their own words for the
+ * AI. Then the photos are made, each shown as it is ready. They are one room: the first photo makes it, and the others
+ * are added to it, a few at a time. The dialog stays open while they are made, as each prompt is written from the room
+ * as saved; when they are all made, the photo page opens. The last choices are kept while the page is open.
  * @param props.open - Whether it is shown.
  * @param props.plan - The room.
  * @param props.onClose - Closes it.
- * @param props.make - Makes one photo of a view (saving the room first), as a new room.
- * @param props.onOpen - Opens a made photo's room in the editor.
+ * @param props.make - Makes one photo of a view (saving the room first): the run's first makes the room, the others
+ * (with its id) are added to it.
+ * @param props.onDone - Opens the photos' room, with why any photos couldn't be made.
  */
 export function GenerateDialog({
   open,
   plan,
   onClose,
   make,
-  onOpen,
+  onDone,
 }: {
   open: boolean
   plan: Plan
   onClose: () => void
-  make: (shot: PlanShot, style: PhotoStyle, instructions: string) => Promise<Room>
-  onOpen: (room: Room) => void
+  make: (shot: PlanShot, style: PhotoStyle, instructions: string, photos: { roomId?: string; note: string }) => Promise<Room>
+  onDone: (roomId: string, failures: string[]) => void
 }) {
   const [style, setStyle] = useState<PhotoStyle>(PHOTO_STYLE.AsBuilt)
   const [instructions, setInstructions] = useState("")
@@ -57,28 +58,34 @@ export function GenerateDialog({
   const real = plan.aiMode === AI_MODE.Real
 
   /**
-   * Makes one view's photo, showing it as being made, then made or failed.
+   * What a photo is, for its room's list of photos: its view's name, and its style when not as planned.
    * @param picture - The view.
    */
-  const makeOne = async (picture: Picture) => {
-    const key = keyOf(picture.shot)
-    const show = (result: Made) => setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === key ? result : m)) ?? null)
-
-    show({ picture, state: "making" })
-
-    try {
-      const room = await make(picture.shot, style, instructions)
-
-      show({ picture, state: "done", room })
-    } catch (error) {
-      show({ picture, state: "failed", error: errorMessage(error) })
-    }
+  const noteOf = (picture: Picture) => {
+    return style === PHOTO_STYLE.AsBuilt ? viewName(plan, picture.shot) : `${viewName(plan, picture.shot)} · ${PHOTO_STYLE_NAMES[style].name}`
   }
 
-  /** Makes a photo of every picked view, a few at a time. */
+  /**
+   * Makes a photo of every picked view, as one room: the first that is made makes the room, then the others go into it,
+   * a few at a time. When at least one is made, the room's photo page opens.
+   */
   const start = async () => {
     const picked = pictures.filter((p) => chosen.has(keyOf(p.shot)))
+    const failures: string[] = []
+    let roomId: string | undefined
     let next = 0
+    const show = (result: Made) => setMade((all) => all?.map((m) => (keyOf(m.picture.shot) === keyOf(result.picture.shot) ? result : m)) ?? null)
+    const makeOne = async (picture: Picture) => {
+      try {
+        const room = await make(picture.shot, style, instructions, { roomId, note: noteOf(picture) })
+
+        roomId ??= room.id
+        show({ picture, state: "done", room })
+      } catch (error) {
+        failures.push(errorMessage(error))
+        show({ picture, state: "failed", error: errorMessage(error) })
+      }
+    }
     const worker = async () => {
       while (next < picked.length) {
         await makeOne(picked[next++])
@@ -86,7 +93,18 @@ export function GenerateDialog({
     }
 
     setMade(picked.map((picture) => ({ picture, state: "making" })))
-    await Promise.all(Array.from({ length: Math.min(BUILDER.photosAtOnce, picked.length) }, worker))
+
+    while (roomId === undefined && next < picked.length) {
+      await makeOne(picked[next++])
+    }
+
+    await Promise.all(Array.from({ length: Math.min(BUILDER.photosAtOnce, picked.length - next) }, worker))
+
+    if (roomId !== undefined) {
+      setMade(null)
+      setPictures([])
+      onDone(roomId, failures)
+    }
   }
 
   /** Closes the dialog (not while photos are made); the next opening starts from the views again. */
@@ -131,25 +149,25 @@ export function GenerateDialog({
         data-generate-dialog
         closable={!making}
         onOpenAutoFocus={(event) => {
-          // Focus the chosen style rather than the first view, so only the choices look picked.
+          // Focus the style section rather than the first view, so only the choices look picked.
           event.preventDefault()
-          ;(event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-photo-style][aria-checked=true]")?.focus()
+          ;(event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-style-toggle]")?.focus()
         }}
       >
         {made ? (
           <>
             <DialogHeader>
-              <DialogTitle>{making ? `Making ${made.length === 1 ? "the photo" : `${made.length} photos`}…` : made.length === 1 ? "Your photo" : "Your photos"}</DialogTitle>
+              <DialogTitle>{making ? `Making ${made.length === 1 ? "the photo" : `${made.length} photos`}…` : "The photos couldn't be made"}</DialogTitle>
               <DialogDescription>
                 {making
-                  ? "Each one shows here when it's ready. This window stays open until they are all made."
-                  : "Each photo is saved as its own room. Open one in the editor to analyze and restyle it."}
+                  ? "Each one is checked off here when it's ready, and they open together when all are made. This window stays open until then."
+                  : "Try again, or pick other views."}
               </DialogDescription>
             </DialogHeader>
-            <PhotoResults plan={plan} made={made} onOpen={onOpen} onRetry={(picture) => void makeOne(picture)} />
+            <PhotoResults plan={plan} made={made} />
             <DialogFooter className="gap-2">
               <Button variant="outline" disabled={making} onClick={() => setMade(null)}>
-                Make other photos
+                Back to the views
               </Button>
               <Button disabled={making} onClick={close}>
                 Close
