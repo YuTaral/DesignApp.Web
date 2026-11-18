@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
-import { ArrowLeftIcon, ArrowRightIcon, LoaderCircleIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, BoxIcon, ImageIcon, LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -9,25 +9,43 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createPlan } from "@/features/builder/api"
 import { FloorChoice } from "@/features/builder/floor-choice"
+import { PhotoStart } from "@/features/builder/photo-start"
 import { ColorChoice, NumberField } from "@/features/builder/fields"
 import { useAiAvailability } from "@/features/rooms/api"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
 import { errorMessage } from "@/lib/api"
 import { BUILDER, FLOOR_TYPE_NAMES, ROOM_TYPE, ROOM_TYPE_NAMES, ROUTES, type FloorType, type RoomType } from "@/lib/constants"
 
-/** The steps before the floor plan: the walls, then the floor. */
-type Step = "walls" | "floor"
+/** The steps before the floor plan: how to start, then the walls and the floor, or the photo. */
+type Step = "start" | "walls" | "floor" | "photo"
+
+/** The two ways to start, each with what it does. */
+const STARTS = [
+  {
+    step: "walls",
+    icon: BoxIcon,
+    title: "Design in 3D, then make a photo",
+    text: "Set the walls and floor, place windows, doors and furniture on a plan, and the AI turns the 3D view into a realistic photo.",
+  },
+  {
+    step: "photo",
+    icon: ImageIcon,
+    title: "Start from a photo",
+    text: "Upload a photo of a room: the AI reads it into a 3D plan you can rearrange, refurnish and restyle, then photograph again.",
+  },
+] as const
 
 /**
- * Route `/build`: the first two steps of building a room from scratch. Step 1, the walls: the room type (which decides
- * the common objects offered), the width, length and ceiling height in metres, and the walls' color. Step 2, the
- * floor: what it is made of and its color. A to-scale outline follows the choices. Then the floor plan opens.
+ * Route `/build`: building a room. First the two ways to start: from scratch, or from a photo. From scratch, step 1,
+ * the walls: the room type (which decides the common objects offered), the width, length and ceiling height in
+ * metres, and the walls' color. Step 2, the floor: what it is made of and its color. A to-scale outline follows the
+ * choices. Then the floor plan opens. From a photo, the photo is read into a plan, which opens.
  */
 export function BuildPage() {
   const navigate = useNavigate()
   const availability = useAiAvailability().data
   const [ai] = useAiChoice(availability)
-  const [step, setStep] = useState<Step>("walls")
+  const [step, setStep] = useState<Step>("start")
   const [roomType, setRoomType] = useState<RoomType>(BUILDER.start.roomType)
   const [name, setName] = useState("")
   const [walls, setWalls] = useState<{ width: number; length: number; height: number }>({ width: BUILDER.start.width, length: BUILDER.start.length, height: BUILDER.start.height })
@@ -54,6 +72,50 @@ export function BuildPage() {
 
   // The outline: the room's floor to scale in a 200 px box.
   const scale = 200 / Math.max(walls.width, walls.length)
+  /** A Back button to an earlier step. */
+  const back = (to: Step) => (
+    <Button type="button" size="lg" variant="outline" onClick={() => setStep(to)}>
+      <ArrowLeftIcon data-icon="inline-start" />
+      Back
+    </Button>
+  )
+
+  if (step === "start" || step === "photo") {
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-10 sm:px-6" data-build-step={step}>
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-balance">{step === "start" ? "Build a room" : "Start from a photo"}</h1>
+          <p className="mt-2 text-pretty text-muted-foreground">
+            {step === "start"
+              ? "Two ways to start. Either way you end up with a room in 3D that you can change and photograph."
+              : "A photo of the whole room, taken from near a wall, works best. The plan opens seen from where the photo was taken, with your photo beside it."}
+          </p>
+        </div>
+        {step === "start" ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {STARTS.map(({ step: next, icon: Icon, title, text }) => (
+              <button
+                key={next}
+                type="button"
+                onClick={() => setStep(next)}
+                className="flex flex-col gap-2 rounded-2xl border bg-card p-5 text-left shadow-soft outline-none transition-colors hover:border-primary hover:bg-accent/40 focus-visible:ring-3 focus-visible:ring-ring/50"
+                data-build-choice={next}
+              >
+                <Icon className="size-6 text-primary" aria-hidden />
+                <span className="text-lg font-semibold">{title}</span>
+                <span className="text-sm text-pretty text-muted-foreground">{text}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <>
+            <PhotoStart ai={availability?.canChoose ? ai : undefined} />
+            {back("start")}
+          </>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto grid w-full max-w-5xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[minmax(0,1fr)_16rem]">
@@ -122,10 +184,13 @@ export function BuildPage() {
               <ColorChoice label="Walls" value={wallColor} colors={BUILDER.wallColors} onPick={setWallColor} />
             </div>
 
-            <Button type="submit" size="lg">
-              Next: the floor
-              <ArrowRightIcon data-icon="inline-end" />
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {back("start")}
+              <Button type="submit" size="lg">
+                Next: the floor
+                <ArrowRightIcon data-icon="inline-end" />
+              </Button>
+            </div>
           </>
         ) : (
           <>
@@ -147,10 +212,7 @@ export function BuildPage() {
               </span>
             </label>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="lg" variant="outline" onClick={() => setStep("walls")}>
-                <ArrowLeftIcon data-icon="inline-start" />
-                Back
-              </Button>
+              {back("walls")}
               <Button type="submit" size="lg" disabled={busy}>
                 {busy ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : null}
                 Next: place the furniture

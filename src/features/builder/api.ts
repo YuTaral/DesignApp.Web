@@ -129,6 +129,17 @@ export type Plan = {
   updatedAt: string
   /** How its walls and ceiling are finished and lit, and when its photo is taken. */
   finish: RoomFinish
+  /** The uploaded room whose photo it was read from; null (or missing) for a room built from scratch. */
+  fromRoomId?: string | null
+  /** Where that photo was taken, in cm, for the `Spot` camera; null (or missing) when there is none. */
+  cameraSpot?: OutlinePoint | null
+}
+
+/** A plan read from an uploaded room's photo, and what was left out (mirrors the API's PhotoPlanResponse). */
+export type PhotoPlan = {
+  plan: Plan
+  /** The names of the objects seen in the photo that fit nowhere. */
+  leftOut: string[]
 }
 
 /** One view of a built room to make a photo from: the wall it looks at and where the camera stands (mirrors the API's PlanShot). */
@@ -211,14 +222,24 @@ export function createPlan(plan: NewPlan, ai?: string): Promise<Plan> {
 }
 
 /**
+ * Reads an uploaded room's photo into a new plan, with the room's AI.
+ * @param roomId - The room.
+ * @returns The plan and what was left out.
+ */
+export function buildPlanFromRoom(roomId: string): Promise<PhotoPlan> {
+  return sendJson<PhotoPlan>("POST", API.roomPlan(roomId))
+}
+
+/**
  * Saves a built room as the user left it.
  * @param plan - The plan.
  * @returns The saved plan.
  */
 export function savePlan(plan: Plan): Promise<Plan> {
-  const { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline, finish } = plan
+  const { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline, finish, cameraSpot } = plan
+  const body = { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline, finish, cameraSpot }
 
-  return sendJson<Plan>("PUT", API.plan(plan.id), { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline, finish })
+  return sendJson<Plan>("PUT", API.plan(plan.id), body)
 }
 
 /**

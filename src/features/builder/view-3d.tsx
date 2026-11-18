@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEv
 import { BUILDER, MESSAGES } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { useBuilderStore } from "./builder-store"
+import { PhotoReference } from "./photo-reference"
 import { wallName } from "./room-outline"
 import { blockingItem, PlanScene } from "./scene-3d"
 import { ViewChoice } from "./view-choice"
@@ -107,6 +108,7 @@ export function View3d({ plan }: { plan: Plan }) {
     // Filling the box's padded inside (its height can come from a minimum alone, which a percentage height can't use),
     // and padded so the picture and the choices keep clear of the frame around the view.
     <div ref={containerRef} className="absolute inset-2 flex flex-col items-center justify-center gap-3 px-2 py-4">
+      {plan.fromRoomId && <PhotoReference roomId={plan.fromRoomId} />}
       {failed ? (
         <p className="text-sm text-muted-foreground">{MESSAGES.guideFailed}</p>
       ) : (

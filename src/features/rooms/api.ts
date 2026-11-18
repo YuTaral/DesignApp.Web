@@ -48,6 +48,8 @@ type UploadOptions = {
   scope?: AnalysisScope
   /** Which AI analyzes the photo; the API's default when missing. */
   ai?: AiMode
+  /** False leaves the room waiting instead of starting its analysis (a photo only read into a room plan). */
+  analyze?: boolean
 }
 
 /**
@@ -58,7 +60,7 @@ type UploadOptions = {
  * @returns The new room.
  * @throws ApiError when the API refuses the photo or can't be reached; an `AbortError` when cancelled.
  */
-export function uploadRoom(file: File, { onProgress, signal, scope, ai }: UploadOptions = {}): Promise<Room> {
+export function uploadRoom(file: File, { onProgress, signal, scope, ai, analyze }: UploadOptions = {}): Promise<Room> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()
     const form = new FormData()
@@ -90,6 +92,10 @@ export function uploadRoom(file: File, { onProgress, signal, scope, ai }: Upload
 
     if (ai) {
       form.append(UPLOAD_FIELDS.ai, ai)
+    }
+
+    if (analyze === false) {
+      form.append(UPLOAD_FIELDS.analyze, "false")
     }
 
     request.send(form)

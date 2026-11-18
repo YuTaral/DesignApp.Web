@@ -2,9 +2,11 @@
 // arrow keys switch photos, "Change with AI" (the fake AI) adds a changed photo and shows it, "Analyze this photo" makes
 // the shown photo the room's and the editor analyzes it, "All photos" goes back, analyzing another photo asks first
 // (and the arrow keys leave the photo asked about alone meanwhile), signing up saves the room into the plan's own
-// design, whose page shows all the room's photos, with the same arrows, without a click, a room without photos to choose from points to its editor, and the page fits a phone.
+// design, whose page shows all the room's photos, with the same arrows, without a click, a room without photos (whose
+// editor's Build in 3D reads it into a plan beside its photo) to choose from points to its editor, and the page fits a phone.
 // Usage: node e2e/photos-pass.mjs [web url]
-import { launch, sleep, until, WEB, signUpFromEditor } from './ff.mjs'
+import path from 'node:path'
+import { launch, sleep, until, WEB, ROOMS, signUpFromEditor } from './ff.mjs'
 
 const results = []
 const step = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
@@ -175,9 +177,52 @@ try {
   await until(page, () => /^\/rooms\/[^/]+$/.test(location.pathname), { label: 'editor of the upload' })
   step('A room without photos to choose from points to its editor', new URL(page.url()).pathname === `/rooms/${upload.id}`)
 
-  // 9. The page fits a phone.
-  await page.goto(`${WEB}/rooms/${roomId}/photos`, { waitUntil: 'networkidle0' })
+  // 8b. Build a room starts with two choices, each described. Start from a photo reads an uploaded photo into a plan
+  //     (the fake AI) without analyzing it, and opens it in the builder, tidied (nothing overlapping), with the photo
+  //     beside the 3D view. The editor no longer offers it.
+  const editorOffers = await page.$('[data-build-from-photo]')
+
+  await page.goto(`${WEB}/build`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-build-choice]')
+  const choices = await page.$$eval('[data-build-choice]', (e) => e.map((c) => c.dataset.buildChoice + ': ' + c.innerText.replace(/\s+/g, ' ').trim()))
+
+  await shot('photos-build-choices')
+  step('Build a room offers both ways to start, each with what it does, and the editor no longer has Build in 3D',
+    choices.length === 2 && choices.every((c) => c.length > 60) && editorOffers === null, choices.join(' | '))
+  await page.click('[data-build-choice=photo]')
+  await page.waitForSelector('[data-photo-start]')
+  const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click('::-p-text(Choose photo)')])
+
+  await chooser.accept([path.join(ROOMS, 'minimalist_living_room.jpg')])
+  await until(page, () => /^\/build\/[0-9a-f-]{36}$/.test(location.pathname), { timeout: 30000, label: 'builder from the photo' })
+  await page.waitForSelector('[data-plan-canvas] [data-item]')
+  await sleep(500)
+  const fromPhoto = await page.evaluate(async () => (await fetch(`/api/plans/${location.pathname.split('/').pop()}`)).json())
+  const overlapping = await page.$$eval('[data-plan-canvas] [data-clash]', (e) => e.length)
+  const readRoom = await page.evaluate(async (id) => (await fetch(`/api/rooms/${id}`)).json(), fromPhoto.fromRoomId)
+
+  await page.click('[role=tab]::-p-text(3D view)')
+  await page.waitForSelector('[data-photo-reference] img')
+  await shot('photos-build-in-3d')
+  step('Build in 3D reads the photo into a tidied plan, linked to the photo, which shows beside the 3D view',
+    fromPhoto.fromRoomId != null && fromPhoto.items.length >= 6 && overlapping === 0 && readRoom.status === 'Waiting',
+    `${fromPhoto.items.length} objects, ${overlapping} overlapping, photo's room ${readRoom.status}`)
+  const spotPicked = await page.$eval('[data-corner-choice=Spot]', (e) => e.getAttribute('aria-checked'))
+
+  step('The 3D view looks from where the photo was taken (its spot is kept with the plan and picked)',
+    fromPhoto.corner === 'Spot' && fromPhoto.cameraSpot != null && spotPicked === 'true', `corner ${fromPhoto.corner}, spot ${JSON.stringify(fromPhoto.cameraSpot)}`)
+
+  // 9. The pages fit a phone: the builder with its four camera places, the photo page and the design's room photos.
   await page.setViewport({ width: 390, height: 844 })
+  await page.goto(page.url(), { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-plan-canvas]')
+  await page.click('[role=tab]::-p-text(3D view)')
+  await page.waitForSelector('[data-corner-choice=Spot]')
+  await sleep(500)
+  const builderOverflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+
+  await shot('photos-build-in-3d-phone')
+  await page.goto(`${WEB}/rooms/${roomId}/photos`, { waitUntil: 'networkidle0' })
   await page.goto(page.url(), { waitUntil: 'networkidle0' })
   await page.waitForSelector('[data-photo-shown]')
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
@@ -189,8 +234,8 @@ try {
   const designOverflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
 
   await shot('room-photos-phone')
-  step('The photo page and the design’s room photos fit a phone screen', overflow <= 0 && designOverflow <= 0,
-    `photo page ${overflow} px, design page ${designOverflow} px too wide`)
+  step('The builder, the photo page and the design’s room photos fit a phone screen', builderOverflow <= 0 && overflow <= 0 && designOverflow <= 0,
+    `builder ${builderOverflow} px, photo page ${overflow} px, design page ${designOverflow} px too wide`)
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('photos-stopped').catch(() => {})

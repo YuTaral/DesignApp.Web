@@ -40,6 +40,8 @@ try {
   //    windows and doors and the room's common objects.
   await page.setViewport({ width: 1440, height: 900 })
   await page.goto(`${WEB}/build`, { waitUntil: 'networkidle0' })
+  await page.click('[data-build-choice=walls]')
+  await page.waitForSelector('form[data-build-step=walls]')
   await page.click('[role=radiogroup][aria-label="Room type"] [role=radio]:nth-child(2)') // Bedroom
   await page.click('[role=radiogroup][aria-label="Room type"] [role=radio]:nth-child(1)') // back to Living room
   const outline = await page.$eval('[data-room-outline]', (e) => [e.style.width, e.style.height])
@@ -57,7 +59,7 @@ try {
   const hangable = await page.evaluate(() => [...document.querySelectorAll('[data-catalog-section=mounted] [data-catalog]')].map((b) => b.dataset.catalog))
 
   step('The walls and floor steps open a floor plan with windows, doors, things to hang and the living room\u2019s objects',
-    catalog.length === 33 && catalog.includes('sofa') && catalog.includes('window') && catalog.includes('door')
+    catalog.length === 34 && catalog.includes('sofa') && catalog.includes('window') && catalog.includes('door')
       && hangable.slice(0, 3).join() === 'painting,mirror,wall-shelf' && hangable.includes('radiator') && hangable.includes('wall-tv')
       && outline[1] === '200px' && floorType === 'Tiles',
     `${catalog.length} objects (to hang: ${hangable}), outline ${outline}, floor ${floorType}`)

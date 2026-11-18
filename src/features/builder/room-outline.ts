@@ -1,4 +1,4 @@
-import { BUILDER, PLAN_SIDE, PLAN_SIDE_NAMES, VIEW_CORNER, type PlanSide } from "@/lib/constants"
+import { BUILDER, PLAN_SIDE, PLAN_SIDE_NAMES, VIEW_CORNER, type PlanSide, type ViewCorner } from "@/lib/constants"
 import type { OutlinePoint, Plan } from "./api"
 
 /** The part of a room its walls come from. */
@@ -161,13 +161,15 @@ export function contains(plan: Shaped, x: number, y: number) {
  * Where the photo is taken from (mirrors the API's PlanPrompt frame): from the middle of the wall in view, straight
  * across the room to the wall facing it, and a little in front of that wall (for a rectangle, the middle of the
  * opposite wall). From a corner (`plan.corner`) it stands at that wall's left or right end instead, a little in from
- * the side wall too, turned towards the room.
+ * the side wall too, turned towards the room. From the spot (`plan.cameraSpot`, where the photo the plan was read from
+ * was taken) it stands there, turned towards the middle of the wall in view; without a spot in front of that wall it
+ * stands in the middle.
  * @param plan - The room.
  * @returns The point in plan centimetres; the way it looks (`lookX`, `lookY`, a unit step on the plan); how far away
- *   the wall in view is (`deep`); how wide the room is across the view (`across`); the wall behind the camera; and
- *   whether it stands in a corner.
+ *   the wall in view is (`deep`) and how far from it the camera stands (`stand`); how wide the room is across the view
+ *   (`across`); the wall behind the camera; and where it stands (`corner`).
  */
-export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Plan, "corner">>) {
+export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Plan, "corner" | "cameraSpot">>) {
   const all = walls(plan)
   const view = all[plan.view] ?? all[0]
   const middle = { x: (view.start.x + view.end.x) / 2, y: (view.start.y + view.end.y) / 2 }
@@ -184,12 +186,24 @@ export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Pla
   const across = view.dx !== 0 ? Math.max(...xs) - Math.min(...xs) : Math.max(...ys) - Math.min(...ys)
   // Along the wall in view (the photo's right), from its left end.
   const along = (p: { x: number; y: number }) => (p.x - view.start.x) * view.dx + (p.y - view.start.y) * view.dy
-  const corner = plan.corner ?? VIEW_CORNER.None
+  const spot = plan.corner === VIEW_CORNER.Spot ? plan.cameraSpot : null
+  // How far in front of the wall in view the spot is: a spot on or behind it isn't used.
+  const ahead = spot ? (spot.x - view.start.x) * view.nx + (spot.y - view.start.y) * view.ny : 0
+  const corner = plan.corner === VIEW_CORNER.Spot && ahead <= inset ? VIEW_CORNER.None : (plan.corner ?? VIEW_CORNER.None)
   // Turned to the right (towards the room) from the left corner, to the left from the right one.
   const turn = DEGREE * (corner === VIEW_CORNER.Left ? BUILDER.scene.cornerTurn : corner === VIEW_CORNER.Right ? -BUILDER.scene.cornerTurn : 0)
+  const stand = corner === VIEW_CORNER.Spot ? ahead : deep - inset
   let at = along(middle)
 
-  if (corner !== VIEW_CORNER.None) {
+  if (spot && corner === VIEW_CORNER.Spot) {
+    // From the spot, turned towards the wall's middle.
+    const [toX, toY] = [middle.x - spot.x, middle.y - spot.y]
+    const length = Math.hypot(toX, toY)
+
+    return { x: spot.x, y: spot.y, lookX: toX / length, lookY: toY / length, deep, stand, across, behind: facing?.wall.index ?? -1, corner }
+  }
+
+  if (corner === VIEW_CORNER.Left || corner === VIEW_CORNER.Right) {
     // The near wall's ends (the room's sides when there is none), a little in from the side wall.
     const ends = facing ? [along(facing.wall.start), along(facing.wall.end)] : plan.outline.map(along)
 
@@ -197,15 +211,25 @@ export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Pla
   }
 
   return {
-    x: view.start.x + view.dx * at + view.nx * (deep - inset),
-    y: view.start.y + view.dy * at + view.ny * (deep - inset),
+    x: view.start.x + view.dx * at + view.nx * stand,
+    y: view.start.y + view.dy * at + view.ny * stand,
     lookX: -view.nx * Math.cos(turn) + view.dx * Math.sin(turn),
     lookY: -view.ny * Math.cos(turn) + view.dy * Math.sin(turn),
     deep,
+    stand,
     across,
     behind: facing?.wall.index ?? -1,
     corner,
   }
+}
+
+/**
+ * Where the camera can stand to look at a wall: across from its middle and in the near corners, and at the camera spot
+ * when the room has one.
+ * @param spot - Whether the room has a camera spot.
+ */
+export function cameraPlaces(spot: boolean): ViewCorner[] {
+  return Object.values(VIEW_CORNER).filter((corner) => spot || corner !== VIEW_CORNER.Spot)
 }
 
 /** One degree in radians. */

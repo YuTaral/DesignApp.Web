@@ -118,24 +118,25 @@ export async function renderGuide(plan: Plan): Promise<Blob> {
  * photographer's height, held level and looking straight at the wall in view. Its lens shows the room's whole width from halfway to the far wall
  * (within an interior photographer's widest range), so the side walls and what stands by them are in the picture, and
  * it is shifted down to show more floor than ceiling. From a near corner it is turned to look diagonally across the
- * room through a fixed wide lens. The API's PlanCamera uses the same lens.
+ * room through a fixed wide lens; from the plan's camera spot it is turned towards the wall's middle, its lens fitted
+ * from where it stands. The API's PlanCamera uses the same lens.
  * @param plan - The room.
  * @param width - The picture's width.
  * @param height - The picture's height.
  */
 export function camera(plan: Plan, width: number, height: number) {
   const eye = Math.min(BUILDER.scene.eyeHeight, plan.height - 0.3)
-  const inset = BUILDER.scene.inset
   const stand = cameraStand(plan)
-  const [across, deep] = [stand.across / 100, stand.deep / 100]
+  const [across, away] = [stand.across / 100, stand.stand / 100]
   const [x, z] = [stand.x / 100, stand.y / 100]
   const [lookX, lookZ] = [x + stand.lookX, z + stand.lookY]
 
   // The horizontal view that fits the far wall, kept in a wide lens's range, then the vertical view of the taller,
   // shifted frame the picture is cut from.
   // The whole width shows from part of the way to the far wall, so the side walls are in the picture.
-  const fit = THREE.MathUtils.radToDeg(2 * Math.atan((across / 2) / Math.max(0.5, (deep - inset) * BUILDER.scene.fitDepthShare)))
-  const fov = stand.corner === VIEW_CORNER.None ? Math.min(BUILDER.scene.maxFov, Math.max(BUILDER.scene.minFov, fit)) : BUILDER.scene.cornerFov
+  const fit = THREE.MathUtils.radToDeg(2 * Math.atan((across / 2) / Math.max(0.5, away * BUILDER.scene.fitDepthShare)))
+  const corners = stand.corner === VIEW_CORNER.Left || stand.corner === VIEW_CORNER.Right
+  const fov = corners ? BUILDER.scene.cornerFov : Math.min(BUILDER.scene.maxFov, Math.max(BUILDER.scene.minFov, fit))
   const horizontal = THREE.MathUtils.degToRad(fov)
   const fullHeight = height * (1 + BUILDER.scene.lensShift)
   const vertical = 2 * Math.atan(Math.tan(horizontal / 2) * (fullHeight / width))
@@ -477,17 +478,36 @@ function opening(plan: Plan, item: PlanItem & { wall: number }) {
   const at = wallPoint(plan, item.wall, item.x)
 
   if (item.shape === ITEM_SHAPE.Window) {
-    const glass = new THREE.Mesh(
-      new THREE.PlaneGeometry(w - frame, h - frame),
-      new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, emissive: BUILDER.scene.glass, emissiveIntensity: 0.55, roughness: 0.15 })
-    )
+    const pane = new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, emissive: BUILDER.scene.glass, emissiveIntensity: 0.55, roughness: 0.15 })
+    // An arched window's round top is a half circle as wide as the window (kept within its height).
+    const arch = item.label.toLowerCase().includes(BUILDER.archWord) ? Math.min(w / 2, h * 0.6) : 0
+    const sides = h - arch
 
-    glass.position.set(0, bottom + h / 2, 0.004)
-    group.add(glass)
+    if (arch > 0) {
+      const inner = arch - frame / 2
+      const outline = new THREE.Shape()
+
+      outline.moveTo(-inner, 0)
+      outline.lineTo(inner, 0)
+      outline.lineTo(inner, sides - frame / 2)
+      outline.absarc(0, sides - frame / 2, inner, 0, Math.PI, false)
+      outline.closePath()
+      const glass = new THREE.Mesh(new THREE.ShapeGeometry(outline, 32), pane)
+
+      block(1, 1, 1, 0, bottom + sides, frame / 2, paint, new THREE.RingGeometry(arch - frame, arch, 32, 1, 0, Math.PI))
+      glass.position.set(0, bottom + frame / 2, 0.004)
+      group.add(glass)
+    } else {
+      const glass = new THREE.Mesh(new THREE.PlaneGeometry(w - frame, h - frame), pane)
+
+      glass.position.set(0, bottom + h / 2, 0.004)
+      group.add(glass)
+      block(w, frame, frame, 0, bottom + h - frame / 2, frame / 2)
+    }
+
     block(w, frame, frame, 0, bottom + frame / 2, frame / 2)
-    block(w, frame, frame, 0, bottom + h - frame / 2, frame / 2)
-    block(frame, h, frame, -w / 2 + frame / 2, bottom + h / 2, frame / 2)
-    block(frame, h, frame, w / 2 - frame / 2, bottom + h / 2, frame / 2)
+    block(frame, sides, frame, -w / 2 + frame / 2, bottom + sides / 2, frame / 2)
+    block(frame, sides, frame, w / 2 - frame / 2, bottom + sides / 2, frame / 2)
 
     if (w > 1.3) {
       block(frame * 0.8, h, frame, 0, bottom + h / 2, frame / 2)
@@ -821,8 +841,32 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       round(w, shadeHeight, d, h - shadeHeight / 2, 0.35, 0.5)
       break
     }
-    default:
-      block(w, h, d, 0, h / 2, 0)
+    default: {
+      const name = item.label.toLowerCase()
+
+      if (!name.split(/\W+/).includes(BUILDER.glassWord) || item.height <= BUILDER.glassTrayHeight) {
+        block(w, h, d, 0, h / 2, 0)
+        break
+      }
+
+      // A shower's glass: a low tray, clear panes on its front (part of it for a screen) and its right, a thin post at the front pane's end.
+      const tray = 0.05
+      const glass = new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.1, depthWrite: false })
+      const metal = new THREE.MeshStandardMaterial({ color: BUILDER.scene.metal, roughness: 0.35, metalness: 0.8 })
+      const screen = name.includes(BUILDER.glassScreenWord)
+      const front = screen ? w * 0.6 : w
+      const thin = 0.01
+
+      block(w, tray, d, 0, tray / 2, 0)
+      block(front, h - tray, thin, -w / 2 + front / 2, tray + (h - tray) / 2, d / 2 - thin / 2, glass).castShadow = false
+      block(0.02, h - tray, 0.02, -w / 2 + front - 0.01, tray + (h - tray) / 2, d / 2 - 0.01, metal)
+
+      if (!screen) {
+        block(thin, h - tray, d, w / 2 - thin / 2, tray + (h - tray) / 2, 0, glass).castShadow = false
+      }
+
+      break
+    }
   }
 
   return group

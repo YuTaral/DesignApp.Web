@@ -31,6 +31,8 @@ export const API = {
   roomTakeChange: (id: string, takeId: string) => `/api/rooms/${id}/takes/${takeId}/change`,
   roomTakeChoice: (id: string, takeId: string) => `/api/rooms/${id}/takes/${takeId}/choose`,
   roomPlanDesign: (id: string) => `/api/rooms/${id}/plan-design`,
+  /** Reads an uploaded room's photo into a new room plan. */
+  roomPlan: (id: string) => `/api/rooms/${id}/plan`,
   palettes: "/api/palettes",
   builderCatalog: (roomType: string) => `/api/builder/catalog/${roomType}`,
   plans: "/api/plans",
@@ -50,7 +52,7 @@ export const HUB = {
 } as const
 
 /** The upload form's field names. */
-export const UPLOAD_FIELDS = { photo: "photo", scope: "scope", ai: "ai" } as const
+export const UPLOAD_FIELDS = { photo: "photo", scope: "scope", ai: "ai", analyze: "analyze" } as const
 
 /** HTTP statuses the app reacts to. */
 export const HTTP_STATUS = {
@@ -296,14 +298,15 @@ export const PLAN_SIDE_NAMES: Record<PlanSide, string> = { Back: "Back wall", Ri
 
 /**
  * Where the 3D view's camera stands to look at the wall in view (Domain Constants.ViewCorner): straight across from its
- * middle, or in the near left or right corner, turned to look diagonally across the room.
+ * middle, in the near left or right corner, turned to look diagonally across the room, or at the plan's camera spot
+ * (where the photo it was read from was taken), turned towards the wall's middle.
  */
-export const VIEW_CORNER = { None: "None", Left: "Left", Right: "Right" } as const
+export const VIEW_CORNER = { None: "None", Left: "Left", Right: "Right", Spot: "Spot" } as const
 
 export type ViewCorner = (typeof VIEW_CORNER)[keyof typeof VIEW_CORNER]
 
 /** Where the camera stands, as the user reads it. */
-export const VIEW_CORNER_NAMES: Record<ViewCorner, string> = { None: "Middle", Left: "Left corner", Right: "Right corner" }
+export const VIEW_CORNER_NAMES: Record<ViewCorner, string> = { None: "Middle", Left: "Left corner", Right: "Right corner", Spot: "Photo's spot" }
 
 /** The interior style a built room's photo is made in (Domain Constants.PhotoStyle): materials and finishes, not layout. */
 export const PHOTO_STYLE = {
@@ -453,6 +456,15 @@ export const BUILDER = {
   mirrorWord: "mirror",
   screenWord: "tv",
   hoodWord: "hood",
+  /**
+   * Words in an object's name that change its 3D model: a window with "arched" gets a round top; a box with "glass"
+   * taller than a tray (`glassTrayHeight`, in cm) is a shower's glass: a tray with clear panes on its front and right,
+   * only part of the front for a "screen".
+   */
+  archWord: "arched",
+  glassWord: "glass",
+  glassScreenWord: "screen",
+  glassTrayHeight: 20,
   /** The most a hung object may stick out from its wall, in centimetres (Domain Constants.Plans.MaxMountedDepth). */
   maxMountedDepth: 70,
   /** A window's usual height above the floor, in centimetres (Domain Constants.Plans.WindowSill). */
@@ -609,6 +621,7 @@ export const MESSAGES = {
   photoChanged: "The changed photo is ready.",
   photosFailed: (count: number, why: string) => `${count === 1 ? "One photo" : `${count} photos`} couldn't be made: ${why}`,
   savedToPlanDesign: "Saved to the room's design.",
+  photoPlanLeftOut: (names: string[]) => `Left out, as they didn't fit the room: ${names.join(", ")}. Add them from the left if you want them.`,
   replaceAnalysis: "Analyze this photo instead? The outlines and colors made for the other photo are replaced.",
   colorsSaved: "Colors saved",
   tonesFailed: "Couldn't read this object's colors. Try again.",

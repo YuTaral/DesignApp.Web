@@ -7,12 +7,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { Room } from "@/features/rooms/types"
 import { errorMessage } from "@/lib/api"
-import { AI_MODE, BUILDER, PHOTO_STYLE, PHOTO_STYLE_NAMES, VIEW_CORNER, type PhotoStyle } from "@/lib/constants"
+import { AI_MODE, BUILDER, PHOTO_STYLE, PHOTO_STYLE_NAMES, type PhotoStyle } from "@/lib/constants"
 import type { Plan, PlanShot } from "./api"
 import { keyOf, viewName, type Made, type Picture } from "./generate-views"
 import { PhotoResults } from "./photo-results"
 import { PhotoStyleChoice } from "./photo-style-choice"
-import { walls } from "./room-outline"
+import { cameraPlaces, walls } from "./room-outline"
 import { drawViewPictures } from "./scene-3d"
 import { ViewPicker } from "./view-picker"
 
@@ -53,7 +53,7 @@ export function GenerateDialog({
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [made, setMade] = useState<Made[] | null>(null)
   const making = made?.some((m) => m.state === "making") ?? false
-  const shots = walls(plan).flatMap((wall) => Object.values(VIEW_CORNER).map((corner) => ({ view: wall.index, corner })))
+  const shots = walls(plan).flatMap((wall) => cameraPlaces(!!plan.cameraSpot).map((corner) => ({ view: wall.index, corner })))
   const count = chosen.size
   const real = plan.aiMode === AI_MODE.Real
 

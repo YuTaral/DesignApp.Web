@@ -22,7 +22,9 @@ export function ViewChoice({ plan, place }: { plan: Plan; place: "panel" | "view
   const caption = place === "panel" ? "text-sm font-medium" : "text-xs text-muted-foreground"
   const group = place === "panel" ? "space-y-2" : "flex flex-col items-center gap-1"
   const wall = <WallChoice plan={plan} value={plan.view} label={words.wallLabel} onPick={(view) => setRoom({ view })} />
-  const corner = <CornerChoice value={plan.corner ?? VIEW_CORNER.None} label={words.cornerLabel} onPick={(corner) => setRoom({ corner })} />
+  const corner = (
+    <CornerChoice value={plan.corner ?? VIEW_CORNER.None} label={words.cornerLabel} spot={!!plan.cameraSpot} onPick={(corner) => setRoom({ corner })} />
+  )
 
   if (place === "panel") {
     return (
