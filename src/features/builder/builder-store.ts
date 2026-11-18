@@ -182,7 +182,11 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
         item = { ...base, wall: null, elevation: 0, x: toGrid(point.x), y: toGrid(point.y) }
       }
 
-      change([...plan.items, inside(snap(withParts(item)), plan)])
+      const placed = inside(snap(withParts(item)), plan)
+
+      // A window, door or hung thing goes to the free place on its wall nearest where it was asked for, not on top of
+      // another.
+      change([...plan.items, isWallItem(placed) ? { ...placed, x: freeAlong(plan, placed) } : placed])
       set({ selected: plan.items.length })
     },
     update: (index, update) => {
@@ -394,12 +398,18 @@ export function footprint(item: Pick<PlanItem, "width" | "depth" | "rotation">) 
 }
 
 /**
- * Whether two objects' footprints overlap (rugs lie under things, and windows and doors are in the walls, so they
- * never count).
+ * Whether two objects get in each other's way: two standing objects whose footprints overlap (rugs lie under things,
+ * so they never count), or two things on the same wall (windows, doors, hung things) that cover the same part of it,
+ * along it and in height. A standing object and a wall's object never count: a sofa may stand under a window.
  * @param a - One object.
  * @param b - The other.
  */
 export function overlaps(a: PlanItem, b: PlanItem) {
+  if (isWallItem(a) && isWallItem(b)) {
+    return a.wall === b.wall && Math.abs(a.x - b.x) * 2 < a.width + b.width - 1
+      && a.elevation < b.elevation + b.height - 1 && b.elevation < a.elevation + a.height - 1
+  }
+
   if (a.shape === ITEM_SHAPE.Rug || b.shape === ITEM_SHAPE.Rug || isWallItem(a) || isWallItem(b)) {
     return false
   }
@@ -458,4 +468,33 @@ function inside(item: PlanItem, plan: Pick<Plan, "outline" | "height">): PlanIte
 
   // A room with bent walls: the nearest place where the whole footprint is inside them.
   return { ...item, ...(plan.outline.length > 4 ? fitInside(plan, kept.x, kept.y, width, depth) : kept) }
+}
+
+/**
+ * The positions of the objects that get in another's way (see `overlaps`), for marking them in red.
+ * @param plan - The room.
+ */
+export function clashingItems(plan: Pick<Plan, "items">) {
+  return new Set(plan.items.flatMap((a, i) => (plan.items.some((b, j) => i !== j && overlaps(a, b)) ? [i] : [])))
+}
+
+/**
+ * Where along its wall a window, door or hung thing fits without covering another one there: the nearest place to
+ * where it is, in 10 cm steps either way; where it is when the wall has no such place.
+ * @param plan - The room.
+ * @param item - The object, already sized to its wall.
+ */
+function freeAlong(plan: Pick<Plan, "outline" | "items">, item: PlanItem & { wall: number }) {
+  const length = wallLength(plan, item.wall)
+  const free = (x: number) => x >= item.width / 2 && x <= length - item.width / 2 && !plan.items.some((other) => overlaps({ ...item, x }, other))
+
+  for (let shift = 0; shift <= length; shift += BUILDER.gridCm) {
+    const found = [item.x + shift, item.x - shift].find(free)
+
+    if (found !== undefined) {
+      return found
+    }
+  }
+
+  return item.x
 }

@@ -386,6 +386,8 @@ export const BUILDER = {
   /** The smallest part of an L- or P-shaped object (its run, leg or chaise), in cm (Domain Constants.Plans.MinPartCentimetres). */
   minPart: 20,
   autosaveMs: 800,
+  /** How long a failed save waits before it is tried again, in ms. */
+  saveRetryMs: 4000,
   guide: { width: 1024, height: 768 },
   /** How long the 3D view waits after the room last changed before checking whether something blocks its view, in ms. */
   blockedCheckMs: 400,
@@ -543,7 +545,7 @@ export const MESSAGES = {
   tonesFailed: "Couldn't read this object's colors. Try again.",
   oneMainColor: (label: string) => `The ${label} has one main color, so there is nothing to split.`,
   planLoadFailed: "Couldn't open this room. It may have been deleted.",
-  planSaveFailed: "Couldn't save the room. Your last change may be lost; try again.",
+  planSaveFailed: "Couldn't save the room. It is tried again every few seconds; leave the page open until it says Saved.",
   catalogLoadFailed: "Couldn't load the common objects. Reload the page.",
   guideFailed: "Couldn't draw the 3D view of the room.",
   objectDescribed: (label: string) => `Added the ${label}. Drag it where it belongs.`,

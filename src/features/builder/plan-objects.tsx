@@ -10,6 +10,16 @@ import type { Part } from "./use-plan-gestures"
 /** Round or flat shapes that look the same from every side, so they get no front and back marks. */
 const SIDELESS = new Set<string>([ITEM_SHAPE.Rug, ITEM_SHAPE.Plant, ITEM_SHAPE.Cylinder, ITEM_SHAPE.Lamp])
 
+/** What a window, door or hung thing on the plan is drawn from. */
+type WallMarkProps = {
+  plan: Plan
+  item: PlanItem & { wall: number }
+  index: number
+  chosen: boolean
+  clashing: boolean
+  onSelect: (event: ReactPointerEvent) => void
+}
+
 /** The four corners of a footprint seen from above, as which way each lies from the middle. */
 const CORNERS = [
   { name: "se", x: 1, y: 1, cursor: "cursor-nwse-resize" },
@@ -244,9 +254,10 @@ function FacingMarks({ item, width, depth, text }: { item: PlanItem; width: numb
  * @param props.item - The window or door.
  * @param props.index - Its position in the plan's objects.
  * @param props.chosen - Whether it is selected.
+ * @param props.clashing - Whether it covers another window, door or hung thing on its wall (then it is outlined in red).
  * @param props.onSelect - Selects it.
  */
-export function Opening({ plan, item, index, chosen, onSelect }: { plan: Plan; item: PlanItem & { wall: number }; index: number; chosen: boolean; onSelect: (event: ReactPointerEvent) => void }) {
+export function Opening({ plan, item, index, chosen, clashing, onSelect }: WallMarkProps) {
   const wall = wallOf(plan, item.wall)
   const middle = wallPoint(plan, item.wall, item.x)
   const across = wall.dx !== 0
@@ -263,7 +274,7 @@ export function Opening({ plan, item, index, chosen, onSelect }: { plan: Plan; i
   const sweep = inward[0] * (shut.y - hinge.y) - inward[1] * (shut.x - hinge.x) > 0 ? 1 : 0
 
   return (
-    <g data-item={index} data-opening={item.shape} className="cursor-pointer" onPointerDown={onSelect}>
+    <g data-item={index} data-opening={item.shape} data-clash={clashing || undefined} className="cursor-pointer" onPointerDown={onSelect}>
       {item.shape === ITEM_SHAPE.Door && (
         <path
           d={`M ${hinge.x} ${hinge.y} L ${open.x} ${open.y} A ${reach} ${reach} 0 0 ${sweep} ${shut.x} ${shut.y}`}
@@ -284,7 +295,7 @@ export function Opening({ plan, item, index, chosen, onSelect }: { plan: Plan; i
         strokeOpacity={item.shape === ITEM_SHAPE.Window ? 1 : 0.4}
         strokeWidth={chosen ? 0 : 3}
       />
-      {chosen && <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} fill="none" strokeWidth={4} className="stroke-primary" />}
+      {(chosen || clashing) && <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} fill="none" strokeWidth={4} className={clashing ? "stroke-destructive" : "stroke-primary"} />}
     </g>
   )
 }
@@ -296,9 +307,10 @@ export function Opening({ plan, item, index, chosen, onSelect }: { plan: Plan; i
  * @param props.item - The hung object.
  * @param props.index - Its position in the plan's objects.
  * @param props.chosen - Whether it is selected.
+ * @param props.clashing - Whether it covers another window, door or hung thing on its wall (then it is outlined in red).
  * @param props.onSelect - Selects it.
  */
-export function Hung({ plan, item, index, chosen, onSelect }: { plan: Plan; item: PlanItem & { wall: number }; index: number; chosen: boolean; onSelect: (event: ReactPointerEvent) => void }) {
+export function Hung({ plan, item, index, chosen, clashing, onSelect }: WallMarkProps) {
   const wall = wallOf(plan, item.wall)
   const [a, b] = [wallPoint(plan, item.wall, item.x - item.width / 2), wallPoint(plan, item.wall, item.x + item.width / 2)]
   // At least a few centimetres deep, so a flat picture can still be seen and clicked.
@@ -306,14 +318,14 @@ export function Hung({ plan, item, index, chosen, onSelect }: { plan: Plan; item
   const corners = [a, b, { x: b.x + wall.nx * deep, y: b.y + wall.ny * deep }, { x: a.x + wall.nx * deep, y: a.y + wall.ny * deep }]
 
   return (
-    <g data-item={index} data-hung={item.shape} className="cursor-pointer" onPointerDown={onSelect}>
+    <g data-item={index} data-hung={item.shape} data-clash={clashing || undefined} className="cursor-pointer" onPointerDown={onSelect}>
       <polygon
         points={corners.map((p) => `${p.x},${p.y}`).join(" ")}
         fill={item.color}
         fillOpacity={0.75}
         strokeDasharray="5 4"
-        strokeWidth={chosen ? 4 : 2}
-        className={chosen ? "stroke-primary" : "stroke-black/40"}
+        strokeWidth={chosen || clashing ? 4 : 2}
+        className={clashing ? "stroke-destructive" : chosen ? "stroke-primary" : "stroke-black/40"}
       >
         <title>{`${item.label}, ${Math.round(item.elevation)} cm above the floor`}</title>
       </polygon>

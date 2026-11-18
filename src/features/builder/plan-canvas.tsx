@@ -3,7 +3,7 @@ import type { DragEvent } from "react"
 import { ITEM_SHAPE } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
-import { isMountedShape, isWallItem, isWallShape, overlaps, useBuilderStore } from "./builder-store"
+import { clashingItems, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
 import { Hung, Opening, PlanObject } from "./plan-objects"
 import { Camera, PlanWalls, ShapeHandles } from "./plan-room"
 import { fromWall } from "./room-outline"
@@ -33,7 +33,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
     .filter(({ item }) => !isWallItem(item))
     .sort((a, b) => Number(b.item.shape === ITEM_SHAPE.Rug) - Number(a.item.shape === ITEM_SHAPE.Rug))
   const openings = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => isWallItem(item))
-  const clashing = new Set(plan.items.flatMap((a, i) => (plan.items.some((b, j) => i !== j && overlaps(a, b)) ? [i] : [])))
+  const clashing = clashingItems(plan)
   const text = Math.max(10, Math.min(roomWidth, roomLength) / 28)
   const floor = plan.outline.map((p) => `${p.x},${p.y}`).join(" ")
 
@@ -121,7 +121,17 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
         {openings.map(({ item, index }) => {
           const OnWall = isMountedShape(item.shape) ? Hung : Opening
 
-          return <OnWall key={index} plan={plan} item={item as PlanItem & { wall: number }} index={index} chosen={index === selected} onSelect={(event) => start(event, index, "move")} />
+          return (
+            <OnWall
+              key={index}
+              plan={plan}
+              item={item as PlanItem & { wall: number }}
+              index={index}
+              chosen={index === selected}
+              clashing={clashing.has(index)}
+              onSelect={(event) => start(event, index, "move")}
+            />
+          )
         })}
       </g>
 

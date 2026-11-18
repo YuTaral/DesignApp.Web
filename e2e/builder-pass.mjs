@@ -310,6 +310,27 @@ try {
       && exact.x === 90 && !!(await page.$('[data-wall-view] [data-measurements]')),
     `added ${added.wall} x ${added.x} at ${added.elevation}; dragged x ${dragged.x} at ${dragged.elevation}; exact x ${exact.x}`)
 
+  // A second window from the dialog goes beside the first rather than on it; moved onto it, both are outlined in red.
+  await addFromDialog('window')
+  await saved()
+  const twin = (await stored()).items.at(-1)
+  const apart = await page.evaluate(() => document.querySelectorAll('[data-wall-view] [data-clash]').length)
+
+  await page.click('[data-inspector-opening] input[aria-label="From left corner"]', { count: 3 })
+  await page.type('[data-inspector-opening] input[aria-label="From left corner"]', '30')
+  await frame()
+  await saved()
+  const together = await page.evaluate(() => ({ wall: document.querySelectorAll('[data-wall-view] [data-clash]').length }))
+
+  await page.evaluate(() => [...document.querySelectorAll('[data-inspector-opening] button')].find((b) => b.textContent.trim() === 'Delete').click())
+  await saved()
+  // The first window chosen again, for the steps below.
+  await page.click('[data-wall-view] [data-item="3"]')
+  await frame()
+  step('A second window goes beside the first, not on it; moved onto it, both are outlined in red',
+    twin.wall === 0 && Math.abs(twin.x - exact.x) * 2 >= twin.width + exact.width - 1 && apart === 0 && together.wall === 2,
+    `first x ${exact.x} w ${exact.width}; second x ${twin.x} w ${twin.width}; outlined apart ${apart}, together ${together.wall}`)
+
   // 8b. Resizing a window from its top-right corner far past the wall's end and the ceiling: its left side and bottom
   //     stay, and it stops at the wall and the ceiling, holding still (it used to shake as each move measured from a
   //     window the wall had moved). Then its top-left corner grows it to the left only.

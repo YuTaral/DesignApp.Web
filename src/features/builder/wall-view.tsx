@@ -3,7 +3,7 @@ import { useRef, type DragEvent, type PointerEvent as ReactPointerEvent } from "
 import { BUILDER, ITEM_SHAPE } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
-import { footprint, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
+import { clashingItems, footprint, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
 import { ResizeHandle } from "./resize-handle"
 import { fromWall, seenFrom, wallLength, wallName, wallOf } from "./room-outline"
 import { WallChoice } from "./wall-choice"
@@ -67,6 +67,8 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
   const onThisWall = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => item.wall === wall)
   const openings = onThisWall.filter(({ item }) => !isMountedShape(item.shape))
   const hung = onThisWall.filter(({ item }) => isMountedShape(item.shape))
+  // Windows, doors and hung things covering one another, outlined in red.
+  const clashing = clashingItems(plan)
 
   /**
    * A point of the screen in the wall's centimetres: along it from its left corner, and up from the floor.
@@ -169,7 +171,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
           const [left, top] = [item.x - item.width / 2, height - item.elevation - item.height]
 
           return (
-            <g key={index} data-item={index} data-opening={item.shape} className="cursor-move" onPointerDown={(event) => start(event, index, "move")}>
+            <g key={index} data-item={index} data-opening={item.shape} data-clash={clashing.has(index) || undefined} className="cursor-move" onPointerDown={(event) => start(event, index, "move")}>
               {item.shape === ITEM_SHAPE.Window ? (
                 <rect x={left} y={top} width={item.width} height={item.height} fill={BUILDER.scene.glass} stroke={item.color} strokeWidth={7} />
               ) : (
@@ -178,6 +180,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
                   <circle cx={left + item.width - 14} cy={height - 100} r={4} fill={BUILDER.scene.metal} />
                 </>
               )}
+              {clashing.has(index) && <rect x={left} y={top} width={item.width} height={item.height} fill="none" strokeWidth={4} className="pointer-events-none stroke-destructive" />}
             </g>
           )
         })}
@@ -209,7 +212,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
 
         {/* What hangs on the wall, in front of the objects standing below it. */}
         {hung.map(({ item, index }) => (
-          <HungFront key={index} item={item} index={index} height={height} text={text} onStart={(event) => start(event, index, "move")} />
+          <HungFront key={index} item={item} index={index} height={height} text={text} clashing={clashing.has(index)} onStart={(event) => start(event, index, "move")} />
         ))}
 
         {/* The chosen window's, door's or hung object's outline and resize handle, above everything so they stay usable. */}
@@ -286,9 +289,24 @@ function Measurements({ item, height, text }: { item: { x: number; width: number
  * @param props.index - Its position in the plan's objects.
  * @param props.height - The wall's height, in centimetres.
  * @param props.text - The text size.
+ * @param props.clashing - Whether it covers another window, door or hung thing on the wall (then it is outlined in red).
  * @param props.onStart - Starts dragging it.
  */
-function HungFront({ item, index, height, text, onStart }: { item: PlanItem; index: number; height: number; text: number; onStart: (event: ReactPointerEvent) => void }) {
+function HungFront({
+  item,
+  index,
+  height,
+  text,
+  clashing,
+  onStart,
+}: {
+  item: PlanItem
+  index: number
+  height: number
+  text: number
+  clashing: boolean
+  onStart: (event: ReactPointerEvent) => void
+}) {
   const [left, top, w, h] = [item.x - item.width / 2, height - item.elevation - item.height, item.width, item.height]
   const name = item.label.toLowerCase()
   const frame = Math.min(6, w / 8, h / 8)
@@ -305,8 +323,18 @@ function HungFront({ item, index, height, text, onStart }: { item: PlanItem; ind
   const label = h > text * 1.4 ? fitLabel(item.label, w, text * 0.8) : null
 
   return (
-    <g data-item={index} data-hung={item.shape} className="cursor-move" onPointerDown={onStart}>
-      <rect x={left} y={top} width={w} height={h} rx={item.shape === ITEM_SHAPE.Picture ? 1 : 2} fill={item.color} stroke="black" strokeOpacity="0.35" strokeWidth={1.5} />
+    <g data-item={index} data-hung={item.shape} data-clash={clashing || undefined} className="cursor-move" onPointerDown={onStart}>
+      <rect
+        x={left}
+        y={top}
+        width={w}
+        height={h}
+        rx={item.shape === ITEM_SHAPE.Picture ? 1 : 2}
+        fill={item.color}
+        stroke={clashing ? "var(--destructive)" : "black"}
+        strokeOpacity={clashing ? 1 : 0.35}
+        strokeWidth={clashing ? 4 : 1.5}
+      />
       {inner && <rect x={left + frame} y={top + frame} width={w - 2 * frame} height={h - 2 * frame} fill={inner} className="pointer-events-none" />}
       {Array.from({ length: doors - 1 }, (_, n) => (
         <line key={n} x1={left + (w * (n + 1)) / doors} y1={top} x2={left + (w * (n + 1)) / doors} y2={top + h} stroke="black" strokeOpacity="0.3" className="pointer-events-none" />

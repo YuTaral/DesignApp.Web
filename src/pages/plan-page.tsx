@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeftIcon, BoxIcon, CheckIcon, ImageIcon, LoaderCircleIcon, MapIcon, PanelTopIcon, RulerIcon } from "lucide-react"
+import { AlertTriangleIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ImageIcon, LoaderCircleIcon, MapIcon, PanelTopIcon, RulerIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -63,7 +63,7 @@ function Builder({ plan }: { plan: Plan }) {
   // Room shape mode on the plan: the walls are edited instead of the objects.
   const [shaping, setShaping] = useState(false)
   const [wall, setWall] = useState<number>(plan.view)
-  const { saving, flush } = useAutosave(plan)
+  const { saving, failed, flush } = useAutosave(plan)
   const make = usePhotoMaker(plan, flush)
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
@@ -116,10 +116,20 @@ function Builder({ plan }: { plan: Plan }) {
           <h1 className="min-w-0 truncate text-sm font-medium">
             {plan.name || ROOM_TYPE_NAMES[plan.roomType]} · {plan.width} × {plan.length} m
           </h1>
-          {/* A fixed width, so "Saving…" and "Saved" don't move the buttons beside it under the pointer. */}
-          <span className="flex w-16 shrink-0 items-center gap-1 text-xs text-muted-foreground" aria-live="polite" data-save-state>
-            {saving ? <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden /> : <CheckIcon className="size-3" aria-hidden />}
-            {saving ? "Saving…" : "Saved"}
+          {/* A fixed width, so "Saving…", "Saved" and "Not saved" don't move the buttons beside it under the pointer. */}
+          <span
+            className={cn("flex w-20 shrink-0 items-center gap-1 text-xs", failed ? "text-destructive" : "text-muted-foreground")}
+            aria-live="polite"
+            data-save-state={failed ? "failed" : saving ? "saving" : "saved"}
+          >
+            {failed ? (
+              <AlertTriangleIcon className="size-3" aria-hidden />
+            ) : saving ? (
+              <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+            ) : (
+              <CheckIcon className="size-3" aria-hidden />
+            )}
+            {failed ? "Not saved" : saving ? "Saving…" : "Saved"}
           </span>
         </div>
         {/*
@@ -214,17 +224,41 @@ function Builder({ plan }: { plan: Plan }) {
 }
 
 /**
- * Saves the plan shortly after each change.
+ * Saves the plan shortly after each change. A failed save is tried again every few seconds until it gets through
+ * (the error is shown once); leaving the builder saves what is left at once, and closing the tab first asks while
+ * changes aren't saved.
  * @param plan - The room as shown.
- * @returns Whether it is saving, and `flush`, which saves now (resolves once saved).
+ * @returns Whether it is saving, whether the last save failed, and `flush`, which saves now (resolves once saved).
  */
 function useAutosave(plan: Plan) {
   const queryClient = useQueryClient()
   const { unsaved, saved } = useBuilderStore()
   const [saving, setSaving] = useState(false)
+  const [failed, setFailed] = useState(false)
+  // A new number after each failure, so the wait for the next try starts again.
+  const [attempt, setAttempt] = useState(0)
   const latest = useRef(plan)
 
   latest.current = plan
+
+  /**
+   * Says that the room couldn't be saved, and why.
+   * @param error - What went wrong.
+   */
+  const showFailure = (error: unknown) => {
+    toast.error(`${MESSAGES.planSaveFailed} ${errorMessage(error)}`)
+  }
+
+  /**
+   * Sends the plan as shown now.
+   * @param changes - How many changes it holds.
+   */
+  const send = async (changes: number) => {
+    const result = await savePlan(latest.current)
+
+    queryClient.setQueryData(QUERY_KEYS.plan(result.id), result)
+    saved(changes)
+  }
 
   /** Saves the plan as shown now. */
   const flush = async () => {
@@ -237,12 +271,15 @@ function useAutosave(plan: Plan) {
     setSaving(true)
 
     try {
-      const result = await savePlan(latest.current)
-
-      queryClient.setQueryData(QUERY_KEYS.plan(result.id), result)
-      saved(changes)
+      await send(changes)
+      setFailed(false)
     } catch (error) {
-      toast.error(`${MESSAGES.planSaveFailed} ${errorMessage(error)}`)
+      if (!failed) {
+        showFailure(error)
+      }
+
+      setFailed(true)
+      setAttempt((n) => n + 1)
       throw error
     } finally {
       setSaving(false)
@@ -254,14 +291,37 @@ function useAutosave(plan: Plan) {
       return
     }
 
-    const timer = setTimeout(() => void flush().catch(() => {}), BUILDER.autosaveMs)
+    const timer = setTimeout(() => void flush().catch(() => {}), failed ? BUILDER.saveRetryMs : BUILDER.autosaveMs)
 
     return () => clearTimeout(timer)
-    // flush reads the latest plan itself; only a new change restarts the wait.
+    // flush reads the latest plan itself; a new change or a failed try restarts the wait.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unsaved])
+  }, [unsaved, attempt])
 
-  return { saving: saving || unsaved > 0, flush }
+  // Leaving the builder sends what isn't saved yet at once; closing or reloading the tab asks first while it isn't.
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (useBuilderStore.getState().unsaved > 0) {
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener("beforeunload", warn)
+
+    return () => {
+      const changes = useBuilderStore.getState().unsaved
+
+      window.removeEventListener("beforeunload", warn)
+
+      if (changes > 0) {
+        send(changes).catch(showFailure)
+      }
+    }
+    // Set up once: everything it reads is read when it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return { saving: saving || unsaved > 0, failed, flush }
 }
 
 /**
