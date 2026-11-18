@@ -2,7 +2,7 @@
 // arrow keys switch photos, "Change with AI" (the fake AI) adds a changed photo and shows it, "Analyze this photo" makes
 // the shown photo the room's and the editor analyzes it, "All photos" goes back, analyzing another photo asks first
 // (and the arrow keys leave the photo asked about alone meanwhile), signing up saves the room into the plan's own
-// design, a room without photos to choose from points to its editor, and the page fits a phone.
+// design, whose page shows all the room's photos, with the same arrows, without a click, a room without photos to choose from points to its editor, and the page fits a phone.
 // Usage: node e2e/photos-pass.mjs [web url]
 import { launch, sleep, until, WEB, signUpFromEditor } from './ff.mjs'
 
@@ -41,16 +41,37 @@ try {
   await shot('photos-page')
   step('Two views make one room, and its photo page opens on the first', opened.thumbs === 2 && opened.caption.startsWith('1 of 2'), JSON.stringify(opened))
 
-  // 2. The arrows and the arrow keys switch photos, round and round.
-  await page.click('[data-next-photo]')
+  // 2. The arrows and the arrow keys switch photos, round and round. Clicked like a person: near the arrow's top edge,
+  // held down briefly (its press effect must not move it from under the pointer), at the same spot each time, in a
+  // window short enough that the small photos are below the fold (switching must not scroll the arrows away).
+  await page.setViewport({ width: 1366, height: 640 })
+  await sleep(300)
+  const arrow = await page.$eval('[data-next-photo]', (b) => {
+    const box = b.getBoundingClientRect()
+
+    return { x: box.left + box.width / 2, y: box.top + 4 }
+  })
+
+  await page.mouse.click(arrow.x, arrow.y, { delay: 250 })
   await sleep(200)
   const next = await caption()
 
-  await page.keyboard.press('ArrowRight')
+  await page.mouse.click(arrow.x, arrow.y, { delay: 250 })
+  await sleep(200)
+  const clickedTwice = await caption()
+
+  await page.keyboard.press('ArrowLeft')
   await sleep(200)
   const wrapped = await caption()
 
-  step('The arrows and the arrow keys switch photos', next.startsWith('2 of 2') && wrapped.startsWith('1 of 2'), `${next} | ${wrapped}`)
+  await page.keyboard.press('ArrowRight')
+  await sleep(200)
+  const round = await caption()
+
+  await page.setViewport({ width: 1366, height: 900 })
+  step('The arrows (clicked twice at one spot) and the arrow keys switch photos',
+    next.startsWith('2 of 2') && clickedTwice.startsWith('1 of 2') && wrapped.startsWith('2 of 2') && round.startsWith('1 of 2'),
+    `${next} | ${clickedTwice} | ${wrapped} | ${round}`)
 
   // 3. A change by the fake AI adds a photo, made from the one shown, and shows it.
   await page.click('[data-photo-option=change] button')
@@ -112,7 +133,30 @@ try {
   await shot('photos-in-design')
   step('Signing up saves the room into the plan’s own design', designName === 'Photo pass' && design.rooms.some((r) => r.roomId === roomId), designName)
 
-  // 7. A room with only its own photo (an upload) has nothing to choose from: the page points to its editor.
+  // 7. The design's page shows all the room's photos without a click: its own photo first, the arrows and (with the
+  // focus on them) the arrow keys switching them, and a way back to the photo page.
+  await page.goto(`${WEB}/designs/${design.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-room-photos] [data-photo-shown]')
+  await sleep(300)
+  const roomCaption = () => page.evaluate(() => document.querySelector('[data-room-photos] figcaption')?.textContent.replace(/\s+/g, ' ').trim())
+  const onDesign = { thumbs: await page.evaluate(() => document.querySelectorAll('[data-room-photos] [data-photo-thumb]').length), caption: await roomCaption() }
+
+  await shot('design-room-photos')
+  await page.click('[data-room-photos] [data-next-photo]')
+  await sleep(200)
+  const designNext = await roomCaption()
+
+  await page.keyboard.press('ArrowRight')
+  await sleep(200)
+  const designKey = await roomCaption()
+
+  await page.click('[data-room-photos-page]')
+  await until(page, () => location.pathname.endsWith('/photos'), { label: 'photo page from the design' })
+  step('The design’s page shows all the room’s photos, switched by the arrows and the arrow keys',
+    onDesign.thumbs === 3 && onDesign.caption.startsWith('2 of 3') && onDesign.caption.includes("Room's photo") && designNext.startsWith('3 of 3')
+      && designKey.startsWith('1 of 3'), `${onDesign.thumbs} photos | ${onDesign.caption} | ${designNext} | ${designKey}`)
+
+  // 8. A room with only its own photo (an upload) has nothing to choose from: the page points to its editor.
   const upload = await page.evaluate(async () => {
     const canvas = new OffscreenCanvas(800, 600)
     const ctx = canvas.getContext('2d')
@@ -131,7 +175,7 @@ try {
   await until(page, () => /^\/rooms\/[^/]+$/.test(location.pathname), { label: 'editor of the upload' })
   step('A room without photos to choose from points to its editor', new URL(page.url()).pathname === `/rooms/${upload.id}`)
 
-  // 8. The page fits a phone.
+  // 9. The page fits a phone.
   await page.goto(`${WEB}/rooms/${roomId}/photos`, { waitUntil: 'networkidle0' })
   await page.setViewport({ width: 390, height: 844 })
   await page.goto(page.url(), { waitUntil: 'networkidle0' })
@@ -139,12 +183,19 @@ try {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
 
   await shot('photos-phone')
-  step('The photo page fits a phone screen', overflow <= 0, `${overflow} px too wide`)
+  await page.goto(`${WEB}/designs/${design.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-room-photos] [data-photo-shown]')
+  await sleep(300)
+  const designOverflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+
+  await shot('room-photos-phone')
+  step('The photo page and the design’s room photos fit a phone screen', overflow <= 0 && designOverflow <= 0,
+    `photo page ${overflow} px, design page ${designOverflow} px too wide`)
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('photos-stopped').catch(() => {})
 } finally {
   console.log(results.join('\n'))
-  console.log('Browser console/network problems:', log.filter((l) => !/NS_BINDING_ABORTED|WebSocket failed|Failed to start the transport|http 40[01]\] .*\/api\/account/.test(l)).join('\n') || 'none')
+  console.log('Browser console/network problems:', log.filter((l) => !/NS_BINDING_ABORTED|WebSocket failed|Failed to start the transport|negotiation with the server|Error from HTTP request\. TypeError: NetworkError|http 40[01]\] .*\/api\/account/.test(l)).join('\n') || 'none')
   await browser.close()
 }

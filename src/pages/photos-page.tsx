@@ -13,15 +13,15 @@ import { usePlan } from "@/features/builder/api"
 import { useDesign } from "@/features/designs/api"
 import { ConfirmDialog } from "@/features/designs/components"
 import { AnalyzeOption, ChangeOption } from "@/features/photos/photo-options"
-import { PhotoStrip } from "@/features/photos/photo-strip"
+import { PhotoViewer } from "@/features/photos/photo-viewer"
 import { chooseRoomTake, saveRoomToPlanDesign, startRoomAnalysis, useRoom, useRoomTakes } from "@/features/rooms/api"
 import type { PhotoTake } from "@/features/rooms/types"
-import { apiUrl, errorMessage } from "@/lib/api"
+import { errorMessage } from "@/lib/api"
 import { MESSAGES, QUERY_KEYS, ROOM_STATUS, ROOM_TYPE_NAMES, ROUTES } from "@/lib/constants"
 
 /**
- * Route `/rooms/$roomId/photos`: the photos of a room builder run, one room. The room's photo is shown large, all of
- * them in a strip below with arrows (and the arrow keys) to switch. On the right: "Change with AI" makes a new version
+ * Route `/rooms/$roomId/photos`: the photos of a room builder run, one room. The room's photo is shown large, with arrows
+ * on either side (and the arrow keys) to switch, and all of them as small pictures below. On the right: "Change with AI" makes a new version
  * of the photo shown from the user's words, and "Analyze this photo" makes it the room's photo and opens it in the
  * editor, to recolor it and remove objects. The room is in the plan's own design; a guest's goes there once they sign in.
  */
@@ -87,25 +87,6 @@ export function PhotosPage() {
       void analyze(shown)
     }
   }
-
-  // The arrow keys switch photos (not while typing a change, nor while a dialog asks something about the photo shown).
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const typing = (event.target as HTMLElement | null)?.closest("input, textarea, [contenteditable=true]")
-      const asking = document.querySelector("[role=dialog]")
-
-      if (typing || asking || list.length < 2 || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) {
-        return
-      }
-
-      event.preventDefault()
-      setShownId(list[(index + (event.key === "ArrowLeft" ? -1 : 1) + list.length) % list.length].id)
-    }
-
-    window.addEventListener("keydown", onKey)
-
-    return () => window.removeEventListener("keydown", onKey)
-  }, [list, index])
 
   // A guest's photos go into the plan's design once they sign in (a signed-in user's went there as they were made, so
   // this only runs again when that design was deleted or was full).
@@ -203,27 +184,10 @@ export function PhotosPage() {
           </div>
         </div>
 
-        <figure className="flex min-h-0 flex-col gap-2">
-          <div className="overflow-hidden rounded-2xl border bg-muted">
-            <img
-              src={apiUrl(shown.photoUrl)}
-              alt={shown.note || "The room"}
-              className="mx-auto max-h-[70dvh] w-full object-contain"
-              style={{ aspectRatio: `${shown.width} / ${shown.height}` }}
-              data-photo-shown={shown.id}
-            />
-          </div>
-          <figcaption className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span className="tabular-nums">
-              {index + 1} of {list.length}
-            </span>
-            <span className="min-w-0 truncate">{shown.changedFrom ? `Changed: ${shown.note}` : shown.note}</span>
-            {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Ready && <Badge variant="secondary">Analyzed</Badge>}
-            {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Failed && <Badge variant="destructive">Analysis failed</Badge>}
-          </figcaption>
-        </figure>
-
-        <PhotoStrip takes={list} shown={index} onShow={show} />
+        <PhotoViewer takes={list} shown={index} onShow={show} imageClassName="max-h-[70dvh]">
+          {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Ready && <Badge variant="secondary">Analyzed</Badge>}
+          {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Failed && <Badge variant="destructive">Analysis failed</Badge>}
+        </PhotoViewer>
       </section>
 
       <aside className="flex flex-col gap-3" aria-label="What to do with this photo">

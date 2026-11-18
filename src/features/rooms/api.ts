@@ -204,11 +204,13 @@ export function findRoomParts(roomId: string, objectIndex: number, baseRevision:
 /**
  * A room's photos to choose from (a room builder run's photos and their AI changes), oldest first.
  * @param roomId - The room.
+ * @param enabled - Whether to load them (false for a room that has none to show).
  */
-export function useRoomTakes(roomId: string) {
+export function useRoomTakes(roomId: string, enabled = true) {
   return useQuery({
     queryKey: QUERY_KEYS.roomTakes(roomId),
     queryFn: ({ signal }) => getJson<PhotoTake[]>(API.roomTakes(roomId), signal),
+    enabled,
   })
 }
 
