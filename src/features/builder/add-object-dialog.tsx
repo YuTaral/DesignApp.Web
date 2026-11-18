@@ -9,12 +9,13 @@ import { BUILDER, ITEM_FORM, MESSAGES, SWATCHES } from "@/lib/constants"
 import type { CatalogObject, CatalogVariant, Plan } from "./api"
 import { cornerOutline, hasParts, inVariation, isMountedShape, isWallShape, useBuilderStore } from "./builder-store"
 import { DecorationChoice } from "./decoration-choice"
+import { MaterialChips } from "./material-chips"
 import { wallLength, wallName } from "./room-outline"
-import { ColorChoice, NumberField } from "./inspector"
+import { ColorChoice, NumberField } from "./fields"
 
 /**
  * Asked when the user clicks an object in the catalog: which type of it (its variations, each drawn from above with
- * its size), its color, its size and its decorations (its five most popular, or the user's own), then "Add to room" puts it in the middle of the room (a window, door or hung thing in
+ * its size), its color, its material, its size and its decorations (its five most popular, or the user's own), then "Add to room" puts it in the middle of the room (a window, door or hung thing in
  * the middle of the wall shown), selected.
  * @param props.plan - The room being built.
  * @param props.object - The catalog object; the dialog is closed while it is null.
@@ -41,7 +42,7 @@ export function AddObjectDialog({ plan, object, wall, onClose }: { plan: Plan; o
 }
 
 /**
- * The dialog's choices for one catalog object; they start from its first type and its usual color.
+ * The dialog's choices for one catalog object; they start from its first type and its usual color and material.
  * @param props.plan - The room being built.
  * @param props.object - The catalog object.
  * @param props.wall - The wall a window, door or hung thing goes on.
@@ -52,6 +53,7 @@ function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogO
   const variants = object.variants
   const [chosen, setChosen] = useState(0)
   const [color, setColor] = useState(object.color)
+  const [material, setMaterial] = useState(object.material ?? "")
   const [decorations, setDecorations] = useState<string[]>([])
   const [size, setSize] = useState({ width: variants[0].width, depth: variants[0].depth, height: variants[0].height })
   const variant = variants[chosen]
@@ -65,7 +67,7 @@ function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogO
   }
 
   const confirm = () => {
-    add({ ...inVariation(object, variant), color, ...size }, onWall ? { wall, along: wallLength(plan, wall) / 2 } : undefined, decorations)
+    add({ ...inVariation(object, variant), color, material, ...size }, onWall ? { wall, along: wallLength(plan, wall) / 2 } : undefined, decorations)
 
     if (onWall) {
       toast.success(MESSAGES.wallItemAdded(variant.label, wallName(plan, wall)))
@@ -78,7 +80,7 @@ function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogO
     <>
       <DialogHeader>
         <DialogTitle>Add a {variant.label}</DialogTitle>
-        <DialogDescription>Choose its type, color, size and decorations. You can change all of them later, and move it on the plan.</DialogDescription>
+        <DialogDescription>Choose its type, color, material, size and decorations. You can change all of them later, and move it on the plan.</DialogDescription>
       </DialogHeader>
 
       <div role="radiogroup" aria-label="Type" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -105,6 +107,7 @@ function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogO
       </div>
 
       <ColorChoice label="Color" value={color} colors={onWall && !hung ? BUILDER.frameColors : SWATCHES} onPick={setColor} />
+      <MaterialChips materials={object.materials ?? []} value={material} onPick={setMaterial} />
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Size (cm)</legend>

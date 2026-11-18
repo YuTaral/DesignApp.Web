@@ -5,7 +5,7 @@ import type { CatalogObject, CatalogVariant, ItemParts, Plan, PlanItem } from ".
 import { extent, fitInside, fromWall, isValidOutline, nearestWall, normalize, rectangle, stretch, wallLength, wallPoint, walls, type Reshaped } from "./room-outline"
 
 /** What the room settings change: its name, walls, colors, floor and view. */
-type RoomChange = Partial<Pick<Plan, "name" | "width" | "length" | "height" | "wallColor" | "floorColor" | "floorType" | "view" | "corner">>
+type RoomChange = Partial<Pick<Plan, "name" | "width" | "length" | "height" | "wallColor" | "floorColor" | "floorType" | "view" | "corner" | "finish">>
 
 type BuilderState = {
   /** The room being built, as shown (saved shortly after each change). */
@@ -167,7 +167,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
 
       const base = {
         label: object.label, shape: object.shape, width: object.width, depth: object.depth, height: object.height, color: object.color, rotation: 0,
-        form: object.form ?? ITEM_FORM.Standard, decorations: decorations ?? [],
+        form: object.form ?? ITEM_FORM.Standard, decorations: decorations ?? [], material: object.material ?? "",
       }
       let item: PlanItem
 

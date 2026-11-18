@@ -2,7 +2,19 @@ import { useQuery } from "@tanstack/react-query"
 
 import type { Room } from "@/features/rooms/types"
 import { getJson, sendForm, sendJson } from "@/lib/api"
-import { API, QUERY_KEYS, type FloorType, type ItemForm, type ItemShape, type PhotoStyle, type RoomType, type ViewCorner } from "@/lib/constants"
+import {
+  API,
+  QUERY_KEYS,
+  type CeilingLight,
+  type FloorType,
+  type ItemForm,
+  type ItemShape,
+  type PhotoStyle,
+  type RoomType,
+  type TimeOfDay,
+  type ViewCorner,
+  type WallFinish,
+} from "@/lib/constants"
 
 /**
  * One object placed in a built room (mirrors the API's PlanItemRequest). Sizes and positions are in centimetres. A
@@ -38,6 +50,25 @@ export type PlanItem = {
   parts?: ItemParts | null
   /** The small things on it, such as "cushions", which the photo shows on it; missing or empty for none. */
   decorations?: string[]
+  /** What it is made of or covered in, such as "velvet"; missing or empty when only its color says. */
+  material?: string
+}
+
+/**
+ * How a built room's walls and ceiling are finished and lit, and when its photo is taken (mirrors RoomFinishRequest):
+ * the walls' finish, one accent wall in its own color and finish, the ceiling's and the skirting boards' colors.
+ */
+export type RoomFinish = {
+  walls: WallFinish
+  /** The number of the wall in its own color and finish; null for none. */
+  accentWall: number | null
+  accentColor: string
+  accentFinish: WallFinish
+  ceilingColor: string
+  /** The skirting boards' color (windows and doors keep their own colors). */
+  trimColor: string
+  ceilingLight: CeilingLight
+  timeOfDay: TimeOfDay
 }
 
 /**
@@ -96,6 +127,8 @@ export type Plan = {
   aiMode: string
   items: PlanItem[]
   updatedAt: string
+  /** How its walls and ceiling are finished and lit, and when its photo is taken. */
+  finish: RoomFinish
 }
 
 /** One view of a built room to make a photo from: the wall it looks at and where the camera stands (mirrors the API's PlanShot). */
@@ -118,6 +151,10 @@ export type CatalogObject = {
   variants: CatalogVariant[]
   /** Its five most popular decorations, offered when it is added; may be empty. */
   decorations: string[]
+  /** What it is usually made of, to choose from; empty for an object the AI described. */
+  materials: string[]
+  /** The material it starts in; empty when it has none. */
+  material: string
 }
 
 /** One variation of a catalog object, such as the L-shaped corner sofa, in the object's color (mirrors CatalogVariantResponse). */
@@ -179,9 +216,9 @@ export function createPlan(plan: NewPlan, ai?: string): Promise<Plan> {
  * @returns The saved plan.
  */
 export function savePlan(plan: Plan): Promise<Plan> {
-  const { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline } = plan
+  const { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline, finish } = plan
 
-  return sendJson<Plan>("PUT", API.plan(plan.id), { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline })
+  return sendJson<Plan>("PUT", API.plan(plan.id), { name, width, length, height, wallColor, floorColor, floorType, view, corner, items, outline, finish })
 }
 
 /**

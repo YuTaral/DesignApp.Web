@@ -341,6 +341,43 @@ export const FLOOR_TYPE_NAMES: Record<FloorType, string> = {
   Wood: "Wooden planks", Parquet: "Parquet", Tiles: "Tiles", Stone: "Stone", Concrete: "Concrete", Carpet: "Carpet", Vinyl: "Vinyl",
 }
 
+/** What a built room's walls are finished in (Domain Constants.WallFinish). */
+export const WALL_FINISH = {
+  Paint: "Paint", Wallpaper: "Wallpaper", Plaster: "Plaster", Brick: "Brick", WoodPanelling: "WoodPanelling", Tiles: "Tiles", Concrete: "Concrete",
+} as const
+
+export type WallFinish = (typeof WALL_FINISH)[keyof typeof WALL_FINISH]
+
+/** The wall finishes' names as the user reads them. */
+export const WALL_FINISH_NAMES: Record<WallFinish, string> = {
+  Paint: "Paint", Wallpaper: "Wallpaper", Plaster: "Limewash", Brick: "Brick", WoodPanelling: "Wood panels", Tiles: "Tiles", Concrete: "Concrete",
+}
+
+/** The light on a built room's ceiling (Domain Constants.CeilingLight). */
+export const CEILING_LIGHT = {
+  None: "None", Pendant: "Pendant", Spotlights: "Spotlights", Chandelier: "Chandelier", FlushLight: "FlushLight", TrackLights: "TrackLights",
+} as const
+
+export type CeilingLight = (typeof CEILING_LIGHT)[keyof typeof CEILING_LIGHT]
+
+/** The ceiling lights' names as the user reads them. */
+export const CEILING_LIGHT_NAMES: Record<CeilingLight, string> = {
+  None: "None", Pendant: "Pendant", Spotlights: "Spotlights", Chandelier: "Chandelier", FlushLight: "Flush light", TrackLights: "Track lights",
+}
+
+/** When a built room's photo is taken, which sets its light and mood (Domain Constants.TimeOfDay). */
+export const TIME_OF_DAY = { Morning: "Morning", Midday: "Midday", GoldenHour: "GoldenHour", Evening: "Evening" } as const
+
+export type TimeOfDay = (typeof TIME_OF_DAY)[keyof typeof TIME_OF_DAY]
+
+/** The times of day's names and what each looks like, as the user reads them. */
+export const TIME_OF_DAY_NAMES: Record<TimeOfDay, { name: string; looks: string }> = {
+  Morning: { name: "Morning", looks: "Soft, cool daylight" },
+  Midday: { name: "Midday", looks: "Bright, even daylight" },
+  GoldenHour: { name: "Golden hour", looks: "Warm, low sun and long shadows" },
+  Evening: { name: "Evening", looks: "Dark outside, the lamps on" },
+}
+
 /**
  * The room builder (Domain Constants.Plans and Application Constants.Builder). Walls in metres, objects in
  * centimetres; positions snap to the grid; the 3D view sent for a photo is `guide` pixels (the photo's 4:3, and
@@ -428,8 +465,20 @@ export const BUILDER = {
    * the API's Constants.Builder.Camera, whose photo prompt describes only what this camera sees.
    */
   scene: {
-    background: "#FFFFFF", sky: "#FFFFFF", ground: "#9A8F80", pot: "#8C6A4A", ceiling: "#FAFAF7", glass: "#CFE3EE", metal: "#B9B9B9",
+    background: "#FFFFFF", sky: "#FFFFFF", ground: "#9A8F80", pot: "#8C6A4A", glass: "#CFE3EE", metal: "#B9B9B9",
     linen: "#F2EFE8",
+    /** The skirting boards along every wall's foot, in metres. */
+    skirting: { height: 0.1, depth: 0.015 },
+    /**
+     * The 3D view's light at each time of day, so the photo's guide already has its mood: the sun's color and strength,
+     * and the sky's and the room's soft light. Midday is the view as it always was.
+     */
+    moods: {
+      Morning: { sun: "#EAF2FF", sunPower: 1.2, sky: 1.8, ambient: 0.5 },
+      Midday: { sun: "#FFFFFF", sunPower: 1.3, sky: 1.9, ambient: 0.5 },
+      GoldenHour: { sun: "#FFC48A", sunPower: 1.6, sky: 1.5, ambient: 0.45 },
+      Evening: { sun: "#FFB877", sunPower: 0.4, sky: 0.9, ambient: 0.35 },
+    } satisfies Record<TimeOfDay, { sun: string; sunPower: number; sky: number; ambient: number }>,
     /**
      * A painting's stand-in face: one plain mid tone, so the painting stands out from the wall without giving the image
      * model a picture to copy (it copied a patterned face almost exactly).
@@ -458,6 +507,13 @@ export const BUILDER = {
     "#E8DCC8", "#D8C3A5", "#C9A27E", "#B89B7A", "#B8864B", "#8C6A4A", "#6B4A2E", "#4A3424",
     "#F4F1EA", "#C8C8C8", "#A9A9A9", "#8A8580", "#5A5A5A", "#2F2C2A", "#9DB4C0", "#A8B89A",
   ],
+  /** Colors offered for the ceiling. */
+  ceilingColors: [
+    "#FFFFFF", "#FAFAF7", "#F4F1EA", "#EFE6CF", "#E8DCC8", "#E8E2D6", "#D8C3A5", "#C8C8C8",
+    "#A8B89A", "#9DB4C0", "#4A6274", "#2E4057", "#8A8580", "#5A5A5A", "#3A3A3A", "#1E1E1E",
+  ],
+  /** The one choice the "None" chip of a material or an accent wall stands for. */
+  none: "none",
   /** Colors offered for windows and doors: frames and door leaves. */
   frameColors: [
     "#FFFFFF", "#F4F1EA", "#E8DCC8", "#C8C8C8", "#8A8580", "#3A3A3A", "#1E1E1E", "#B8864B",

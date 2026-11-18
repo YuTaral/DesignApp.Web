@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { MousePointerClickIcon, RotateCwIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import { cn } from "cn"
 
@@ -7,7 +6,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { BUILDER, ITEM_FORM, ITEM_SHAPE, ROOM_TYPE_NAMES, SWATCHES } from "@/lib/constants"
 import { useCatalog, type Plan } from "./api"
+import { ChoiceChips } from "./choice-chips"
 import { DecorationChoice } from "./decoration-choice"
+import { ColorChoice, NumberField } from "./fields"
+import { FinishFields } from "./finish-fields"
+import { MaterialChips } from "./material-chips"
 import { hasParts, isMountedShape, isWallItem, partsOf, toVariation, useBuilderStore, variationOf } from "./builder-store"
 import { wallLength } from "./room-outline"
 import { FloorChoice } from "./floor-choice"
@@ -15,8 +18,8 @@ import { ViewChoice } from "./view-choice"
 import { WallChoice } from "./wall-choice"
 
 /**
- * The right column: the selected object's variation, name, size, turn and color (a window's or door's wall and place on it), or,
- * with nothing selected, the room's name, walls, colors, floor and the wall the photo looks at.
+ * The right column: the selected object's variation, name, material, size, turn and color (a window's or door's wall and place on it), or,
+ * with nothing selected, the room's name, walls, colors, floor, finish, light and the wall the photo looks at.
  * @param props.plan - The room being built.
  */
 export function Inspector({ plan }: { plan: Plan }) {
@@ -95,7 +98,7 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
 }
 
 /**
- * What every object's settings start with: its name, its variation and its decorations.
+ * What every object's settings start with: its name, its variation, its material and its decorations.
  * @param props.plan - The room.
  * @param props.index - The object's position in the plan's objects.
  */
@@ -110,6 +113,7 @@ function ItemBasics({ plan, index }: { plan: Plan; index: number }) {
         <Input id="item-label" value={item.label} maxLength={BUILDER.labelLength} onChange={(event) => update(index, { label: event.target.value })} />
       </div>
       <VariationChoice plan={plan} index={index} />
+      <MaterialChoice plan={plan} index={index} />
       <ItemDecorations plan={plan} index={index} />
     </>
   )
@@ -199,30 +203,36 @@ function VariationChoice({ plan, index }: { plan: Plan; index: number }) {
     return null
   }
 
+  const variants = found.object.variants
+  const chips = variants.map((v) => ({ value: v.key, name: v.name, title: `${v.label}, ${v.width} × ${v.depth} × ${v.height} cm` }))
+
   return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium">Variation</p>
-      <div role="radiogroup" aria-label="Variation" className="flex flex-wrap gap-1.5" data-variations={found.object.key}>
-        {found.object.variants.map((variant, i) => (
-          <button
-            key={variant.key}
-            type="button"
-            role="radio"
-            aria-checked={i === found.index}
-            data-variation={variant.key}
-            title={`${variant.label}, ${variant.width} × ${variant.depth} × ${variant.height} cm`}
-            onClick={() => update(index, toVariation(variant))}
-            className={cn(
-              "rounded-lg border px-2.5 py-1 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
-              i === found.index && "border-primary bg-accent text-accent-foreground hover:bg-accent"
-            )}
-          >
-            {variant.name}
-          </button>
-        ))}
-      </div>
-    </div>
+    <ChoiceChips
+      label="Variation"
+      chips={chips}
+      value={variants[found.index].key}
+      onPick={(key) => update(index, toVariation(variants.find((v) => v.key === key)!))}
+      attribute="variation"
+      group={{ "data-variations": found.object.key }}
+    />
   )
+}
+
+/**
+ * What the selected object is made of: its catalog object's materials (found by its name), "None" to leave it to its
+ * color, and a material it has that isn't one of them. Hidden for an object with no materials to choose from.
+ * @param props.plan - The room.
+ * @param props.index - The object's position in the plan's objects.
+ */
+function MaterialChoice({ plan, index }: { plan: Plan; index: number }) {
+  const update = useBuilderStore((state) => state.update)
+  const catalog = useCatalog(plan.roomType).data ?? []
+  const item = plan.items[index]
+  const offered = variationOf(catalog, item)?.object.materials ?? []
+  const current = item.material ?? ""
+  const names = current && !offered.includes(current) ? [...offered, current] : offered
+
+  return <MaterialChips materials={names} value={current} onPick={(material) => update(index, { material })} />
 }
 
 /**
@@ -280,108 +290,8 @@ function RoomInspector({ plan }: { plan: Plan }) {
         <FloorChoice value={plan.floorType} color={plan.floorColor} onPick={(floorType) => setRoom({ floorType })} />
       </div>
       <ColorChoice label="Floor color" value={plan.floorColor} colors={BUILDER.floorColors} onPick={(floorColor) => setRoom({ floorColor })} />
+      <FinishFields plan={plan} />
       <ViewChoice plan={plan} place="panel" />
-    </div>
-  )
-}
-
-/**
- * A number field that takes the value once it is a number in range; until then the typing stays as typed, and leaving
- * the field shows the value in use again.
- * @param props.label - Its label.
- * @param props.value - The value in use.
- * @param props.min - The lowest value taken.
- * @param props.max - The highest value taken.
- * @param props.step - The arrows' step.
- * @param props.onCommit - Takes a new value.
- */
-export function NumberField({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  onCommit,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step?: number
-  onCommit: (value: number) => void
-}) {
-  // What is being typed; null while the field isn't being typed in, so it shows the value in use.
-  const [text, setText] = useState<string | null>(null)
-
-  return (
-    <label className="grid gap-1 text-xs text-muted-foreground">
-      {label}
-      <Input
-        type="number"
-        inputMode="decimal"
-        className="h-8"
-        value={text ?? String(value)}
-        min={min}
-        max={max}
-        step={step}
-        aria-label={label}
-        onFocus={() => setText(String(value))}
-        onBlur={() => setText(null)}
-        onChange={(event) => {
-          setText(event.target.value)
-          const number = Number(event.target.value)
-
-          if (event.target.value !== "" && number >= min && number <= max) {
-            onCommit(number)
-          }
-        }}
-      />
-    </label>
-  )
-}
-
-/**
- * A color: swatches and any color.
- * @param props.label - What it colors.
- * @param props.value - The color in use.
- * @param props.colors - The swatches.
- * @param props.onPick - Takes a color.
- */
-export function ColorChoice({ label, value, colors, onPick }: { label: string; value: string; colors: readonly string[]; onPick: (color: string) => void }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{label}</span>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-mono">{value}</span>
-          <span className="relative size-6 overflow-hidden rounded-md border" style={{ backgroundColor: value }}>
-            <input
-              type="color"
-              value={value.toLowerCase()}
-              aria-label={`Any ${label.toLowerCase()} color`}
-              className="absolute inset-0 size-full cursor-pointer opacity-0"
-              onChange={(event) => onPick(event.target.value.toUpperCase())}
-            />
-          </span>
-        </label>
-      </div>
-      <div role="radiogroup" aria-label={`${label} color`} className="grid grid-cols-8 gap-1.5">
-        {colors.map((color) => (
-          <button
-            key={color}
-            type="button"
-            role="radio"
-            aria-checked={value.toUpperCase() === color.toUpperCase()}
-            aria-label={`Color ${color}`}
-            onClick={() => onPick(color)}
-            className={cn(
-              "aspect-square rounded-md border shadow-soft outline-none transition-transform hover:scale-110 focus-visible:ring-3 focus-visible:ring-ring/50",
-              value.toUpperCase() === color.toUpperCase() && "ring-2 ring-primary ring-offset-2 ring-offset-card"
-            )}
-            style={{ backgroundColor: color }}
-          />
-        ))}
-      </div>
     </div>
   )
 }

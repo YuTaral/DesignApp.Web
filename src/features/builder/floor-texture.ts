@@ -169,7 +169,7 @@ export function shade(color: string, factor: number) {
  * Random numbers that are the same every time for the same seed (mulberry32).
  * @param seed - The seed.
  */
-function seeded(seed: number) {
+export function seeded(seed: number) {
   let state = seed
 
   return () => {

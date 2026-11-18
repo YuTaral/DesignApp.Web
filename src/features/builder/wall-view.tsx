@@ -1,12 +1,13 @@
-import { useRef, type DragEvent, type PointerEvent as ReactPointerEvent } from "react"
+import { useMemo, useRef, type DragEvent, type PointerEvent as ReactPointerEvent } from "react"
 
-import { BUILDER, ITEM_SHAPE } from "@/lib/constants"
+import { BUILDER, ITEM_SHAPE, WALL_FINISH } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { clashingItems, footprint, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
 import { ResizeHandle } from "./resize-handle"
 import { fromWall, seenFrom, wallLength, wallName, wallOf } from "./room-outline"
 import { WallChoice } from "./wall-choice"
+import { WALL_TILE_METRES, wallSurface, wallTileUrl } from "./wall-texture"
 
 /** Room around the wall in the drawing, in centimetres (for the measurements and the handles). */
 const MARGIN = 60
@@ -49,7 +50,12 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
   const { selected, select, update, add } = useBuilderStore()
   const svgRef = useRef<SVGSVGElement>(null)
   const gesture = useRef<Gesture | null>(null)
+  const [surface, color] = wallSurface(plan, wall)
+  // The wall's finish as a repeating pattern (painted once per finish and color); plain paint is its color alone.
+  const tile = useMemo(() => (surface === WALL_FINISH.Paint ? null : wallTileUrl(surface, color)), [surface, color])
   const [length, height] = [wallLength(plan, wall), plan.height * 100]
+  const tileCm = WALL_TILE_METRES * 100
+  const skirting = BUILDER.scene.skirting.height * 100
   const text = Math.max(10, Math.min(length, height) / 18)
   const alongWall = wallOf(plan, wall).dx !== 0
 
@@ -163,7 +169,26 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
         onDragOver={allowCatalogDrop}
         onDrop={drop}
       >
-        <rect x={0} y={0} width={length} height={height} fill={plan.wallColor} stroke="currentColor" strokeOpacity="0.35" strokeWidth="2" />
+        {tile && (
+          <defs>
+            <pattern id={`wall-finish-${wall}`} patternUnits="userSpaceOnUse" width={tileCm} height={tileCm} y={height}>
+              <image href={tile} width={tileCm} height={tileCm} preserveAspectRatio="none" />
+            </pattern>
+          </defs>
+        )}
+        <rect
+          x={0}
+          y={0}
+          width={length}
+          height={height}
+          fill={tile ? `url(#wall-finish-${wall})` : color}
+          stroke="currentColor"
+          strokeOpacity="0.35"
+          strokeWidth="2"
+          data-wall-finish-fill={surface}
+        />
+        {/* The skirting along the wall's foot, under the doors and windows drawn next. */}
+        <rect x={0} y={height - skirting} width={length} height={skirting} fill={plan.finish.trimColor} className="pointer-events-none" data-skirting />
         <rect x={-12} y={height} width={length + 24} height={16} fill={plan.floorColor} stroke="currentColor" strokeOpacity="0.35" strokeWidth="1" />
 
         {/* Windows and doors first, so the room's objects stand in front of them. */}

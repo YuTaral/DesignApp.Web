@@ -3,6 +3,8 @@
 // catalog lands where it is let go; dragging moves it, its corner handle resizes it, the inspector sizes and colors it;
 // overlapping objects are outlined; "Describe an object" (the fake AI) adds one; the plan is saved and comes back after
 // a reload; the catalog's sections collapse, and a click opens a dialog to choose an object's type, color and size;
+// a furnished room comes dressed (curtains, decorations, materials, things on its walls, a finish for its type); an
+// object's material is picked in the inspector; the walls' finish, an accent wall and the time of day redraw the 3D view;
 // a P-shaped sofa's parts resize one by one; a window is placed exactly on its wall in the wall view, and a door dropped near a wall lands on it; the 3D
 // view draws the room, and clicking a wall turns it to look at that wall; Generate photo asks for a style and extra
 // instructions, then (the fake AI) makes the picked views' photos one room and opens its photo page; phone layout.
@@ -54,8 +56,9 @@ try {
   const floorType = (await stored()).floorType
   const hangable = await page.evaluate(() => [...document.querySelectorAll('[data-catalog-section=mounted] [data-catalog]')].map((b) => b.dataset.catalog))
 
-  step('The walls and floor steps open a floor plan with windows, doors, things to hang and the 10 common objects',
-    catalog.length === 19 && catalog.includes('sofa') && catalog.includes('window') && catalog.includes('door') && hangable.join() === 'painting,mirror,wall-shelf,wall-tv'
+  step('The walls and floor steps open a floor plan with windows, doors, things to hang and the living room\u2019s objects',
+    catalog.length === 33 && catalog.includes('sofa') && catalog.includes('window') && catalog.includes('door')
+      && hangable.slice(0, 3).join() === 'painting,mirror,wall-shelf' && hangable.includes('radiator') && hangable.includes('wall-tv')
       && outline[1] === '200px' && floorType === 'Tiles',
     `${catalog.length} objects (to hang: ${hangable}), outline ${outline}, floor ${floorType}`)
 
@@ -65,12 +68,17 @@ try {
     const plan = await (await fetch('/api/plans', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roomType: 'Bedroom', width: 4, length: 4, height: 2.6, wallColor: '#E8E2D6', floorColor: '#B89B7A', floorType: 'Wood' }) })).json()
 
-    return { id: plan.id, items: plan.items }
+    return { id: plan.id, items: plan.items, finish: plan.finish }
   })
   const kinds = furnished.items.map((i) => i.label)
+  const bed = furnished.items.find((i) => i.shape === 'Bed')
 
   step('A new room starts furnished for its type and size', furnished.items.some((i) => i.shape === 'Door') && furnished.items.some((i) => i.wall === 0 && i.shape === 'Window')
     && furnished.items.some((i) => i.shape === 'Bed') && kinds.filter((k) => k === 'nightstand').length === 2, kinds.join(', '))
+  step('It comes dressed: curtains, decorations, materials, art above the bed, and the wall behind the bed in its own color',
+    furnished.items.filter((i) => i.shape === 'Window').every((w) => w.decorations?.includes('sheer curtains')) && bed?.decorations?.includes('decorative pillows')
+      && bed?.material === 'linen upholstered' && furnished.items.some((i) => i.label === 'set of three framed prints' && i.wall === 1) && furnished.finish.accentWall === 1,
+    `bed ${bed?.material} ${bed?.decorations}, accent wall ${furnished.finish.accentWall}`)
 
   // 2. Dropping the sofa from the catalog onto the plan puts it where it is let go (on the 10 cm grid).
   const sofa = await page.evaluate(() => fetch('/api/builder/catalog/LivingRoom').then((r) => r.json()).then((list) => list.find((o) => o.key === 'sofa')))
@@ -190,6 +198,9 @@ try {
 
   await page.click('[data-object-type="p-shaped"]')
   await page.click('[data-add-object-dialog] [aria-label="Color #4A6274"]')
+  const firstMaterial = await page.$eval('[data-add-object-dialog] [data-material][aria-checked=true]', (b) => b.dataset.material)
+
+  await page.click('[data-add-object-dialog] [data-material=wool]')
   const offered = await page.evaluate(() => [...document.querySelectorAll('[data-add-object-dialog] [data-decoration]')].map((d) => d.dataset.decoration))
 
   await page.click('[data-add-object-dialog] [data-decoration="cushions"]')
@@ -204,9 +215,10 @@ try {
   const corner = (await stored()).items[3]
   const drawnP = await page.evaluate(() => !!document.querySelector('[data-plan-canvas] [data-item="3"] polygon[data-form=PShaped]'))
 
-  step('Windows and doors collapse; clicking an object offers its types, a color and a size, and adds the chosen one',
-    collapsed && types.join() === 'standard,corner,p-shaped' && corner.form === 'PShaped' && corner.width === 300 && corner.color === '#4A6274' && drawnP && !!corner.parts,
-    `collapsed ${collapsed}; types ${types}; ${corner.label} ${corner.width}×${corner.depth} ${corner.color} ${JSON.stringify(corner.parts)}`)
+  step('Windows and doors collapse; clicking an object offers its types, a color, a material and a size, and adds the chosen one',
+    collapsed && types.join() === 'standard,corner,p-shaped' && corner.form === 'PShaped' && corner.width === 300 && corner.color === '#4A6274' && drawnP && !!corner.parts
+      && firstMaterial === 'linen' && corner.material === 'wool',
+    `collapsed ${collapsed}; types ${types}; ${corner.label} ${corner.width}×${corner.depth} ${corner.color} ${firstMaterial} → ${corner.material} ${JSON.stringify(corner.parts)}`)
   const inInspector = await page.evaluate(() => [...document.querySelectorAll('[data-inspector-item] [data-decoration][aria-checked=true]')].map((d) => d.dataset.decoration))
 
   step('The dialog offers five decorations and Other; the chosen ones are saved and shown in the inspector',
@@ -240,6 +252,24 @@ try {
   step('Choosing another type in the inspector changes it where it stands',
     straight.label === 'three-seat sofa' && straight.form === 'Standard' && !straight.parts && straight.width === 220 && straight.x === resized.x,
     `${straight.label} ${straight.width}×${straight.depth}, parts ${JSON.stringify(straight.parts)}`)
+
+  // 7b. Its material: the sofa's offered ones (wool, picked in the dialog), then velvet, then None.
+  const materials = await page.$$eval('[data-inspector-item] [data-material]', (b) => b.map((x) => x.dataset.material))
+  const startedIn = straight.material
+
+  await page.click('[data-inspector-item] [data-material=velvet]')
+  await frame()
+  await saved()
+  const velvet = (await stored()).items[3].material
+
+  await page.click('[data-inspector-item] [data-material=none]')
+  await frame()
+  await saved()
+  const plainSofa = (await stored()).items[3].material
+
+  step('The inspector offers the sofa\u2019s materials and saves the one picked, or none',
+    startedIn === 'wool' && materials.includes('velvet') && materials.at(-1) === 'none' && velvet === 'velvet' && plainSofa === '',
+    `${materials.join(' ')}: ${startedIn} → ${velvet} → "${plainSofa}"`)
   await page.evaluate(() => [...document.querySelectorAll('[data-inspector-item] button')].find((b) => b.textContent.trim() === 'Delete').click())
   await frame()
   await saved()
@@ -500,6 +530,37 @@ try {
 
   step('Straight on puts the camera back', backPicture === straightPicture && backMarker.turn === straightMarker.turn && (await stored()).corner === 'None',
     JSON.stringify(backMarker))
+
+  // 10c. The room's finish: brick walls redraw the 3D view, a plaster accent on the wall in view too, and the evening
+  //     darkens it; all saved. The sections start closed, their headings saying what is chosen.
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-finish-toggle=walls]')
+  const closedHeading = await page.$eval('[data-finish-toggle=walls]', (b) => b.textContent.trim())
+
+  await page.click('[data-finish-toggle=walls]')
+  await page.click('[data-wall-finish=Brick]')
+  await saved()
+  await sleep(600)
+  const brickPicture = await picture()
+
+  await page.click('[data-accent-wall="3"]')
+  await page.click('[data-accent-finish=Plaster]')
+  await saved()
+  await sleep(600)
+  const accentPicture = await picture()
+
+  await page.click('[data-finish-toggle=light]')
+  await page.click('[data-time-of-day=Evening]')
+  await saved()
+  await sleep(600)
+  const eveningPicture = await picture()
+  const finish = (await stored()).finish
+
+  await shot('builder-finish')
+  step('Brick walls, an accent wall and the evening each redraw the 3D view, and are saved',
+    closedHeading === 'Walls & ceiling: Paint' && new Set([backPicture, brickPicture, accentPicture, eveningPicture]).size === 4
+      && finish.walls === 'Brick' && finish.accentWall === 3 && finish.accentFinish === 'Plaster' && finish.timeOfDay === 'Evening',
+    `${closedHeading} | ${JSON.stringify(finish)}`)
 
   // 11. Generate photo (the fake AI) shows a small picture of every view (each wall from the middle and both near
   //    corners), the room's own picked, and the style closed at "As planned"; with one more picked it makes two photos,

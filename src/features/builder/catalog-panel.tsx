@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { ChevronDownIcon, LoaderCircleIcon, PanelTopIcon, PlusIcon, SparklesIcon } from "lucide-react"
-import { cn } from "cn"
+import { LoaderCircleIcon, PanelTopIcon, PlusIcon, SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -12,6 +11,7 @@ import { describeObject, useCatalog, type CatalogObject, type Plan } from "./api
 import { AddObjectDialog } from "./add-object-dialog"
 import { isMountedShape, isOpeningShape, isWallShape, useBuilderStore } from "./builder-store"
 import { startCatalogDrag } from "./catalog-drag"
+import { FoldToggle } from "./fold-toggle"
 
 /**
  * The objects to add, in three sections the user can collapse (remembered in this browser): windows and doors, things
@@ -108,17 +108,9 @@ function Section({ name, title, hint, children }: { name: string; title: string;
   return (
     <section className="space-y-3" aria-label={title} data-catalog-section={name}>
       <div>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={id}
-          onClick={toggle}
-          className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-2 rounded-lg px-2 py-1 text-left font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
-          data-section-toggle
-        >
+        <FoldToggle open={open} controls={id} onToggle={toggle} className="font-medium" data-section-toggle>
           <h2>{title}</h2>
-          <ChevronDownIcon className={cn("size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none", !open && "-rotate-90")} aria-hidden />
-        </button>
+        </FoldToggle>
         {open && hint && <p className="mt-1 text-sm text-muted-foreground">{hint}</p>}
       </div>
       {open && <div id={id}>{children}</div>}
@@ -135,7 +127,7 @@ function Section({ name, title, hint, children }: { name: string; title: string;
  */
 function ObjectList({ objects, disabled, onChoose }: { objects: CatalogObject[]; disabled: boolean; onChoose: (object: CatalogObject) => void }) {
   return (
-    <ul className="grid gap-1">
+    <ul className="grid grid-cols-1 gap-1">
       {objects.map((object) => (
         <li key={object.key}>
           <button
@@ -150,7 +142,7 @@ function ObjectList({ objects, disabled, onChoose }: { objects: CatalogObject[];
             onClick={() => onChoose(object)}
             className="flex w-full cursor-grab items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing disabled:opacity-50"
           >
-            <span className="size-5 shrink-0 rounded-md border shadow-soft" style={{ backgroundColor: object.color }} aria-hidden />
+            <span className="size-5 shrink-0 rounded-md border border-foreground/20 shadow-soft" style={{ backgroundColor: object.color }} aria-hidden />
             <span className="min-w-0 flex-1 truncate first-letter:uppercase">{object.label}</span>
             <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
               {object.variants.length > 1 ? `${object.variants.length} types` : `${object.width}×${isWallShape(object.shape) ? object.height : object.depth}`}

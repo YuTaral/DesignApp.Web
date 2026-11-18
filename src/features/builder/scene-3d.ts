@@ -1,11 +1,12 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, VIEW_CORNER } from "@/lib/constants"
+import { BUILDER, ITEM_FORM, ITEM_SHAPE, VIEW_CORNER, WALL_FINISH } from "@/lib/constants"
 import type { ItemBox, Plan, PlanItem, PlanShot } from "./api"
 import { hasParts, isMountedShape, isWallItem, partsOf } from "./builder-store"
 import { cameraStand, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
+import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
 
 /**
  * Draws a built room in 3D: the floor in its material and color, the walls and the ceiling, the windows and doors in
@@ -154,24 +155,25 @@ export function camera(plan: Plan, width: number, height: number) {
  * @param anisotropy - The sharpest texture filtering the GPU offers.
  */
 function buildScene(plan: Plan, anisotropy: number) {
-  const { width, length, height } = plan
+  const { width, length, height, finish } = plan
+  const mood = BUILDER.scene.moods[finish.timeOfDay]
   const scene = new THREE.Scene()
-  const sun = new THREE.DirectionalLight(BUILDER.scene.sky, 1.3)
+  const sun = new THREE.DirectionalLight(mood.sun, mood.sunPower)
   const reach = Math.max(width, length) * 1.2
   // The floor and ceiling are the outline's shape; turned flat, the shape's y runs along the room (the floor's is
   // flipped, as it turns the other way).
   const shape = (flip: number) => new THREE.ShapeGeometry(new THREE.Shape(plan.outline.map((p) => new THREE.Vector2(p.x / 100, (flip * p.y) / 100))))
   const floor = new THREE.Mesh(shape(-1), floorMaterial(plan, anisotropy))
-  // The ceiling gets no direct light, so it glows a little to read as the white it is.
+  // The ceiling gets no direct light, so it glows a little to read as the color it is.
   const ceiling = new THREE.Mesh(
     shape(1),
-    new THREE.MeshStandardMaterial({ color: BUILDER.scene.ceiling, emissive: BUILDER.scene.ceiling, emissiveIntensity: 0.55, roughness: 0.9 })
+    new THREE.MeshStandardMaterial({ color: finish.ceilingColor, emissive: finish.ceilingColor, emissiveIntensity: 0.55, roughness: 0.9 })
   )
   // Every wall but the one behind the camera is drawn, with the windows and doors on them.
   const behind = cameraStand(plan).behind
 
   scene.background = new THREE.Color(BUILDER.scene.background)
-  scene.add(new THREE.HemisphereLight(BUILDER.scene.sky, BUILDER.scene.ground, 1.9), new THREE.AmbientLight(BUILDER.scene.sky, 0.5))
+  scene.add(new THREE.HemisphereLight(BUILDER.scene.sky, BUILDER.scene.ground, mood.sky), new THREE.AmbientLight(BUILDER.scene.sky, mood.ambient))
   sun.position.set(width * 0.3, height * 2.2, length * 0.8)
   sun.target.position.set(width / 2, 0, length / 2)
   sun.castShadow = true
@@ -188,11 +190,11 @@ function buildScene(plan: Plan, anisotropy: number) {
   scene.add(floor, ceiling)
 
   for (const wall of walls(plan).filter((w) => w.index !== behind)) {
-    const mesh = wallMesh(plan, wall, material(plan.wallColor))
+    const mesh = wallMesh(plan, wall, wallPaint(plan, wall, anisotropy))
 
     mesh.userData.surface = MASK_ID.wall
     mesh.receiveShadow = true
-    scene.add(mesh)
+    scene.add(mesh, skirting(plan, wall))
   }
 
   for (const [index, item] of plan.items.entries()) {
@@ -401,6 +403,54 @@ function wallMesh(plan: Plan, wall: OutlineWall, paint: THREE.Material) {
   mesh.userData.wall = wall.index
 
   return mesh
+}
+
+/**
+ * A wall's surface: the room's wall finish and color, or the accent wall's own; plain paint is a matte color, any other
+ * finish a texture of it (bricks, panels, tiles...) at its real size along the wall.
+ * @param plan - The room.
+ * @param wall - The wall.
+ * @param anisotropy - The sharpest texture filtering the GPU offers.
+ */
+function wallPaint(plan: Plan, wall: OutlineWall, anisotropy: number) {
+  const [kind, color] = wallSurface(plan, wall.index)
+
+  if (kind === WALL_FINISH.Paint) {
+    return material(color)
+  }
+
+  return tileMaterial((context, size) => paintWall(context, kind, color, size), wall.length / 100 / WALL_TILE_METRES, plan.height / WALL_TILE_METRES, anisotropy)
+}
+
+/**
+ * The skirting boards along a wall's foot, in the room's trim color, stopping at its doors (and at windows down to the
+ * floor). They count as the wall in the object masks.
+ * @param plan - The room.
+ * @param wall - The wall.
+ */
+function skirting(plan: Plan, wall: OutlineWall) {
+  const { height, depth } = BUILDER.scene.skirting
+  const group = new THREE.Group()
+  const block = blockAdder(group, material(plan.finish.trimColor))
+  const gaps = plan.items
+    .filter((i) => i.wall === wall.index && (i.shape === ITEM_SHAPE.Door || (i.shape === ITEM_SHAPE.Window && i.elevation < height * 100)))
+    .map((i) => [i.x - i.width / 2, i.x + i.width / 2] as const)
+    .sort((a, b) => a[0] - b[0])
+  let from = 0
+
+  for (const [start, end] of [...gaps, [wall.length, wall.length] as const]) {
+    if (start - from > 1) {
+      block((start - from) / 100, height, depth, ((from + start) / 2 - wall.length / 2) / 100, height / 2, depth / 2)
+    }
+
+    from = Math.max(from, end)
+  }
+
+  group.position.set((wall.start.x + wall.end.x) / 200, 0, (wall.start.y + wall.end.y) / 200)
+  group.rotation.y = wallTurn(wall)
+  group.userData.surface = MASK_ID.wall
+
+  return group
 }
 
 /**
@@ -799,18 +849,30 @@ const PLANT_CLUSTERS = [
  * @param anisotropy - The sharpest texture filtering the GPU offers.
  */
 function floorMaterial(plan: Plan, anisotropy: number) {
+  return tileMaterial((context, size) => paintFloor(context, plan.floorType, plan.floorColor, size), 1 / FLOOR_TILE_METRES, 1 / FLOOR_TILE_METRES, anisotropy, 0.7)
+}
+
+/**
+ * A matte material of a painted tile repeated across a surface (a floor's or a wall's pattern).
+ * @param paint - Paints the tile on a square canvas of a size.
+ * @param repeatX - How many times the tile repeats across the surface's texture coordinates.
+ * @param repeatY - How many times it repeats up them.
+ * @param anisotropy - The sharpest texture filtering the GPU offers.
+ * @param roughness - How rough it looks.
+ */
+function tileMaterial(paint: (context: CanvasRenderingContext2D, size: number) => void, repeatX: number, repeatY: number, anisotropy: number, roughness = 0.85) {
   const canvas = document.createElement("canvas")
 
   canvas.width = canvas.height = 512
-  paintFloor(canvas.getContext("2d")!, plan.floorType, plan.floorColor, 512)
+  paint(canvas.getContext("2d")!, 512)
   const texture = new THREE.CanvasTexture(canvas)
 
   texture.colorSpace = THREE.SRGBColorSpace
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(1 / FLOOR_TILE_METRES, 1 / FLOOR_TILE_METRES)
+  texture.repeat.set(repeatX, repeatY)
   texture.anisotropy = anisotropy
 
-  return new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7, metalness: 0 })
+  return new THREE.MeshStandardMaterial({ map: texture, roughness, metalness: 0 })
 }
 
 /**
