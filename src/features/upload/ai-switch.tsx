@@ -1,75 +1,58 @@
 import { FlaskConicalIcon, SparklesIcon } from "lucide-react"
 import { cn } from "cn"
 
-import type { AiAvailability } from "@/features/rooms/api"
+import { useAiAvailability } from "@/features/rooms/api"
 import { AI_MODE, type AiMode } from "@/lib/constants"
+import { useAiChoice } from "./use-ai-choice"
 
 /** The two choices. */
 const MODES: { value: AiMode; title: string; note: string; icon: typeof SparklesIcon }[] = [
-  { value: AI_MODE.Fake, title: "Fake AI", note: "Free, instant", icon: FlaskConicalIcon },
-  { value: AI_MODE.Real, title: "Real AI", note: "Claude + SAM 3, costs a few cents", icon: SparklesIcon },
+  { value: AI_MODE.Fake, title: "Fake AI", note: "Fake AI: free and instant", icon: FlaskConicalIcon },
+  { value: AI_MODE.Real, title: "Real AI", note: "Real AI: Claude, SAM 3 and FLUX; costs a few cents", icon: SparklesIcon },
 ]
 
 /**
- * The development switch between the fake and the real AI, above the upload area. Shown only when
- * the API allows choosing (never in production).
- * @param props.availability - What the API can use.
- * @param props.value - The chosen mode.
- * @param props.onChange - Called with a new choice.
- * @param props.disabled - Locks the choice while a photo uploads.
+ * The development switch between the fake and the real AI, in the header: what new uploads, sample rooms and built
+ * rooms use. Shown only when the API allows choosing (never in production), and from tablet width up (on a phone the
+ * header has no room for it); icons only below desktop width.
  */
-export function AiSwitch({
-  availability,
-  value,
-  onChange,
-  disabled = false,
-}: {
-  availability: AiAvailability
-  value: AiMode
-  onChange: (mode: AiMode) => void
-  disabled?: boolean
-}) {
-  return (
-    <fieldset disabled={disabled} className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <legend className="sr-only">Which AI analyzes the photo</legend>
-      <span className="text-sm font-medium" aria-hidden>
-        AI
-      </span>
-      <div role="radiogroup" aria-label="Which AI analyzes the photo" className="flex rounded-xl border bg-card p-1 shadow-soft">
-        {MODES.map(({ value: mode, title, note, icon: Icon }) => {
-          const unavailable = mode === AI_MODE.Real && !availability.realAvailable
+export function AiSwitch() {
+  const availability = useAiAvailability().data
+  const [value, choose] = useAiChoice(availability)
 
-          return (
-            <button
-              key={mode}
-              type="button"
-              role="radio"
-              aria-checked={value === mode}
-              disabled={unavailable}
-              title={unavailable ? "Add the Anthropic and fal.ai keys to the API's user secrets first." : note}
-              onClick={() => onChange(mode)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
-                value === mode
-                  ? mode === AI_MODE.Real
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Icon className="size-4" aria-hidden />
-              {title}
-            </button>
-          )
-        })}
-      </div>
-      <span className="text-xs text-muted-foreground" aria-live="polite">
-        {value === AI_MODE.Real
-          ? "Claude and SAM 3 analyze the photo. Costs a few cents."
-          : availability.realAvailable
-            ? "Free. The five sample photos get recorded outlines."
-            : "Free. The real AI needs its keys in the API's user secrets."}
-      </span>
-    </fieldset>
+  if (!availability?.canChoose || !value) {
+    return null
+  }
+
+  return (
+    <div role="radiogroup" aria-label="Which AI the app uses" className="hidden rounded-lg border bg-card p-0.5 sm:flex" data-ai-switch>
+      {MODES.map(({ value: mode, title, note, icon: Icon }) => {
+        const unavailable = mode === AI_MODE.Real && !availability.realAvailable
+
+        return (
+          <button
+            key={mode}
+            type="button"
+            role="radio"
+            aria-checked={value === mode}
+            aria-label={title}
+            disabled={unavailable}
+            title={unavailable ? "Add the Anthropic and fal.ai keys to the API's user secrets first." : note}
+            onClick={() => choose(mode)}
+            className={cn(
+              "flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+              value === mode
+                ? mode === AI_MODE.Real
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Icon className="size-3.5" aria-hidden />
+            <span className="hidden lg:inline">{title}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }

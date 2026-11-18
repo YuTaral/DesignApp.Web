@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
-import { HouseIcon, LayoutGridIcon, LogInIcon, LogOutIcon, PlusIcon, UserRoundIcon, RulerIcon } from "lucide-react"
+import { HouseIcon, LayoutGridIcon, LogInIcon, LogOutIcon, UserRoundIcon, RulerIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Logo } from "@/components/logo"
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAccount, useSignOut } from "@/features/account/api"
+import { AiSwitch } from "@/features/upload/ai-switch"
 import { errorMessage } from "@/lib/api"
 import { MESSAGES, ROUTES } from "@/lib/constants"
 
@@ -21,13 +22,14 @@ import { MESSAGES, ROUTES } from "@/lib/constants"
 const navLinkClass =
   "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
 
-/** Layout of every page: sticky header with logo, navigation, theme and account menus, then the page. */
+/** Layout of every page: sticky header with logo, navigation, the AI switch (Development), account and theme, then the page. */
 export function AppShell() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
-          <Link to={ROUTES.home} className="mr-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          {/* A flex box rather than an inline link, so the logo sits on the same middle line as the page links. */}
+          <Link to={ROUTES.home} className="mr-2 flex items-center rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
             <Logo />
           </Link>
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
@@ -60,14 +62,9 @@ export function AppShell() {
                 <LayoutGridIcon />
               </Link>
             </Button>
-            <ThemeToggle />
+            <AiSwitch />
             <AccountMenu />
-            <Button size="lg" className="hidden md:inline-flex" asChild>
-              <Link to={ROUTES.home}>
-                <PlusIcon data-icon="inline-start" />
-                New design
-              </Link>
-            </Button>
+            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -96,10 +93,11 @@ function AccountMenu() {
     const onAuthPage = here.startsWith("/sign-in") || here.startsWith("/sign-up")
 
     return (
+      // On a phone only its icon, so the header fits with the AI switch.
       <Button variant="ghost" size="sm" asChild>
-        <Link to={ROUTES.signIn} search={onAuthPage ? {} : { redirect: here }}>
+        <Link to={ROUTES.signIn} search={onAuthPage ? {} : { redirect: here }} aria-label="Sign in">
           <LogInIcon data-icon="inline-start" />
-          Sign in
+          <span className="hidden sm:inline">Sign in</span>
         </Link>
       </Button>
     )
