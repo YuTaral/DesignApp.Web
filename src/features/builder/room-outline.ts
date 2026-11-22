@@ -188,7 +188,7 @@ export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Pla
   const along = (p: { x: number; y: number }) => (p.x - view.start.x) * view.dx + (p.y - view.start.y) * view.dy
   // The near wall's ends (the room's sides when there is none), and the spot, if any.
   const ends = facing ? [along(facing.wall.start), along(facing.wall.end)] : plan.outline.map(along)
-  const spot = plan.cameraSpot
+  const spot = cameraSpotOf(plan)
   const geometry: ViewGeometry = {
     middle: along(middle),
     nearLeft: Math.min(...ends),
@@ -255,6 +255,17 @@ const CAMERA_PLACES: Record<ViewCorner, (view: ViewGeometry) => CameraPose | nul
 
     return { at: view.spot.at, stand: view.spot.ahead, turn: Math.atan2(view.middle - view.spot.at, Math.max(BUILDER.scene.minFitDistance, view.spot.ahead)), fov: null }
   },
+}
+
+/**
+ * The room's camera spot while it is inside the walls (the API drops one a smaller room leaves outside, as the camera
+ * would stand outside the room); null otherwise.
+ * @param plan - The room.
+ */
+export function cameraSpotOf(plan: Shaped & Partial<Pick<Plan, "cameraSpot">>) {
+  const spot = plan.cameraSpot
+
+  return spot && contains(plan, spot.x, spot.y) ? spot : null
 }
 
 /**

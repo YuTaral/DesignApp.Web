@@ -335,17 +335,27 @@ export function withParts(item: PlanItem): PlanItem {
   const fit = (value: number, low: number, high: number) => Math.round(Math.min(Math.max(value, low), Math.max(low, high)))
   const runDepth = fit(parts.runDepth, min, item.depth - min)
   const legWidth = fit(parts.legWidth, min, item.width - min)
+  const legLeft = parts.legLeft ?? false
   const fitted =
     item.form === ITEM_FORM.PShaped
-      ? { runDepth, legWidth, chaiseWidth: fit(parts.chaiseWidth, legWidth, item.width), chaiseDepth: fit(parts.chaiseDepth, min, item.depth - runDepth) }
-      : { runDepth, legWidth, chaiseWidth: 0, chaiseDepth: 0 }
+      ? { runDepth, legWidth, chaiseWidth: fit(parts.chaiseWidth, legWidth, item.width), chaiseDepth: fit(parts.chaiseDepth, min, item.depth - runDepth), legLeft }
+      : { runDepth, legWidth, chaiseWidth: 0, chaiseDepth: 0, legLeft }
 
   return { ...item, parts: fitted }
 }
 
 /**
+ * Which way an L- or P-shaped object's leg is from its middle before turning: 1 to the right, -1 to the left (the
+ * outline mirrored).
+ * @param item - The object.
+ */
+export function legSide(item: Pick<PlanItem, "form" | "width" | "depth" | "parts">) {
+  return partsOf(item)?.legLeft ? -1 : 1
+}
+
+/**
  * The outline of an L- or P-shaped object before turning, around its middle, from its parts: the back run at the top,
- * the leg down its right side, and a P's chaise at the leg's front end.
+ * the leg down its right side, and a P's chaise at the leg's front end; drawn mirrored (`legSide`) for a leg on the left.
  * @param item - The object.
  */
 export function cornerOutline(item: PlanItem): [number, number][] {

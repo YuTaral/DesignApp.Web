@@ -10,7 +10,7 @@ import { EditorPage } from "@/pages/editor-page"
 import { HomePage } from "@/pages/home-page"
 import { DesignPage } from "@/pages/design-page"
 import { LibraryPage } from "@/pages/library-page"
-import { ROUTES } from "@/lib/constants"
+import { BUILD_STEP, isEnumValue, ROUTES } from "@/lib/constants"
 
 /** The root route: every page renders inside the app shell (header + main). */
 const rootRoute = createRootRoute({ component: AppShell })
@@ -57,7 +57,13 @@ const routeTree = rootRoute.addChildren([
     validateSearch: (search: Record<string, unknown>) => ({ design: optionalText(search.design), house: optionalText(search.house) }),
     component: LibraryPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: ROUTES.build, component: BuildPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: ROUTES.build,
+    // ?step= is the step after the start (walls, floor or photo), so Back goes back a step.
+    validateSearch: (search: Record<string, unknown>) => ({ step: isEnumValue(BUILD_STEP, search.step) ? search.step : undefined }),
+    component: BuildPage,
+  }),
   createRoute({ getParentRoute: () => rootRoute, path: ROUTES.plan, component: PlanPage }),
   signInRoute,
   signUpRoute,

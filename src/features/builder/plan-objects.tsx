@@ -2,7 +2,7 @@ import type { PointerEvent as ReactPointerEvent, SVGProps } from "react"
 
 import { BUILDER, ITEM_FORM, ITEM_SHAPE } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
-import { cornerOutline, footprint, hasParts, partsOf } from "./builder-store"
+import { cornerOutline, footprint, hasParts, legSide, partsOf } from "./builder-store"
 import { ResizeHandle } from "./resize-handle"
 import { wallOf, wallPoint } from "./room-outline"
 import type { Part } from "./use-plan-gestures"
@@ -109,14 +109,14 @@ function Outline({ item, width, depth, look }: { item: PlanItem; width: number; 
   }
 
   if (hasParts(item)) {
-    // Drawn before turning from its parts, then turned like the object: SVG turns clockwise on screen, as the plan
-    // does. Dashed lines show where the parts meet.
+    // Drawn before turning from its parts (mirrored for a leg on the left), then turned like the object: SVG turns
+    // clockwise on screen, as the plan does. Dashed lines show where the parts meet.
     const { runDepth: run, legWidth: leg, chaiseDepth } = partsOf(item)!
     const [w, d] = [item.width, item.depth]
     const cd = item.form === ITEM_FORM.PShaped ? chaiseDepth : 0
 
     return (
-      <g transform={`rotate(${item.rotation})`}>
+      <g transform={`rotate(${item.rotation}) scale(${legSide(item)} 1)`}>
         <polygon points={cornerOutline(item).map((p) => p.join(",")).join(" ")} strokeLinejoin="round" {...(look as SVGProps<SVGPolygonElement>)} />
         <g className="pointer-events-none stroke-black/30" strokeDasharray="6 5" strokeWidth={1.5}>
           <line x1={w / 2 - leg} y1={-d / 2} x2={w / 2 - leg} y2={-d / 2 + run} />
@@ -151,7 +151,7 @@ function PartHandles({ item, onStart }: { item: PlanItem; onStart: (event: React
   }
 
   return (
-    <g transform={`rotate(${item.rotation})`}>
+    <g transform={`rotate(${item.rotation}) scale(${legSide(item)} 1)`}>
       {handles.map(({ part, x, y, label }) => (
         <circle
           key={part}

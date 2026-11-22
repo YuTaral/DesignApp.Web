@@ -2,7 +2,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 import { BUILDER } from "@/lib/constants"
 import type { Plan } from "./api"
-import { footprint, isWallItem, partsOf, toGrid, useBuilderStore } from "./builder-store"
+import { footprint, isWallItem, legSide, partsOf, toGrid, useBuilderStore } from "./builder-store"
 import { moveCorner, moveWall, pushSection, wallOf, walls } from "./room-outline"
 
 /** Room around the walls in the drawing, in centimetres (for the walls' thickness and the handles). */
@@ -178,10 +178,11 @@ export function usePlanGestures(plan: Plan) {
     }
 
     if (g.kind !== "resize") {
-      // A part's handle: the pointer in the object's own frame before turning (turned back by its rotation).
+      // A part's handle: the pointer in the object's own frame before turning (turned back by its rotation, and
+      // mirrored back for a leg on the left).
       const turn = (item.rotation * Math.PI) / 180
       const [dx, dy] = [point.x - item.x, point.y - item.y]
-      const local = { x: Math.cos(turn) * dx + Math.sin(turn) * dy, y: -Math.sin(turn) * dx + Math.cos(turn) * dy }
+      const local = { x: legSide(item) * (Math.cos(turn) * dx + Math.sin(turn) * dy), y: -Math.sin(turn) * dx + Math.cos(turn) * dy }
       const parts = partsOf(item)!
       const next =
         g.kind === "run"

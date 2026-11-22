@@ -1,7 +1,7 @@
-import { VIEW_CORNER } from "@/lib/constants"
 import { useBuilderStore } from "./builder-store"
 import type { Plan } from "./api"
 import { CornerChoice } from "./corner-choice"
+import { cameraSpotOf, cameraStand } from "./room-outline"
 import { WallChoice } from "./wall-choice"
 
 /** The captions and screen-reader names of the view's two choices, by where they are shown. */
@@ -23,7 +23,7 @@ export function ViewChoice({ plan, place }: { plan: Plan; place: "panel" | "view
   const group = place === "panel" ? "space-y-2" : "flex flex-col items-center gap-1"
   const wall = <WallChoice plan={plan} value={plan.view} label={words.wallLabel} onPick={(view) => setRoom({ view })} />
   const corner = (
-    <CornerChoice value={plan.corner ?? VIEW_CORNER.None} label={words.cornerLabel} spot={!!plan.cameraSpot} onPick={(corner) => setRoom({ corner })} />
+    <CornerChoice value={cameraStand(plan).corner} label={words.cornerLabel} spot={!!cameraSpotOf(plan)} onPick={(corner) => setRoom({ corner })} />
   )
 
   if (place === "panel") {

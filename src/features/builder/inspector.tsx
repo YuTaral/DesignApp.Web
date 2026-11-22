@@ -4,16 +4,16 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, ROOM_TYPE_NAMES, SWATCHES } from "@/lib/constants"
+import { BUILDER, ITEM_FORM, ITEM_SHAPE, LEG_SIDE, ROOM_TYPE_NAMES, SWATCHES, type LegSide } from "@/lib/constants"
 import { useCatalog, type Plan } from "./api"
-import { ChoiceChips } from "./choice-chips"
+import { ChoiceChips, type Chip } from "./choice-chips"
 import { DecorationChoice } from "./decoration-choice"
 import { ColorChoice, NumberField } from "./fields"
 import { FinishFields } from "./finish-fields"
 import { MaterialChips } from "./material-chips"
 import { hasParts, isMountedShape, isWallItem, partsOf, toVariation, useBuilderStore, variationOf } from "./builder-store"
 import { wallLength } from "./room-outline"
-import { FloorChoice } from "./floor-choice"
+import { FloorChoice, FloorColorChoice } from "./floor-choice"
 import { ViewChoice } from "./view-choice"
 import { WallChoice } from "./wall-choice"
 
@@ -168,10 +168,21 @@ function PartFields({ plan, index }: { plan: Plan; index: number }) {
   const min = BUILDER.minPart
   const isP = item.form === ITEM_FORM.PShaped
   const set = (change: Partial<typeof parts>) => update(index, { parts: { ...parts, ...change } })
+  const sides: Chip<LegSide>[] = [
+    { value: LEG_SIDE.Left, name: "Left", title: "The corner leg at the back's left end, as seen from above before turning" },
+    { value: LEG_SIDE.Right, name: "Right", title: "The corner leg at the back's right end, as seen from above before turning" },
+  ]
 
   return (
     <fieldset className="space-y-2" data-part-fields>
       <legend className="text-sm font-medium">Parts (cm)</legend>
+      <ChoiceChips
+        label={isP ? "Corner leg and chaise on the" : "Corner leg on the"}
+        chips={sides}
+        value={parts.legLeft ? LEG_SIDE.Left : LEG_SIDE.Right}
+        onPick={(side) => set({ legLeft: side === LEG_SIDE.Left })}
+        attribute="leg-side"
+      />
       <p className="text-xs text-muted-foreground">Resize each part here, or drag its round handle on the plan.</p>
       <div className="grid grid-cols-2 gap-2">
         <NumberField label="Back run depth" value={parts.runDepth} min={min} max={Math.round(item.depth - min)} onCommit={(runDepth) => set({ runDepth })} />
@@ -289,7 +300,7 @@ function RoomInspector({ plan }: { plan: Plan }) {
         <p className="text-sm font-medium">Floor</p>
         <FloorChoice value={plan.floorType} color={plan.floorColor} onPick={(floorType) => setRoom({ floorType })} />
       </div>
-      <ColorChoice label="Floor color" value={plan.floorColor} colors={BUILDER.floorColors} onPick={(floorColor) => setRoom({ floorColor })} />
+      <FloorColorChoice type={plan.floorType} value={plan.floorColor} onPick={(floorColor) => setRoom({ floorColor })} />
       <FinishFields plan={plan} />
       <ViewChoice plan={plan} place="panel" />
     </div>

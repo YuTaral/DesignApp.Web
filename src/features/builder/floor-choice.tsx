@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react"
 import { cn } from "cn"
 
-import { FLOOR_TYPE, FLOOR_TYPE_NAMES, type FloorType } from "@/lib/constants"
+import { BUILDER, FLOOR_TYPE, FLOOR_TYPE_NAMES, type FloorType } from "@/lib/constants"
+import { ColorChoice } from "./fields"
 import { paintFloor } from "./floor-texture"
 
 /**
@@ -37,6 +38,18 @@ export function FloorChoice({ value, color, onPick, className }: { value: FloorT
 }
 
 /**
+ * The floor's color: the usual colors of its type, each drawn in the floor's pattern, or any other.
+ * @param props.type - The floor type.
+ * @param props.value - The floor's color.
+ * @param props.onPick - Takes a color.
+ */
+export function FloorColorChoice({ type, value, onPick }: { type: FloorType; value: string; onPick: (color: string) => void }) {
+  return (
+    <ColorChoice label="Floor color" value={value} colors={BUILDER.floorColors[type]} onPick={onPick} swatch={(color) => <FloorSwatch type={type} color={color} />} />
+  )
+}
+
+/**
  * A small square of a floor's pattern.
  * @param props.type - The floor type.
  * @param props.color - The floor's color.
@@ -52,5 +65,5 @@ function FloorSwatch({ type, color }: { type: FloorType; color: string }) {
     }
   }, [type, color])
 
-  return <canvas ref={ref} width={128} height={128} className="aspect-square w-full rounded-md" aria-hidden />
+  return <canvas ref={ref} width={128} height={128} className="block aspect-square w-full rounded-md" aria-hidden />
 }

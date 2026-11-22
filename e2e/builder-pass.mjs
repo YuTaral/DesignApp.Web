@@ -18,6 +18,31 @@ const { browser, page, log, shot } = await launch()
 const frame = () => sleep(250)
 const saved = () => until(page, () => document.querySelector('[data-save-state]')?.textContent.trim() === 'Saved', { timeout: 10000, label: 'saved' })
 const stored = () => page.evaluate(async () => (await fetch(`/api/plans/${location.pathname.split('/').at(-1)}`)).json())
+/**
+ * Clicks a button in a dialog that scrolls: scrolled to the middle of the view first, and after the dialog has settled
+ * (opening, or growing to new content), as the mouse's own scrolling left some clicks beside it.
+ * @param selector - The button.
+ */
+const clickInDialog = async (selector) => {
+  await page.waitForSelector(selector)
+  await sleep(400)
+  await page.$eval(selector, (b) => b.scrollIntoView({ block: 'center' }))
+  await page.click(selector)
+}
+/** The saved plan once it passes a check (the builder saves a moment after a change), or as it is after 10 s. */
+const storedOnce = async (check) => {
+  for (let tries = 0; tries < 40; tries++) {
+    const plan = await stored()
+
+    if (check(plan)) {
+      return plan
+    }
+
+    await sleep(250)
+  }
+
+  return await stored()
+}
 const shown = () => page.evaluate(() => [...document.querySelectorAll('[data-plan-canvas] [data-item]')].length)
 /** Clicks a catalog object and adds its first type from the dialog that opens. */
 const addFromDialog = async (key) => {
@@ -42,6 +67,16 @@ try {
   await page.goto(`${WEB}/build`, { waitUntil: 'networkidle0' })
   await page.click('[data-build-choice=walls]')
   await page.waitForSelector('form[data-build-step=walls]')
+  // The step is in the address, so the browser's Back goes back to the two ways to start.
+  const wallsStep = new URL(page.url()).search
+
+  await page.goBack()
+  await page.waitForSelector('[data-build-choice=walls]')
+  const backToStart = new URL(page.url()).pathname + new URL(page.url()).search
+
+  await page.click('[data-build-choice=walls]')
+  await page.waitForSelector('form[data-build-step=walls]')
+  step('Build a room’s steps are in the address, so Back goes back a step', wallsStep === '?step=walls' && backToStart === '/build', `${wallsStep} then ${backToStart}`)
   await page.click('[role=radiogroup][aria-label="Room type"] [role=radio]:nth-child(2)') // Bedroom
   await page.click('[role=radiogroup][aria-label="Room type"] [role=radio]:nth-child(1)') // back to Living room
   const outline = await page.$eval('[data-room-outline]', (e) => [e.style.width, e.style.height])
@@ -54,15 +89,26 @@ try {
   await until(page, () => /^\/build\/[0-9a-f-]{36}$/.test(location.pathname), { label: 'plan page' })
   await page.waitForSelector('[data-plan-canvas]')
   await page.waitForSelector('[data-catalog]')
-  const catalog = await page.evaluate(() => [...document.querySelectorAll('[data-catalog]')].map((b) => b.dataset.catalog))
+  const listed = () => page.evaluate(() => [...document.querySelectorAll('[data-catalog]')].map((b) => b.dataset.catalog))
+  const sections = () => page.evaluate(() => [...document.querySelectorAll('[data-catalog-section]')].map((s) => s.dataset.catalogSection).join())
+  const firstPage = await listed()
+  const planSections = await sections()
   const floorType = (await stored()).floorType
-  const hangable = await page.evaluate(() => [...document.querySelectorAll('[data-catalog-section=mounted] [data-catalog]')].map((b) => b.dataset.catalog))
 
-  step('The walls and floor steps open a floor plan with windows, doors, things to hang and the living room\u2019s objects',
-    catalog.length === 34 && catalog.includes('sofa') && catalog.includes('window') && catalog.includes('door')
-      && hangable.slice(0, 3).join() === 'painting,mirror,wall-shelf' && hangable.includes('radiator') && hangable.includes('wall-tv')
-      && outline[1] === '200px' && floorType === 'Tiles',
-    `${catalog.length} objects (to hang: ${hangable}), outline ${outline}, floor ${floorType}`)
+  await page.click('[data-show-more=objects]')
+  const secondPage = await listed()
+  const moreLeft = await page.$('[data-show-more]')
+
+  await page.type('[data-catalog-search]', 'lamp')
+  const lamps = await listed()
+
+  await page.click('[data-catalog-search]', { count: 3 })
+  await page.keyboard.press('Backspace')
+
+  step('The plan opens with the living room\u2019s objects only (no windows or things to hang), ten at a time, and a search',
+    planSections === 'objects' && firstPage.length === 10 && firstPage.includes('sofa') && !firstPage.includes('window')
+      && secondPage.length === 18 && moreLeft === null && lamps.join() === 'floor-lamp' && outline[1] === '200px' && floorType === 'Tiles',
+    `${planSections}: ${firstPage.length} then ${secondPage.length}, lamps ${lamps}, outline ${outline}, floor ${floorType}`)
 
   // 1b. A furnished room (the default): a 4 × 4 m bedroom gets a door, windows on the back wall and a bed with two
   //     nightstands, all inside the walls.
@@ -146,6 +192,20 @@ try {
     pasted.items.length === countBefore + 1 && copyItem.label === moved.label && copyItem.x === Math.min(moved.x + 30, roomWidth - moved.width / 2) && copyItem.y === moved.y + 30 && copySelected && afterDelete === countBefore,
     `${countBefore} → ${pasted.items.length} → ${afterDelete}; copy at ${copyItem.x}, ${copyItem.y}; selected ${copySelected}`)
 
+  // 3c. The same keys on a Cyrillic keyboard (where C types "с" and V "м") copy and paste too; Delete removes the copy.
+  await page.evaluate(() => {
+    for (const [code, key] of [['KeyC', 'с'], ['KeyV', 'м']]) {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { code, key, ctrlKey: true, bubbles: true }))
+    }
+  })
+  const cyrillic = await storedOnce((plan) => plan.items.length === countBefore + 1)
+
+  await page.keyboard.press('Delete')
+  await storedOnce((plan) => plan.items.length === countBefore)
+  await page.mouse.click(sofaAt.x, sofaAt.y)
+  await frame()
+  step('Ctrl+C and Ctrl+V work on a Cyrillic keyboard too', cyrillic.items.length === countBefore + 1, `${countBefore} → ${cyrillic.items.length}`)
+
   // 4. The inspector sets its height and color; turning swaps its footprint.
   await page.click('[data-inspector-item] input[aria-label=Height]', { count: 3 })
   await page.type('[data-inspector-item] input[aria-label=Height]', '90')
@@ -170,10 +230,15 @@ try {
 
   step('Overlapping objects are outlined', clashes === 2, `${clashes} outlined`)
 
-  // 6. Describe an object (the fake AI): it is added with the size and color the words give.
+  // 6. Describe an object (the fake AI), at the bottom of the Other dialog: it is added with the size and color the
+  //    words give, and the dialog closes.
+  await page.click('[data-other-objects]')
+  await page.waitForSelector('[data-other-objects-dialog] #describe-object')
   await page.type('#describe-object', 'a round oak coffee table, 90 cm')
-  await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Add it').click())
-  await until(page, () => document.querySelectorAll('[data-plan-canvas] [data-item]').length === 3, { label: 'described object' })
+  await page.evaluate(() => [...document.querySelectorAll('[data-other-objects-dialog] button')].find((b) => b.textContent.trim() === 'Add it').click())
+  await until(page, () => document.querySelectorAll('[data-plan-canvas] [data-item]').length === 3 && !document.querySelector('[data-other-objects-dialog]'), {
+    label: 'described object',
+  })
   await saved()
   const described = (await stored()).items[2]
 
@@ -189,11 +254,11 @@ try {
   //     and a size; the P-shaped one is added in the chosen color, drawn as a P. Its parts resize one by one: the back
   //     run by its handle on the plan, the chaise in the inspector. Choosing its first type in the inspector makes it a
   //     three-seat sofa where it stands. Then it is deleted, so the room is as before.
-  await page.click('[data-catalog-section=openings] [data-section-toggle]')
-  const collapsed = await page.evaluate(() => !document.querySelector('[data-catalog="window"]'))
+  await page.click('[data-catalog-section=objects] [data-section-toggle]')
+  const collapsed = await page.evaluate(() => !document.querySelector('[data-catalog="sofa"]'))
 
-  await page.click('[data-catalog-section=openings] [data-section-toggle]')
-  await page.waitForSelector('[data-catalog="window"]')
+  await page.click('[data-catalog-section=objects] [data-section-toggle]')
+  await page.waitForSelector('[data-catalog="sofa"]')
   await page.click('[data-catalog="sofa"]')
   await page.waitForSelector('[data-add-object-dialog] [data-object-type]')
   const types = await page.evaluate(() => [...document.querySelectorAll('[data-add-object-dialog] [data-object-type]')].map((t) => t.dataset.objectType))
@@ -217,7 +282,7 @@ try {
   const corner = (await stored()).items[3]
   const drawnP = await page.evaluate(() => !!document.querySelector('[data-plan-canvas] [data-item="3"] polygon[data-form=PShaped]'))
 
-  step('Windows and doors collapse; clicking an object offers its types, a color, a material and a size, and adds the chosen one',
+  step('The room’s objects collapse; clicking an object offers its types, a color, a material and a size, and adds the chosen one',
     collapsed && types.join() === 'standard,corner,p-shaped' && corner.form === 'PShaped' && corner.width === 300 && corner.color === '#4A6274' && drawnP && !!corner.parts
       && firstMaterial === 'linen' && corner.material === 'wool',
     `collapsed ${collapsed}; types ${types}; ${corner.label} ${corner.width}×${corner.depth} ${corner.color} ${firstMaterial} → ${corner.material} ${JSON.stringify(corner.parts)}`)
@@ -276,8 +341,9 @@ try {
   await frame()
   await saved()
 
-  // 7c. On the plan, windows, doors and hung things can't be added (they go on a wall seen straight on): their buttons
-  //     are off and say how to open a wall. Clicking the back wall on the plan opens it in the Wall tab, and they work.
+  // 7c. On the plan, windows, doors and hung things aren't listed (they go on a wall seen straight on): a hint says how
+  //     to open a wall. Clicking the back wall on the plan opens it in the Wall tab, which lists them (and not the room's
+  //     objects), and they work.
   await page.click('[role=tab]::-p-text(Plan)')
   await page.waitForSelector('[data-plan-canvas]')
   const offOnPlan = await page.evaluate(() => ({
@@ -289,11 +355,17 @@ try {
 
   await page.click('[data-plan-wall="0"]')
   await page.waitForSelector('[data-wall-view="0"]')
-  const onInWall = await page.evaluate(() => ({ window: document.querySelector('[data-catalog="window"]')?.disabled, hints: document.querySelectorAll('[data-open-wall-hint]').length }))
+  const onInWall = await page.evaluate(() => ({
+    window: document.querySelector('[data-catalog="window"]')?.disabled,
+    sofa: document.querySelector('[data-catalog="sofa"]')?.disabled,
+    hints: document.querySelectorAll('[data-open-wall-hint]').length,
+    hangable: [...document.querySelectorAll('[data-catalog-section=mounted] [data-catalog]')].map((b) => b.dataset.catalog),
+  }))
 
-  step('On the plan, windows, doors and hung things are off with a hint; clicking a wall opens it in the Wall tab, where they work',
-    offOnPlan.window === true && offOnPlan.painting === true && offOnPlan.sofa === false && offOnPlan.hints === 2 && onInWall.window === false && onInWall.hints === 0
-      && (await stored()).view === 0,
+  step('On the plan, windows, doors and hung things aren\u2019t listed but a hint is; clicking a wall opens it in the Wall tab, which lists them only',
+    offOnPlan.window === undefined && offOnPlan.painting === undefined && offOnPlan.sofa === false && offOnPlan.hints === 1
+      && onInWall.window === false && onInWall.sofa === undefined && onInWall.hints === 0
+      && onInWall.hangable.slice(0, 3).join() === 'painting,mirror,wall-shelf' && onInWall.hangable.includes('radiator') && (await stored()).view === 0,
     JSON.stringify({ offOnPlan, onInWall }))
 
   // 8. A window: clicking it puts it on the wall shown (the back wall), straight on; dragging it there moves it along
@@ -563,6 +635,79 @@ try {
     closedHeading === 'Walls & ceiling: Paint' && new Set([backPicture, brickPicture, accentPicture, eveningPicture]).size === 4
       && finish.walls === 'Brick' && finish.accentWall === 3 && finish.accentFinish === 'Plaster' && finish.timeOfDay === 'Evening',
     `${closedHeading} | ${JSON.stringify(finish)}`)
+
+  // 10d. The floor's colors are its type's own, each swatch drawn in its pattern: carpet offers carpet colors, and one
+  //     picked is saved.
+  await page.click('[data-floor-type=Carpet]')
+  await saved()
+  const carpetColors = await page.$$eval('[aria-label="Floor color color"] [role=radio]', (b) => b.map((x) => x.getAttribute('aria-label')))
+  const drawnSwatches = await page.$$eval('[aria-label="Floor color color"] canvas', (c) => c.length)
+
+  await page.click('[aria-label="Floor color color"] [aria-label="Color #7A2E3A"]')
+  await saved()
+  const carpeted = await stored()
+
+  step('The floor offers its own type’s colors, drawn in its pattern, and the one picked is saved',
+    carpetColors.length === 16 && drawnSwatches === 16 && carpeted.floorType === 'Carpet' && carpeted.floorColor === '#7A2E3A',
+    `${carpetColors.length} colors, ${drawnSwatches} drawn, ${carpeted.floorType} ${carpeted.floorColor}`)
+
+  // 10e. Other: every room type's objects in a dialog, in a list per room that opens (the room's own open first, then
+  //     "Every room"... in order), searchable; the bathroom's glass shower shows the same choices as the room's own
+  //     objects in the dialog, and Add puts it in.
+  await page.click('[data-other-objects]')
+  await page.waitForSelector('[data-other-objects-dialog] [data-catalog]')
+  const groups = await page.$$eval('[data-other-group]', (g) => g.map((x) => `${x.dataset.otherGroup}${x.querySelector('[data-catalog]') ? '+' : ''}`))
+
+  await page.click('[data-other-toggle=Bathroom]')
+  const bathroom = await page.$$eval('[data-other-group=Bathroom] [data-catalog]', (b) => b.length)
+
+  await page.type('[data-other-search]', 'glass shower')
+  await until(page, () => document.querySelectorAll('[data-other-objects-dialog] [data-catalog]').length === 1, { label: 'searched' })
+  await page.click('[data-other-objects-dialog] [data-catalog=glass-shower]')
+  await page.waitForSelector('[data-other-objects-dialog] [data-add-object]')
+  const showerTypes = await page.$$eval('[data-other-objects-dialog] [data-object-type]', (b) => b.map((x) => x.dataset.objectType))
+  const before = (await stored()).items.length
+
+  await shot('builder-other-choices')
+  await clickInDialog('[data-other-objects-dialog] [data-add-object]')
+  await until(page, () => !document.querySelector('[data-other-objects-dialog]'), { label: 'other dialog closed' })
+  const withShower = await storedOnce((plan) => plan.items.length === before + 1)
+  const shower = withShower.items.find((i) => i.label === 'glass shower screen')
+
+  step('Other lists every room type\u2019s objects by room in lists that open (the room\u2019s own open), with search, and adds a bathroom\u2019s glass shower with its choices',
+    groups.join() === 'Every room,LivingRoom+,Bedroom,Kitchen,Bathroom,DiningRoom,HomeOffice,KidsRoom' && bathroom > 5
+      && showerTypes.join() === 'screen,cubicle,large' && withShower.items.length === before + 1 && shower?.form === 'GlassScreen',
+    `groups ${groups.join()}, bathroom ${bathroom}, types ${showerTypes.join()}, form ${shower?.form}`)
+
+  // 10f. A P-shaped corner sofa's leg and chaise move to the back's other end: the plan draws it mirrored, and it is saved.
+  await page.click('[role=tab]::-p-text(Plan)')
+  await page.click('[data-catalog=sofa]')
+  await page.waitForSelector('[data-add-object-dialog] [data-object-type=p-shaped]')
+  await clickInDialog('[data-add-object-dialog] [data-object-type=p-shaped]')
+  await clickInDialog('[data-add-object-dialog] [data-add-object]')
+  await until(page, () => !document.querySelector('[data-add-object-dialog]'), { label: 'sofa added' })
+  await page.waitForSelector('[data-leg-side=Left]')
+  await page.click('[data-leg-side=Left]')
+  const withSofa = await storedOnce((plan) => plan.items.some((i) => i.parts?.legLeft))
+  const pIndex = withSofa.items.findIndex((i) => i.form === 'PShaped')
+  const mirrored = await page.evaluate((i) => !!document.querySelector(`[data-plan-canvas] [data-item="${i}"] g[transform*="scale(-1"]`), pIndex)
+
+  await shot('builder-leg-left')
+  step('A corner sofa’s leg and chaise can go on the left: drawn mirrored and saved', mirrored && withSofa.items[pIndex]?.parts?.legLeft === true,
+    `mirrored ${mirrored}, parts ${JSON.stringify(withSofa.items[pIndex]?.parts)}`)
+
+  // 10g. With the sofa selected, Delete inside a dialog doesn't remove it (the shortcuts wait for the dialog to close).
+  await page.click('[data-catalog=sofa]')
+  await page.waitForSelector('[data-add-object-dialog] [data-object-type]')
+  await sleep(400)
+  await page.keyboard.press('Delete')
+  await sleep(1200)
+  const keptBehind = (await stored()).items.length
+
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-add-object-dialog]', { hidden: true })
+  step('Delete inside a dialog leaves the object selected behind it', keptBehind === withSofa.items.length, `${withSofa.items.length} → ${keptBehind}`)
+  await page.keyboard.press('Escape')
 
   // 11. Generate photo (the fake AI) shows a small picture of every view (each wall from the middle and both near
   //    corners), the room's own picked, and the style closed at "As planned"; with one more picked it makes two photos,

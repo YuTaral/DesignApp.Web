@@ -73,17 +73,19 @@ export type RoomFinish = {
 
 /**
  * The parts of an L- or P-shaped object in cm, before turning (mirrors ItemPartsRequest): the run along its whole back,
- * the corner leg at its right end, and a P's chaise at the leg's front end (0 for an L).
+ * the corner leg at its right end (or its left end, mirrored), and a P's chaise at the leg's front end (0 for an L).
  */
 export type ItemParts = {
   /** How deep the back run is (front to back). */
   runDepth: number
   /** How wide the corner leg is (left to right). */
   legWidth: number
-  /** How wide a P's chaise is, from the object's right side. */
+  /** How wide a P's chaise is, from the leg's side of the object. */
   chaiseWidth: number
   /** How deep a P's chaise is, from the object's front. */
   chaiseDepth: number
+  /** Whether the leg (and a P's chaise) is at the back run's left end: the whole outline mirrored. Right when missing. */
+  legLeft?: boolean
 }
 
 /** A corner of a built room's outline, in cm (mirrors OutlinePointRequest): across from the left, down from the top. */
@@ -199,16 +201,24 @@ export function usePlan(id: string | undefined) {
 }
 
 /**
- * Loads the common objects of a room type. They never change while the app runs.
+ * How the common objects of a room type are loaded: they never change while the app runs.
+ * @param roomType - The room type.
+ */
+export function catalogQuery(roomType: RoomType) {
+  return {
+    queryKey: QUERY_KEYS.catalog(roomType),
+    // Always from the server: a copy the browser kept from an older release would miss newer objects.
+    queryFn: ({ signal }: { signal: AbortSignal }) => getJson<CatalogObject[]>(API.builderCatalog(roomType), signal, "no-cache"),
+    staleTime: Infinity,
+  }
+}
+
+/**
+ * Loads the common objects of a room type.
  * @param roomType - The room type.
  */
 export function useCatalog(roomType: RoomType) {
-  return useQuery({
-    queryKey: QUERY_KEYS.catalog(roomType),
-    // Always from the server: a copy the browser kept from an older release would miss newer objects.
-    queryFn: ({ signal }) => getJson<CatalogObject[]>(API.builderCatalog(roomType), signal, "no-cache"),
-    staleTime: Infinity,
-  })
+  return useQuery(catalogQuery(roomType))
 }
 
 /**

@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
+import { SearchIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Input } from "@/components/ui/input"
@@ -59,13 +60,63 @@ export function NumberField({
 }
 
 /**
+ * A search box with a magnifier, cleared by its own button.
+ * @param props.value - What is typed.
+ * @param props.onChange - Takes what is typed.
+ * @param props.label - What it searches, for screen readers.
+ * @param props.placeholder - The hint shown while it is empty.
+ * @param props.attribute - The data attribute it carries (`data-<attribute>`), for tests.
+ */
+export function SearchField({
+  value,
+  onChange,
+  label,
+  placeholder,
+  attribute,
+}: {
+  value: string
+  onChange: (value: string) => void
+  label: string
+  placeholder: string
+  attribute: string
+}) {
+  return (
+    <div className="relative">
+      <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+      <Input
+        type="search"
+        value={value}
+        placeholder={placeholder}
+        aria-label={label}
+        className="pl-8"
+        onChange={(event) => onChange(event.target.value)}
+        {...{ [`data-${attribute}`]: true }}
+      />
+    </div>
+  )
+}
+
+/**
  * A color: swatches and any color.
  * @param props.label - What it colors.
  * @param props.value - The color in use.
  * @param props.colors - The swatches.
  * @param props.onPick - Takes a color.
+ * @param props.swatch - Draws a swatch in a color (a floor's pattern, say); a plain square of it when missing.
  */
-export function ColorChoice({ label, value, colors, onPick }: { label: string; value: string; colors: readonly string[]; onPick: (color: string) => void }) {
+export function ColorChoice({
+  label,
+  value,
+  colors,
+  onPick,
+  swatch,
+}: {
+  label: string
+  value: string
+  colors: readonly string[]
+  onPick: (color: string) => void
+  swatch?: (color: string) => ReactNode
+}) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
@@ -93,11 +144,13 @@ export function ColorChoice({ label, value, colors, onPick }: { label: string; v
             aria-label={`Color ${color}`}
             onClick={() => onPick(color)}
             className={cn(
-              "aspect-square rounded-md border shadow-soft outline-none transition-transform hover:scale-110 focus-visible:ring-3 focus-visible:ring-ring/50",
+              "aspect-square overflow-hidden rounded-md border shadow-soft outline-none transition-transform hover:scale-110 focus-visible:ring-3 focus-visible:ring-ring/50",
               value.toUpperCase() === color.toUpperCase() && "ring-2 ring-primary ring-offset-2 ring-offset-card"
             )}
             style={{ backgroundColor: color }}
-          />
+          >
+            {swatch?.(color)}
+          </button>
         ))}
       </div>
     </div>

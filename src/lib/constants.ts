@@ -279,10 +279,31 @@ export type ItemShape = (typeof ITEM_SHAPE)[keyof typeof ITEM_SHAPE]
  * whole back and a leg running forward at its right end (before turning), both `BUILDER.legShare` of its smaller side
  * deep; a P, an L whose leg widens at its front end into a chaise `BUILDER.chaiseShare` times as wide as the runs are
  * deep (corner sofas); or an ellipse (round when its width and depth are equal). A window may be arched (a round top),
- * and a box may be a shower's glass: a screen along part of its front, or a cubicle with glass on its front and right.
+ * and a box may be a shower's glass: a screen along part of its front, or a cubicle with glass on its front and right. A
+ * chair may be a swivel office chair: a five-star base on wheels, a gas column, a tall back and armrests.
  */
+/**
+ * The steps of Build a room after its two ways to start, in the address (`/build?step=walls`) so the browser's Back
+ * goes back a step: the walls, the floor, or a photo to read. None is the start, choosing a way.
+ */
+export const BUILD_STEP = { Walls: "walls", Floor: "floor", Photo: "photo" } as const
+
+export type BuildStep = (typeof BUILD_STEP)[keyof typeof BUILD_STEP]
+
+/** Which end of an L- or P-shaped object's back run its corner leg is at (ItemPartsRequest.LegLeft). */
+export const LEG_SIDE = { Left: "Left", Right: "Right" } as const
+
+export type LegSide = (typeof LEG_SIDE)[keyof typeof LEG_SIDE]
+
 export const ITEM_FORM = {
-  Standard: "Standard", LShaped: "LShaped", PShaped: "PShaped", Round: "Round", Arched: "Arched", GlassScreen: "GlassScreen", GlassCubicle: "GlassCubicle",
+  Standard: "Standard",
+  LShaped: "LShaped",
+  PShaped: "PShaped",
+  Round: "Round",
+  Arched: "Arched",
+  GlassScreen: "GlassScreen",
+  GlassCubicle: "GlassCubicle",
+  Swivel: "Swivel",
 } as const
 
 export type ItemForm = (typeof ITEM_FORM)[keyof typeof ITEM_FORM]
@@ -423,6 +444,8 @@ export const BUILDER = {
   maxDecorations: 8,
   decorationLength: 60,
   descriptionLength: 300,
+  /** How many objects a catalog list shows at first, and how many more each "Show more" adds. */
+  catalogPage: 10,
   /** The longest extra instructions for the photo (Application Constants.Builder.MaxInstructionsLength). */
   instructionsLength: 500,
   gridCm: 10,
@@ -511,10 +534,37 @@ export const BUILDER = {
     "#FFFFFF", "#F4F1EA", "#EFE6CF", "#E8E2D6", "#E8DCC8", "#D8C3A5", "#E9CFC7", "#F2D46B",
     "#C8C8C8", "#A8B89A", "#7D8B6A", "#9DB4C0", "#4A6274", "#2E4057", "#B5543C", "#3A3A3A",
   ],
-  floorColors: [
-    "#E8DCC8", "#D8C3A5", "#C9A27E", "#B89B7A", "#B8864B", "#8C6A4A", "#6B4A2E", "#4A3424",
-    "#F4F1EA", "#C8C8C8", "#A9A9A9", "#8A8580", "#5A5A5A", "#2F2C2A", "#9DB4C0", "#A8B89A",
-  ],
+  /** Colors offered for each floor type: the usual ones for what it is made of (any other can be picked too). */
+  floorColors: {
+    Wood: [
+      "#E8DCC8", "#D8C3A5", "#C9A27E", "#B89B7A", "#B8864B", "#8C6A4A", "#6B4A2E", "#4A3424",
+      "#F4F1EA", "#D9C7A8", "#C8C8C8", "#A9A9A9", "#8A8580", "#5A5A5A", "#2F2C2A", "#A0522D",
+    ],
+    Parquet: [
+      "#E8DCC8", "#D9B88F", "#C9A27E", "#B89B7A", "#B8864B", "#A0703F", "#8C6A4A", "#6B4A2E",
+      "#4A3424", "#F4F1EA", "#D8C3A5", "#C8B8A0", "#8A8580", "#5A5A5A", "#2F2C2A", "#7A3E2A",
+    ],
+    Tiles: [
+      "#FFFFFF", "#F4F1EA", "#E8E2D6", "#D8D2C6", "#C8C8C8", "#A9A9A9", "#8A8580", "#5A5A5A",
+      "#2F2C2A", "#1E1E1E", "#C8704A", "#B5543C", "#9DB4C0", "#4A6274", "#A8B89A", "#2E4057",
+    ],
+    Stone: [
+      "#F4F1EA", "#E8E2D6", "#D8CFC0", "#C9BBA5", "#B8A88E", "#A89A86", "#C8C8C8", "#9A9A9A",
+      "#7A7A78", "#5A5A5A", "#3E3E3E", "#2A2A2A", "#8C7B6B", "#6B5B4B", "#A8B0B8", "#556270",
+    ],
+    Concrete: [
+      "#E0DED8", "#D0CEC8", "#C0BEB8", "#B0AEA8", "#A09E98", "#8F8D88", "#7E7C78", "#6E6C68",
+      "#5E5C58", "#4E4C48", "#3E3C38", "#2E2C2A", "#C8C0B0", "#B8B0A0", "#A8B0B0", "#98A0A0",
+    ],
+    Carpet: [
+      "#F4F1EA", "#E8DCC8", "#D8C3A5", "#C8B8A0", "#A89A86", "#8A8580", "#5A5A5A", "#2F2C2A",
+      "#9DB4C0", "#4A6274", "#2E4057", "#A8B89A", "#4F6B3A", "#B5543C", "#7A2E3A", "#C9A27E",
+    ],
+    Vinyl: [
+      "#E8DCC8", "#D8C3A5", "#C9A27E", "#B89B7A", "#B8864B", "#8C6A4A", "#6B4A2E", "#4A3424",
+      "#F4F1EA", "#D8D2C6", "#C8C8C8", "#A9A9A9", "#8A8580", "#5A5A5A", "#2F2C2A", "#9DB4C0",
+    ],
+  },
   /** Colors offered for the ceiling. */
   ceilingColors: [
     "#FFFFFF", "#FAFAF7", "#F4F1EA", "#EFE6CF", "#E8DCC8", "#E8E2D6", "#D8C3A5", "#C8C8C8",

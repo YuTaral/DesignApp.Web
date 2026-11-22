@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 
 import { BUILDER, ITEM_FORM, ITEM_SHAPE, WALL_FINISH } from "@/lib/constants"
 import type { ItemBox, Plan, PlanItem, PlanShot } from "./api"
-import { hasParts, isMountedShape, isWallItem, partsOf } from "./builder-store"
+import { hasParts, isMountedShape, isWallItem, legSide, partsOf } from "./builder-store"
 import { cameraStand, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
 import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
@@ -644,6 +644,9 @@ function model(item: PlanItem) {
       end.position.set((item.width - chaiseWidth) / 200, 0, (item.depth - front) / 200)
       group.add(end)
     }
+
+    // A leg on the left: the whole model mirrored across its middle (three.js turns the faces round for it).
+    group.scale.x = legSide(item)
   } else {
     group = piece(item, {})
   }
@@ -813,6 +816,40 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       break
     }
     case ITEM_SHAPE.Chair: {
+      if (item.form === ITEM_FORM.Swivel) {
+        // An office chair: five spokes on wheels, a gas column, a padded seat, a tall back leaning slightly back, and
+        // two armrests on posts, so the photo shows an office chair rather than a dining chair.
+        const seat = Math.min(0.5, h * 0.42)
+        const metal = new THREE.MeshStandardMaterial({ color: BUILDER.scene.metal, roughness: 0.35, metalness: 0.8 })
+        const reach = Math.min(w, d) / 2
+        const pad = Math.min(0.08, (h - seat) * 0.2)
+        const backHeight = h - seat - pad
+
+        for (let i = 0; i < 5; i++) {
+          const turn = (i * 2 * Math.PI) / 5
+          const spoke = block(reach, 0.03, 0.04, (Math.sin(turn) * reach) / 2, 0.07, (Math.cos(turn) * reach) / 2, darker)
+          const wheel = block(1, 1, 1, Math.sin(turn) * reach * 0.95, 0.03, Math.cos(turn) * reach * 0.95, darker, new THREE.SphereGeometry(0.5, 12, 8))
+
+          spoke.rotation.y = turn - Math.PI / 2
+          wheel.scale.set(0.05, 0.05, 0.05)
+        }
+
+        const column = block(1, 1, 1, 0, (0.08 + seat - pad) / 2, 0, metal, new THREE.CylinderGeometry(0.5, 0.5, 1, 16))
+
+        column.scale.set(0.05, seat - pad - 0.08, 0.05)
+        soft(w * 0.9, pad, d * 0.85, 0, seat - pad / 2, d * 0.05)
+        const back = soft(w * 0.85, backHeight, 0.06, 0, seat + backHeight / 2, -d / 2 + 0.06)
+
+        back.rotation.x = -0.1
+
+        for (const side of [-1, 1]) {
+          block(0.03, 0.2, 0.03, side * (w / 2 - 0.04), seat + 0.1, 0, darker)
+          block(0.06, 0.03, d * 0.45, side * (w / 2 - 0.04), seat + 0.21, 0, darker)
+        }
+
+        break
+      }
+
       // A seat on four legs and an open back (two posts, a top rail and a slat), so it reads as a chair from any side,
       // even from behind (a solid back panel turned into a wooden block).
       const seat = Math.min(0.46, h * 0.55)

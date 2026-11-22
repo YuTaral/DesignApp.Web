@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useNavigate } from "@tanstack/react-router"
+import { useNavigate, useSearch } from "@tanstack/react-router"
 import { ArrowLeftIcon, ArrowRightIcon, BoxIcon, ImageIcon, LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
@@ -8,27 +8,27 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createPlan } from "@/features/builder/api"
-import { FloorChoice } from "@/features/builder/floor-choice"
+import { FloorChoice, FloorColorChoice } from "@/features/builder/floor-choice"
 import { PhotoStart } from "@/features/builder/photo-start"
 import { ColorChoice, NumberField } from "@/features/builder/fields"
 import { useAiAvailability } from "@/features/rooms/api"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
 import { errorMessage } from "@/lib/api"
-import { BUILDER, FLOOR_TYPE_NAMES, ROOM_TYPE, ROOM_TYPE_NAMES, ROUTES, type FloorType, type RoomType } from "@/lib/constants"
+import { BUILD_STEP, BUILDER, FLOOR_TYPE_NAMES, ROOM_TYPE, ROOM_TYPE_NAMES, ROUTES, type BuildStep, type FloorType, type RoomType } from "@/lib/constants"
 
 /** The steps before the floor plan: how to start, then the walls and the floor, or the photo. */
-type Step = "start" | "walls" | "floor" | "photo"
+type Step = "start" | BuildStep
 
 /** The two ways to start, each with what it does. */
 const STARTS = [
   {
-    step: "walls",
+    step: BUILD_STEP.Walls,
     icon: BoxIcon,
     title: "Design in 3D, then make a photo",
     text: "Set the walls and floor, place windows, doors and furniture on a plan, and the AI turns the 3D view into a realistic photo.",
   },
   {
-    step: "photo",
+    step: BUILD_STEP.Photo,
     icon: ImageIcon,
     title: "Start from a photo",
     text: "Upload a photo of a room: the AI reads it into a 3D plan you can rearrange, refurnish and restyle, then photograph again.",
@@ -45,7 +45,7 @@ export function BuildPage() {
   const navigate = useNavigate()
   const availability = useAiAvailability().data
   const [ai] = useAiChoice(availability)
-  const [step, setStep] = useState<Step>("start")
+  const step: Step = useSearch({ from: ROUTES.build }).step ?? "start"
   const [roomType, setRoomType] = useState<RoomType>(BUILDER.start.roomType)
   const [name, setName] = useState("")
   const [walls, setWalls] = useState<{ width: number; length: number; height: number }>({ width: BUILDER.start.width, length: BUILDER.start.length, height: BUILDER.start.height })
@@ -53,6 +53,11 @@ export function BuildPage() {
   const [floor, setFloor] = useState<{ type: FloorType; color: string }>({ type: BUILDER.start.floorType, color: BUILDER.start.floor })
   const [furnish, setFurnish] = useState(true)
   const [busy, setBusy] = useState(false)
+
+  /** Goes to a step, as a new page in the browser's history (so Back comes back). */
+  const setStep = (next: Step) => {
+    void navigate({ to: ROUTES.build, search: { step: next === "start" ? undefined : next } })
+  }
 
   const start = async () => {
     setBusy(true)
@@ -80,7 +85,7 @@ export function BuildPage() {
     </Button>
   )
 
-  if (step === "start" || step === "photo") {
+  if (step === "start" || step === BUILD_STEP.Photo) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-10 sm:px-6" data-build-step={step}>
         <div>
@@ -126,24 +131,24 @@ export function BuildPage() {
         onSubmit={(event) => {
           event.preventDefault()
 
-          if (step === "walls") {
-            setStep("floor")
+          if (step === BUILD_STEP.Walls) {
+            setStep(BUILD_STEP.Floor)
           } else {
             void start()
           }
         }}
       >
         <div>
-          <p className="text-sm text-muted-foreground">Step {step === "walls" ? 1 : 2} of 3</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-balance">{step === "walls" ? "Build a room" : "Choose the floor"}</h1>
+          <p className="text-sm text-muted-foreground">Step {step === BUILD_STEP.Walls ? 1 : 2} of 3</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-balance">{step === BUILD_STEP.Walls ? "Build a room" : "Choose the floor"}</h1>
           <p className="mt-2 text-muted-foreground">
-            {step === "walls"
+            {step === BUILD_STEP.Walls
               ? "Start with the walls. Then choose the floor, place the windows, doors and furniture, and make a photo of it."
               : "What the floor is made of, and its color. You can change both later."}
           </p>
         </div>
 
-        {step === "walls" ? (
+        {step === BUILD_STEP.Walls ? (
           <>
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Room type</legend>
@@ -199,7 +204,7 @@ export function BuildPage() {
               <FloorChoice value={floor.type} color={floor.color} onPick={(type) => setFloor({ ...floor, type })} />
             </div>
             <div className="max-w-md">
-              <ColorChoice label="Floor color" value={floor.color} colors={BUILDER.floorColors} onPick={(color) => setFloor({ ...floor, color })} />
+              <FloorColorChoice type={floor.type} value={floor.color} onPick={(color) => setFloor({ ...floor, color })} />
             </div>
             <label className="flex max-w-md items-start gap-3 rounded-xl border p-3 text-sm" data-furnish>
               <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={furnish} onChange={(event) => setFurnish(event.target.checked)} />
@@ -212,7 +217,7 @@ export function BuildPage() {
               </span>
             </label>
             <div className="flex flex-wrap gap-2">
-              {back("walls")}
+              {back(BUILD_STEP.Walls)}
               <Button type="submit" size="lg" disabled={busy}>
                 {busy ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : null}
                 Next: place the furniture
@@ -233,7 +238,7 @@ export function BuildPage() {
         </div>
         <figcaption className="text-center text-sm text-muted-foreground tabular-nums">
           {walls.width} × {walls.length} m · {Math.round(walls.width * walls.length * 10) / 10} m²
-          {step === "floor" && <span className="block">{FLOOR_TYPE_NAMES[floor.type]}</span>}
+          {step === BUILD_STEP.Floor && <span className="block">{FLOOR_TYPE_NAMES[floor.type]}</span>}
         </figcaption>
       </figure>
     </div>

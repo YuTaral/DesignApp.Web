@@ -1,11 +1,12 @@
 import { useState } from "react"
-import { PlusIcon } from "lucide-react"
+import { ArrowLeftIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { BUILDER, ITEM_FORM, MESSAGES, SWATCHES } from "@/lib/constants"
+import { withArticle } from "@/lib/utils"
 import type { CatalogObject, CatalogVariant, Plan } from "./api"
 import { cornerOutline, hasParts, inVariation, isMountedShape, isWallShape, useBuilderStore } from "./builder-store"
 import { DecorationChoice } from "./decoration-choice"
@@ -35,20 +36,34 @@ export function AddObjectDialog({ plan, object, wall, onClose }: { plan: Plan; o
           ;(event.currentTarget as HTMLElement).querySelector<HTMLElement>("[role=radio][aria-checked=true]")?.focus()
         }}
       >
-        {object && <Choices key={object.key} plan={plan} object={object} wall={wall ?? plan.view} onClose={onClose} />}
+        {object && <AddObjectChoices key={object.key} plan={plan} object={object} wall={wall ?? plan.view} onClose={onClose} />}
       </DialogContent>
     </Dialog>
   )
 }
 
 /**
- * The dialog's choices for one catalog object; they start from its first type and its usual color and material.
+ * A dialog's choices for one catalog object, then "Add" puts it in; they start from its first type and its usual color
+ * and material. Shown by {@link AddObjectDialog}, and inside the Other dialog after picking an object there.
  * @param props.plan - The room being built.
  * @param props.object - The catalog object.
  * @param props.wall - The wall a window, door or hung thing goes on.
- * @param props.onClose - Closes the dialog.
+ * @param props.onClose - Closes the dialog (after adding, or on Cancel).
+ * @param props.onBack - Goes back to where the object was picked; given, it takes Cancel's place.
  */
-function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogObject; wall: number; onClose: () => void }) {
+export function AddObjectChoices({
+  plan,
+  object,
+  wall,
+  onClose,
+  onBack,
+}: {
+  plan: Plan
+  object: CatalogObject
+  wall: number
+  onClose: () => void
+  onBack?: () => void
+}) {
   const add = useBuilderStore((state) => state.add)
   const variants = object.variants
   const [chosen, setChosen] = useState(0)
@@ -79,7 +94,7 @@ function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogO
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Add a {variant.label}</DialogTitle>
+        <DialogTitle>Add {withArticle(variant.label)}</DialogTitle>
         <DialogDescription>Choose its type, color, material, size and decorations. You can change all of them later, and move it on the plan.</DialogDescription>
       </DialogHeader>
 
@@ -130,9 +145,16 @@ function Choices({ plan, object, wall, onClose }: { plan: Plan; object: CatalogO
       <DecorationChoice suggestions={object.decorations ?? []} value={decorations} onChange={setDecorations} />
 
       <DialogFooter className="gap-2">
-        <Button variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
+        {onBack ? (
+          <Button variant="outline" onClick={onBack} data-add-back>
+            <ArrowLeftIcon data-icon="inline-start" />
+            Back
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        )}
         <Button onClick={confirm} data-add-object>
           <PlusIcon data-icon="inline-start" />
           Add {name}

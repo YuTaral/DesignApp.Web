@@ -12,7 +12,7 @@ import type { Plan, PlanShot } from "./api"
 import { keyOf, viewName, type Made, type Picture } from "./generate-views"
 import { PhotoResults } from "./photo-results"
 import { PhotoStyleChoice } from "./photo-style-choice"
-import { cameraPlaces, walls } from "./room-outline"
+import { cameraPlaces, cameraSpotOf, walls } from "./room-outline"
 import { drawViewPictures } from "./scene-3d"
 import { ViewPicker } from "./view-picker"
 
@@ -53,7 +53,7 @@ export function GenerateDialog({
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [made, setMade] = useState<Made[] | null>(null)
   const making = made?.some((m) => m.state === "making") ?? false
-  const shots = walls(plan).flatMap((wall) => cameraPlaces(!!plan.cameraSpot).map((corner) => ({ view: wall.index, corner })))
+  const shots = walls(plan).flatMap((wall) => cameraPlaces(!!cameraSpotOf(plan)).map((corner) => ({ view: wall.index, corner })))
   const count = chosen.size
   const real = plan.aiMode === AI_MODE.Real
 
