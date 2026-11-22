@@ -293,7 +293,7 @@ function PartsList({ room, whole, parts }: { room: Room; whole: DetectedObject; 
               onChange={(event) => setInstructions(event.target.value)}
             />
           </div>
-          <Button variant="outline" className="w-full" disabled={finding} onClick={() => void find(whole, instructions)}>
+          <Button variant="outline" className="w-full" once disabled={finding} onClick={() => void find(whole, instructions)}>
             {finding ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : <SparklesIcon data-icon="inline-start" />}
             Recognize parts
           </Button>
@@ -329,7 +329,7 @@ function PartsList({ room, whole, parts }: { room: Room; whole: DetectedObject; 
         </>
       )}
       {chosen && (
-        <Button variant="ghost" size="sm" className="w-full" disabled={merging} onClick={() => void merge(chosen)}>
+        <Button variant="ghost" size="sm" className="w-full" once disabled={merging} onClick={() => void merge(chosen)}>
           {merging ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : <CombineIcon data-icon="inline-start" />}
           <span className="truncate first-letter:uppercase">Merge {chosen.label} into the {whole.label}</span>
         </Button>

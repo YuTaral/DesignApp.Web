@@ -707,6 +707,28 @@ try {
   await page.keyboard.press('Escape')
   await page.waitForSelector('[data-add-object-dialog]', { hidden: true })
   step('Delete inside a dialog leaves the object selected behind it', keptBehind === withSofa.items.length, `${withSofa.items.length} → ${keptBehind}`)
+
+  // 10h. A double-click on Add (as a browser sends it: the second click counted as such) adds one object, not two; the
+  //     buttons that send a request ignore a double-click's second click the same way.
+  await page.click('[data-catalog=sofa]')
+  await page.waitForSelector('[data-add-object-dialog] [data-add-object]')
+  await sleep(400)
+  const addAt = await page.$eval('[data-add-object-dialog] [data-add-object]', (b) => {
+    b.scrollIntoView({ block: 'center' })
+    const r = b.getBoundingClientRect()
+
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+
+  await page.mouse.click(addAt.x, addAt.y)
+  await sleep(40)
+  await page.mouse.click(addAt.x, addAt.y, { clickCount: 2 })
+  const doubled = await storedOnce((plan) => plan.items.length > keptBehind)
+
+  await sleep(1500)
+  const afterDouble = (await stored()).items.length
+
+  step('A double-click on Add adds one object', doubled.items.length === keptBehind + 1 && afterDouble === keptBehind + 1, `${keptBehind} → ${afterDouble}`)
   await page.keyboard.press('Escape')
 
   // 11. Generate photo (the fake AI) shows a small picture of every view (each wall from the middle and both near

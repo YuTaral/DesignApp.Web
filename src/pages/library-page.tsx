@@ -21,6 +21,7 @@ import { useAiAvailability } from "@/features/rooms/api"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
 import { apiUrl, errorMessage } from "@/lib/api"
 import { MESSAGES, ROUTES } from "@/lib/constants"
+import { isRepeatClick } from "@/lib/utils"
 
 /** A room whose layouts are being chosen from. */
 type Choosing = { house: LibraryDesign; room: LibraryRoom }
@@ -230,7 +231,7 @@ function HouseSection({
         </div>
         {!addingToDesign &&
           (signedIn ? (
-            <Button onClick={onUseHouse} disabled={busy}>
+            <Button once onClick={onUseHouse} disabled={busy}>
               {savingHouse ? <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" data-icon="inline-start" /> : <LayoutGridIcon data-icon="inline-start" />}
               Use the whole house
             </Button>
@@ -249,7 +250,7 @@ function HouseSection({
           <li key={room.id}>
             <button
               type="button"
-              onClick={() => onOpenRoom(room)}
+              onClick={(event) => !isRepeatClick(event) && onOpenRoom(room)}
               disabled={busy}
               aria-label={`Try the ${room.title.toLowerCase()} of the ${house.name}`}
               data-room={room.id}
@@ -317,7 +318,7 @@ function LayoutDialog({
                 <li key={layout.id}>
                   <button
                     type="button"
-                    onClick={() => onPick(layout)}
+                    onClick={(event) => !isRepeatClick(event) && onPick(layout)}
                     disabled={busy}
                     aria-label={`Layout ${i + 1}`}
                     data-layout={layout.id}

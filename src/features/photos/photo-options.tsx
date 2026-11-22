@@ -10,6 +10,7 @@ import { useChangeTake } from "@/features/rooms/api"
 import type { PhotoTake, Room } from "@/features/rooms/types"
 import { errorMessage } from "@/lib/api"
 import { AI_MODE, BUILDER, MESSAGES, ROOM_STATUS } from "@/lib/constants"
+import { isRepeatClick } from "@/lib/utils"
 
 /**
  * One of the photo page's options: a large button with an icon, a title and a short description, and what it opens
@@ -48,7 +49,7 @@ function OptionButton({
         type="button"
         aria-expanded={children === undefined ? undefined : open}
         disabled={busy}
-        onClick={onClick}
+        onClick={(event) => !isRepeatClick(event) && onClick()}
         className="flex w-full items-start gap-3 rounded-2xl p-4 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
       >
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
@@ -116,7 +117,7 @@ export function ChangeOption({ room, take, onChanged }: { room: Room; take: Phot
           ? "Uses the real AI (FLUX 3 Image Klein on fal.ai): about 1 cent and a few seconds."
           : "Uses the fake AI: the new version looks the same as this one."}
       </p>
-      <Button className="w-full" disabled={words.trim().length === 0 || change.isPending} onClick={submit} data-make-change>
+      <Button className="w-full" once disabled={words.trim().length === 0 || change.isPending} onClick={submit} data-make-change>
         {change.isPending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
         Make the change
       </Button>

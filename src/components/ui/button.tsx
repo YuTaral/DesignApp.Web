@@ -3,6 +3,8 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 import { Slot } from "radix-ui"
 
+import { isRepeatClick } from "@/lib/utils"
+
 /** Button styles by `variant` and `size`; also usable on links. */
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -41,18 +43,35 @@ const buttonVariants = cva(
   }
 )
 
-/** The app's button. `asChild` renders the styles on the child (e.g. a Link). Takes the props of the underlying element. */
+/**
+ * The app's button. `asChild` renders the styles on the child (e.g. a Link). Takes the props of the underlying element.
+ * `once` ignores the second click of a double-click (and doesn't submit its form again): for buttons that send a
+ * request, as a quick one can finish, and the button come back on, between the two clicks.
+ */
 function Button({
   className,
   variant = "default",
   size = "default",
   asChild = false,
+  once = false,
+  onClick,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    once?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
+
+  const click = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (once && isRepeatClick(event)) {
+      event.preventDefault()
+
+      return
+    }
+
+    onClick?.(event)
+  }
 
   return (
     <Comp
@@ -60,6 +79,7 @@ function Button({
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
+      onClick={click}
       {...props}
     />
   )

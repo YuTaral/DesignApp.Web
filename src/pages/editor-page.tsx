@@ -427,7 +427,7 @@ function SaveDesign({ room, editable, design }: { room: Room; editable: boolean;
 
     return (
       <div className="space-y-2">
-        <Button size="lg" className="w-full" disabled={!editable || !dirty || saveColors.isPending} onClick={save}>
+        <Button size="lg" className="w-full" once disabled={!editable || !dirty || saveColors.isPending} onClick={save}>
           {saveColors.isPending ? (
             <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
           ) : dirty ? (
@@ -582,7 +582,7 @@ function SaveToDesignForm({ room, edits, sizes, onDone }: { room: Room; edits: E
         <Button type="button" variant="ghost" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={!canSave || pending}>
+        <Button type="submit" once disabled={!canSave || pending || create.isSuccess || addRoom.isSuccess}>
           {pending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
           Save
         </Button>

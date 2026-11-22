@@ -106,7 +106,7 @@ export function NewObjectPanel({ room }: { room: Room }) {
         <Button type="button" variant="outline" disabled={saving} onClick={stopMarking}>
           Cancel
         </Button>
-        <Button type="submit" disabled={!canSave}>
+        <Button type="submit" once disabled={!canSave}>
           {saving && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
           Save
         </Button>

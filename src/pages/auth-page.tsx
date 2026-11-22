@@ -47,7 +47,7 @@ function AuthPage({ mode, redirect }: { mode: "sign-in" | "sign-up"; redirect?: 
             <Button size="lg" asChild>
               <Link to={safeRedirect(redirect)}>Continue</Link>
             </Button>
-            <Button variant="ghost" disabled={signOut.isPending} onClick={() => signOut.mutate()}>
+            <Button variant="ghost" once disabled={signOut.isPending} onClick={() => signOut.mutate()}>
               Use another account
             </Button>
           </div>
@@ -175,7 +175,7 @@ function AuthForm({ mode, redirect, onSubmitted }: { mode: "sign-in" | "sign-up"
             </p>
           )}
 
-          <Button type="submit" size="lg" className="w-full" disabled={submit.isPending}>
+          <Button type="submit" size="lg" className="w-full" once disabled={submit.isPending}>
             {submit.isPending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
             {submit.isPending ? text.busy : text.submit}
           </Button>

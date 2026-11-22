@@ -53,7 +53,7 @@ export function DescribeObject({ plan, disabled, onAdded }: { plan: Plan; disabl
         placeholder="Such as: a round oak coffee table, about 90 cm"
         onChange={(event) => setText(event.target.value)}
       />
-      <Button variant="outline" className="w-full" disabled={busy || disabled || text.trim().length === 0} onClick={() => void describe()}>
+      <Button variant="outline" className="w-full" once disabled={busy || disabled || text.trim().length === 0} onClick={() => void describe()}>
         {busy ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : <SparklesIcon data-icon="inline-start" />}
         Add it
       </Button>

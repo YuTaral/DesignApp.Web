@@ -105,7 +105,7 @@ function RemoveObjectSection({ room, object }: { room: Room; object: DetectedObj
         </fieldset>
       )}
 
-      <Button variant="outline" className="w-full" disabled={removing} onClick={() => void remove(together)}>
+      <Button variant="outline" className="w-full" once disabled={removing} onClick={() => void remove(together)}>
         {removing ? (
           <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
         ) : (

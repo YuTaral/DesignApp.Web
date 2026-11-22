@@ -69,7 +69,7 @@ function AnalysisWaiting({ room }: { room: Room }) {
         This photo isn't analyzed yet. Analyze it to find the walls and objects you can recolor
         {room.aiMode === AI_MODE.Real ? " (it uses the real AI, which costs money)." : "."}
       </p>
-      <Button size="lg" className="mt-3 w-full" disabled={starting} onClick={() => void start()}>
+      <Button size="lg" className="mt-3 w-full" once disabled={starting} onClick={() => void start()}>
         {starting ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : <ScanSearchIcon data-icon="inline-start" />}
         Analyze photo
       </Button>

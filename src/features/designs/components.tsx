@@ -139,7 +139,7 @@ function DesignDetailsForm({ design, onDone }: { design: Design; onDone: () => v
         <Button type="button" variant="ghost" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={name.trim().length === 0 || edit.isPending}>
+        <Button type="submit" once disabled={name.trim().length === 0 || edit.isPending || edit.isSuccess}>
           {edit.isPending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
           Save
         </Button>
@@ -235,7 +235,7 @@ export function ConfirmDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="destructive" disabled={pending} onClick={onConfirm}>
+          <Button variant="destructive" once disabled={pending} onClick={onConfirm}>
             {pending && <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
             {action}
           </Button>

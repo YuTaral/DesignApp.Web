@@ -218,7 +218,7 @@ export function BuildPage() {
             </label>
             <div className="flex flex-wrap gap-2">
               {back(BUILD_STEP.Walls)}
-              <Button type="submit" size="lg" disabled={busy}>
+              <Button type="submit" size="lg" once disabled={busy}>
                 {busy ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : null}
                 Next: place the furniture
                 <ArrowRightIcon data-icon="inline-end" />

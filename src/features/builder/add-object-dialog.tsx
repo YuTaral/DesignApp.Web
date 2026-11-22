@@ -155,7 +155,7 @@ export function AddObjectChoices({
             Cancel
           </Button>
         )}
-        <Button onClick={confirm} data-add-object>
+        <Button once onClick={confirm} data-add-object>
           <PlusIcon data-icon="inline-start" />
           Add {name}
         </Button>

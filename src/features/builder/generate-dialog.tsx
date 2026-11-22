@@ -205,7 +205,7 @@ export function GenerateDialog({
                 <Button variant="outline" onClick={close}>
                   Cancel
                 </Button>
-                <Button disabled={count === 0 || !drawn || failed} onClick={() => void start()} data-generate-confirm>
+                <Button once disabled={count === 0 || !drawn || failed} onClick={() => void start()} data-generate-confirm>
                   <ImageIcon data-icon="inline-start" />
                   {count <= 1 ? "Generate photo" : `Generate ${count} photos`}
                 </Button>
