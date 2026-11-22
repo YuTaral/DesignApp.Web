@@ -167,7 +167,7 @@ export function contains(plan: Shaped, x: number, y: number) {
  * @param plan - The room.
  * @returns The point in plan centimetres; the way it looks (`lookX`, `lookY`, a unit step on the plan); how far away
  *   the wall in view is (`deep`) and how far from it the camera stands (`stand`); how wide the room is across the view
- *   (`across`); the wall behind the camera; and where it stands (`corner`).
+ *   (`across`); the wall behind the camera; where it stands (`corner`); and its fixed lens (`fov`, or null to fit).
  */
 export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Plan, "corner" | "cameraSpot">>) {
   const all = walls(plan)
@@ -186,29 +186,22 @@ export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Pla
   const across = view.dx !== 0 ? Math.max(...xs) - Math.min(...xs) : Math.max(...ys) - Math.min(...ys)
   // Along the wall in view (the photo's right), from its left end.
   const along = (p: { x: number; y: number }) => (p.x - view.start.x) * view.dx + (p.y - view.start.y) * view.dy
-  const spot = plan.corner === VIEW_CORNER.Spot ? plan.cameraSpot : null
-  // How far in front of the wall in view the spot is: a spot on or behind it isn't used.
-  const ahead = spot ? (spot.x - view.start.x) * view.nx + (spot.y - view.start.y) * view.ny : 0
-  const corner = plan.corner === VIEW_CORNER.Spot && ahead <= inset ? VIEW_CORNER.None : (plan.corner ?? VIEW_CORNER.None)
-  // Turned to the right (towards the room) from the left corner, to the left from the right one.
-  const turn = DEGREE * (corner === VIEW_CORNER.Left ? BUILDER.scene.cornerTurn : corner === VIEW_CORNER.Right ? -BUILDER.scene.cornerTurn : 0)
-  const stand = corner === VIEW_CORNER.Spot ? ahead : deep - inset
-  let at = along(middle)
-
-  if (spot && corner === VIEW_CORNER.Spot) {
-    // From the spot, turned towards the wall's middle.
-    const [toX, toY] = [middle.x - spot.x, middle.y - spot.y]
-    const length = Math.hypot(toX, toY)
-
-    return { x: spot.x, y: spot.y, lookX: toX / length, lookY: toY / length, deep, stand, across, behind: facing?.wall.index ?? -1, corner }
+  // The near wall's ends (the room's sides when there is none), and the spot, if any.
+  const ends = facing ? [along(facing.wall.start), along(facing.wall.end)] : plan.outline.map(along)
+  const spot = plan.cameraSpot
+  const geometry: ViewGeometry = {
+    middle: along(middle),
+    nearLeft: Math.min(...ends),
+    nearRight: Math.max(...ends),
+    deep,
+    inset,
+    spot: spot ? { at: along(spot), ahead: (spot.x - view.start.x) * view.nx + (spot.y - view.start.y) * view.ny } : null,
   }
-
-  if (corner === VIEW_CORNER.Left || corner === VIEW_CORNER.Right) {
-    // The near wall's ends (the room's sides when there is none), a little in from the side wall.
-    const ends = facing ? [along(facing.wall.start), along(facing.wall.end)] : plan.outline.map(along)
-
-    at = corner === VIEW_CORNER.Left ? Math.min(...ends) + inset : Math.max(...ends) - inset
-  }
+  // The place chosen; the middle when it can't be used (a spot behind the wall in view, or none).
+  const chosen = plan.corner ?? VIEW_CORNER.None
+  const pose = CAMERA_PLACES[chosen](geometry)
+  const corner = pose ? chosen : VIEW_CORNER.None
+  const { at, stand, turn, fov } = pose ?? CAMERA_PLACES.None(geometry)!
 
   return {
     x: view.start.x + view.dx * at + view.nx * stand,
@@ -220,7 +213,48 @@ export function cameraStand(plan: Shaped & Pick<Plan, "view"> & Partial<Pick<Pla
     across,
     behind: facing?.wall.index ?? -1,
     corner,
+    fov,
   }
+}
+
+/**
+ * A room as seen looking at one of its walls, in cm along that wall from its left end: its middle, the near wall's
+ * ends, how deep the room is, how far in from the walls a camera stands, and the camera spot if any (along the wall,
+ * and how far in front of it).
+ */
+type ViewGeometry = {
+  middle: number
+  nearLeft: number
+  nearRight: number
+  deep: number
+  inset: number
+  spot: { at: number; ahead: number } | null
+}
+
+/**
+ * Where a camera stands and how it looks: along the wall in view (`at`), how far in front of it (`stand`), how far it
+ * is turned to the right (`turn`, radians), and its fixed horizontal view in degrees (`fov`; null fits the room).
+ */
+type CameraPose = { at: number; stand: number; turn: number; fov: number | null }
+
+/**
+ * The places the camera can stand (mirrors the API's CameraPlace classes): each gives its pose in a room, or null when
+ * it can't be used there. A new place is a new entry here and in `VIEW_CORNER`.
+ */
+const CAMERA_PLACES: Record<ViewCorner, (view: ViewGeometry) => CameraPose | null> = {
+  // Straight across from the middle of the wall in view, a little in front of the near wall.
+  None: (view) => ({ at: view.middle, stand: view.deep - view.inset, turn: 0, fov: null }),
+  // In a near corner, a little in from both walls, turned towards the room through a fixed wide lens.
+  Left: (view) => ({ at: view.nearLeft + view.inset, stand: view.deep - view.inset, turn: DEGREE * BUILDER.scene.cornerTurn, fov: BUILDER.scene.cornerFov }),
+  Right: (view) => ({ at: view.nearRight - view.inset, stand: view.deep - view.inset, turn: -DEGREE * BUILDER.scene.cornerTurn, fov: BUILDER.scene.cornerFov }),
+  // At the spot a photo was taken from, turned towards the middle of the wall in view.
+  Spot: (view) => {
+    if (!view.spot || view.spot.ahead <= view.inset) {
+      return null
+    }
+
+    return { at: view.spot.at, stand: view.spot.ahead, turn: Math.atan2(view.middle - view.spot.at, Math.max(BUILDER.scene.minFitDistance, view.spot.ahead)), fov: null }
+  },
 }
 
 /**

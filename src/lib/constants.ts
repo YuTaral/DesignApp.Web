@@ -278,9 +278,12 @@ export type ItemShape = (typeof ITEM_SHAPE)[keyof typeof ITEM_SHAPE]
  * A built room's object's outline seen from above (Domain Constants.ItemForm): a rectangle; an L, with a run along its
  * whole back and a leg running forward at its right end (before turning), both `BUILDER.legShare` of its smaller side
  * deep; a P, an L whose leg widens at its front end into a chaise `BUILDER.chaiseShare` times as wide as the runs are
- * deep (corner sofas); or an ellipse (round when its width and depth are equal).
+ * deep (corner sofas); or an ellipse (round when its width and depth are equal). A window may be arched (a round top),
+ * and a box may be a shower's glass: a screen along part of its front, or a cubicle with glass on its front and right.
  */
-export const ITEM_FORM = { Standard: "Standard", LShaped: "LShaped", PShaped: "PShaped", Round: "Round" } as const
+export const ITEM_FORM = {
+  Standard: "Standard", LShaped: "LShaped", PShaped: "PShaped", Round: "Round", Arched: "Arched", GlassScreen: "GlassScreen", GlassCubicle: "GlassCubicle",
+} as const
 
 export type ItemForm = (typeof ITEM_FORM)[keyof typeof ITEM_FORM]
 
@@ -456,15 +459,6 @@ export const BUILDER = {
   mirrorWord: "mirror",
   screenWord: "tv",
   hoodWord: "hood",
-  /**
-   * Words in an object's name that change its 3D model: a window with "arched" gets a round top; a box with "glass"
-   * taller than a tray (`glassTrayHeight`, in cm) is a shower's glass: a tray with clear panes on its front and right,
-   * only part of the front for a "screen".
-   */
-  archWord: "arched",
-  glassWord: "glass",
-  glassScreenWord: "screen",
-  glassTrayHeight: 20,
   /** The most a hung object may stick out from its wall, in centimetres (Domain Constants.Plans.MaxMountedDepth). */
   maxMountedDepth: 70,
   /** A window's usual height above the floor, in centimetres (Domain Constants.Plans.WindowSill). */
@@ -503,6 +497,8 @@ export const BUILDER = {
      * near wall.
      */
     cornerFov: 90, cornerTurn: 45,
+    /** The least distance to the wall in view used to fit the lens or turn towards it, in cm (the API's Camera.MinFitDistance). */
+    minFitDistance: 50,
     /**
      * The share of the picture one object may fill before the 3D view warns that it blocks the view (something standing
      * where the camera is, such as a cabinet in its corner); and how much smaller than the guide the check draws. In

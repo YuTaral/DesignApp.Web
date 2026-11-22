@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, VIEW_CORNER, WALL_FINISH } from "@/lib/constants"
+import { BUILDER, ITEM_FORM, ITEM_SHAPE, WALL_FINISH } from "@/lib/constants"
 import type { ItemBox, Plan, PlanItem, PlanShot } from "./api"
 import { hasParts, isMountedShape, isWallItem, partsOf } from "./builder-store"
 import { cameraStand, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
@@ -134,9 +134,8 @@ export function camera(plan: Plan, width: number, height: number) {
   // The horizontal view that fits the far wall, kept in a wide lens's range, then the vertical view of the taller,
   // shifted frame the picture is cut from.
   // The whole width shows from part of the way to the far wall, so the side walls are in the picture.
-  const fit = THREE.MathUtils.radToDeg(2 * Math.atan((across / 2) / Math.max(0.5, away * BUILDER.scene.fitDepthShare)))
-  const corners = stand.corner === VIEW_CORNER.Left || stand.corner === VIEW_CORNER.Right
-  const fov = corners ? BUILDER.scene.cornerFov : Math.min(BUILDER.scene.maxFov, Math.max(BUILDER.scene.minFov, fit))
+  const fit = THREE.MathUtils.radToDeg(2 * Math.atan((across / 2) / Math.max(BUILDER.scene.minFitDistance / 100, away * BUILDER.scene.fitDepthShare)))
+  const fov = stand.fov ?? Math.min(BUILDER.scene.maxFov, Math.max(BUILDER.scene.minFov, fit))
   const horizontal = THREE.MathUtils.degToRad(fov)
   const fullHeight = height * (1 + BUILDER.scene.lensShift)
   const vertical = 2 * Math.atan(Math.tan(horizontal / 2) * (fullHeight / width))
@@ -480,7 +479,7 @@ function opening(plan: Plan, item: PlanItem & { wall: number }) {
   if (item.shape === ITEM_SHAPE.Window) {
     const pane = new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, emissive: BUILDER.scene.glass, emissiveIntensity: 0.55, roughness: 0.15 })
     // An arched window's round top is a half circle as wide as the window (kept within its height).
-    const arch = item.label.toLowerCase().includes(BUILDER.archWord) ? Math.min(w / 2, h * 0.6) : 0
+    const arch = item.form === ITEM_FORM.Arched ? Math.min(w / 2, h * 0.6) : 0
     const sides = h - arch
 
     if (arch > 0) {
@@ -691,6 +690,26 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
     return group
   }
 
+  if (item.form === ITEM_FORM.GlassScreen || item.form === ITEM_FORM.GlassCubicle) {
+    // A shower's glass: a low tray, clear panes on its front (part of it for a screen) and its right, a thin post at the front pane's end.
+    const tray = 0.05
+    const glass = new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.1, depthWrite: false })
+    const metal = new THREE.MeshStandardMaterial({ color: BUILDER.scene.metal, roughness: 0.35, metalness: 0.8 })
+    const screen = item.form === ITEM_FORM.GlassScreen
+    const front = screen ? w * 0.6 : w
+    const thin = 0.01
+
+    block(w, tray, d, 0, tray / 2, 0)
+    block(front, h - tray, thin, -w / 2 + front / 2, tray + (h - tray) / 2, d / 2 - thin / 2, glass).castShadow = false
+    block(0.02, h - tray, 0.02, -w / 2 + front - 0.01, tray + (h - tray) / 2, d / 2 - 0.01, metal)
+
+    if (!screen) {
+      block(thin, h - tray, d, w / 2 - thin / 2, tray + (h - tray) / 2, 0, glass).castShadow = false
+    }
+
+    return group
+  }
+
   if (item.form === ITEM_FORM.Round && item.shape === ITEM_SHAPE.Table) {
     // A round or oval top on a pedestal and a foot.
     const top = Math.min(0.04, h * 0.08)
@@ -841,32 +860,8 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       round(w, shadeHeight, d, h - shadeHeight / 2, 0.35, 0.5)
       break
     }
-    default: {
-      const name = item.label.toLowerCase()
-
-      if (!name.split(/\W+/).includes(BUILDER.glassWord) || item.height <= BUILDER.glassTrayHeight) {
-        block(w, h, d, 0, h / 2, 0)
-        break
-      }
-
-      // A shower's glass: a low tray, clear panes on its front (part of it for a screen) and its right, a thin post at the front pane's end.
-      const tray = 0.05
-      const glass = new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.1, depthWrite: false })
-      const metal = new THREE.MeshStandardMaterial({ color: BUILDER.scene.metal, roughness: 0.35, metalness: 0.8 })
-      const screen = name.includes(BUILDER.glassScreenWord)
-      const front = screen ? w * 0.6 : w
-      const thin = 0.01
-
-      block(w, tray, d, 0, tray / 2, 0)
-      block(front, h - tray, thin, -w / 2 + front / 2, tray + (h - tray) / 2, d / 2 - thin / 2, glass).castShadow = false
-      block(0.02, h - tray, 0.02, -w / 2 + front - 0.01, tray + (h - tray) / 2, d / 2 - 0.01, metal)
-
-      if (!screen) {
-        block(thin, h - tray, d, w / 2 - thin / 2, tray + (h - tray) / 2, 0, glass).castShadow = false
-      }
-
-      break
-    }
+    default:
+      block(w, h, d, 0, h / 2, 0)
   }
 
   return group
