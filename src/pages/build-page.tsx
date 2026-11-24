@@ -21,7 +21,7 @@ import { ColorChoice, NumberField } from "@/features/builder/fields"
 import { useAiAvailability } from "@/features/rooms/api"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
 import { errorMessage } from "@/lib/api"
-import { BUILD_STEP, BUILDER, FLOOR_TYPE_NAMES, ROOM_TYPE, ROOM_TYPE_NAMES, ROUTES, type BuildStep, type FloorType, type RoomType } from "@/lib/constants"
+import { BUILD_STEP, BUILDER, FLOOR_TYPE_NAMES, MESSAGES, ROOM_TYPE, ROOM_TYPE_NAMES, ROUTES, type BuildStep, type FloorType, type RoomType } from "@/lib/constants"
 
 /** The steps before the floor plan: how to start, then the walls and the floor, or the photo. */
 type Step = "start" | BuildStep
@@ -56,7 +56,8 @@ export function BuildPage() {
   const target = useDesign(search.design).data
   const account = useAccount().data
   const signedIn = account?.signedIn === true
-  const designs = useDesigns(signedIn).data
+  const designsQuery = useDesigns(signedIn)
+  const designs = designsQuery.data
   const [roomType, setRoomType] = useState<RoomType>(BUILDER.start.roomType)
   const [name, setName] = useState("")
   const [walls, setWalls] = useState<{ width: number; length: number; height: number }>({ width: BUILDER.start.width, length: BUILDER.start.length, height: BUILDER.start.height })
@@ -138,6 +139,14 @@ export function BuildPage() {
             onPick={(designId) => chooseDesign({ designId })}
             onNew={() => setAsking(true)}
           />
+        )}
+        {step === "start" && signedIn && designsQuery.isError && (
+          <p className="flex flex-wrap items-center gap-2 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm" role="alert" data-designs-failed>
+            {MESSAGES.designsLoadFailed}, so the room can&apos;t be given one yet.
+            <Button variant="outline" size="sm" onClick={() => void designsQuery.refetch()}>
+              Try again
+            </Button>
+          </p>
         )}
         {step === "start" && account && !signedIn && (
           <p className="rounded-2xl border bg-muted/40 p-4 text-sm text-muted-foreground" data-guest-design-hint>

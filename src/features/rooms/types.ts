@@ -73,7 +73,15 @@ export type Room = {
   chosenTakeId: string | null
   /** Named in its photo and outline addresses, new each time a photo is chosen; null when it has none. */
   photoSetId: string | null
+  /** Its 360° photo (API PanoramaResponse), whose views can be saved as its photos; null when it has none. */
+  panorama: RoomPanorama | null
 }
+
+/**
+ * A room's 360° photo: where it is (relative, like photoUrl), its size (twice as wide as it is tall), and which way its
+ * views start, in degrees from its middle (right is positive).
+ */
+export type RoomPanorama = { url: string; width: number; height: number; startYaw: number }
 
 /** One of a room's photos to choose from (API PhotoTakeResponse): a Generate photo, or an AI change of one. */
 export type PhotoTake = {

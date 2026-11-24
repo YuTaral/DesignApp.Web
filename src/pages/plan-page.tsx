@@ -6,14 +6,15 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
-import { generateRoom, savePlan, usePlan, type Plan, type PlanShot } from "@/features/builder/api"
+import { generatePanorama, generateRoom, savePlan, usePlan, type Plan, type PlanShot, type RunPhoto } from "@/features/builder/api"
+import { panoramaSpot, panoramaStartYaw } from "@/features/builder/panorama-spot"
 import { isWallItem, useBuilderStore } from "@/features/builder/builder-store"
 import { CatalogPanel } from "@/features/builder/catalog-panel"
 import { GenerateDialog } from "@/features/builder/generate-dialog"
 import { Inspector } from "@/features/builder/inspector"
 import { PlanCanvas } from "@/features/builder/plan-canvas"
 import { ReplaceBanner } from "@/features/builder/replace-banner"
-import { objectBoxes, renderGuide } from "@/features/builder/scene-3d"
+import { objectBoxes, renderGuide, renderPanorama } from "@/features/builder/scene-3d"
 import { View3d } from "@/features/builder/view-3d"
 import { useBuilderShortcuts } from "@/features/builder/use-builder-shortcuts"
 import { WallView } from "@/features/builder/wall-view"
@@ -71,6 +72,7 @@ function Builder({ plan }: { plan: Plan }) {
   const replacing = useRoom(replace).data
   const { saving, failed, flush } = useAutosave(plan)
   const make = usePhotoMaker(plan, flush, replacing?.id)
+  const makePanorama = usePanoramaMaker(plan, flush, replacing?.id)
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
 
@@ -220,6 +222,7 @@ function Builder({ plan }: { plan: Plan }) {
         plan={plan}
         onClose={() => setAsking(false)}
         make={make}
+        makePanorama={makePanorama}
         onDone={(roomId, failures) => {
           if (failures.length > 0) {
             toast.error(MESSAGES.photosFailed(failures.length, failures[0]))
@@ -339,23 +342,49 @@ function useAutosave(plan: Plan) {
 }
 
 /**
+ * Makes the 360° view for Generate photo: saves the plan, draws the room's 360° 3D view from its clearest spot, and has
+ * the AI make one photo of it, as a new room.
+ * @param plan - The room.
+ * @param flush - Saves the plan now.
+ * @param replaces - The room the new room replaces in its design; missing to add a room.
+ * @returns The function that makes the 360° photo.
+ */
+function usePanoramaMaker(plan: Plan, flush: () => Promise<void>, replaces?: string) {
+  return async (style: PhotoStyle, instructions: string) => {
+    const spot = panoramaSpot(plan)
+    const startYaw = panoramaStartYaw(plan, spot)
+
+    await flush()
+    const { guide, boxes } = await renderPanorama(plan, spot)
+
+    return generatePanorama(plan.id, guide, boxes, spot, startYaw, style, instructions, replaces)
+  }
+}
+
+/**
  * Makes one photo for Generate photo: saves the plan, draws the 3D view of the chosen view, and has the AI make a photo
- * of it in the chosen style, as a new room. The plan keeps its own view.
+ * of it in the chosen style, as a new room; a run's later photos send where each object is in its first photo, for the
+ * AI to copy them from it. The plan keeps its own view.
  * @param plan - The room.
  * @param flush - Saves the plan now.
  * @param replaces - The room a run's new room replaces in its design; missing to add a room.
  * @returns The function that makes a photo of one view.
  */
 function usePhotoMaker(plan: Plan, flush: () => Promise<void>, replaces?: string) {
-  return async (shot: PlanShot, style: PhotoStyle, instructions: string, photos: { roomId?: string; note: string }) => {
+  return async (shot: PlanShot, style: PhotoStyle, instructions: string, photos: RunPhoto) => {
     const seen = { ...plan, ...shot }
     // Only a run's first photo makes the room, which replaces the old one.
-    const run = { ...photos, replaces: photos.roomId ? undefined : replaces }
+    const run = {
+      roomId: photos.roomId,
+      note: photos.note,
+      replaces: photos.roomId ? undefined : replaces,
+      referenceBoxes: photos.reference && objectBoxes({ ...plan, ...photos.reference }),
+    }
 
     await flush()
     const guide = await renderGuide(seen)
 
     // Each object's box in the view keeps the image model to the plan's layout (it kept sizes and places better so).
-    return generateRoom(plan.id, guide, style, instructions, undefined, objectBoxes(seen), shot, run)
+    return generateRoom(plan.id, guide, style, instructions, photos.seed, objectBoxes(seen), shot, run)
   }
 }

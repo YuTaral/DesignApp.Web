@@ -147,6 +147,18 @@ export type PhotoPlan = {
 /** One view of a built room to make a photo from: the wall it looks at and where the camera stands (mirrors the API's PlanShot). */
 export type PlanShot = Pick<Plan, "view" | "corner">
 
+/** A photo of a Generate run: where it goes, what it is, the run's seed, and the view of the run's first photo, its reference. */
+export type RunPhoto = {
+  /** The room of the run's earlier photos; missing for its first, which makes the room. */
+  roomId?: string
+  /** What the photo is: its view's name. */
+  note: string
+  /** The run's seed, the same for all its photos. */
+  seed: number
+  /** The view of the run's first photo, from which the others copy the objects; missing for the first. */
+  reference?: PlanShot
+}
+
 /** An object the user can add, with its usual size and color (mirrors the API's CatalogObjectResponse). */
 export type CatalogObject = {
   key: string
@@ -252,6 +264,49 @@ export function buildPlanFromRoom(roomId: string, choice: DesignChoice = {}): Pr
 }
 
 /**
+ * Makes one 360° photo of the built room from one spot, as a new room whose photo is the view straight ahead; more views
+ * of it are saved later without AI.
+ * @param planId - The plan.
+ * @param guide - The room's 360° 3D view as a PNG (`renderPanorama`).
+ * @param boxes - Where each object is in it.
+ * @param spot - Where the camera stands, in cm on the plan.
+ * @param startYaw - Which way its views start, in degrees from its middle (`panoramaStartYaw`).
+ * @param style - The photo's interior style.
+ * @param instructions - The user's own extra instructions for the AI (may be empty).
+ * @param replaces - The room of the plan the new room replaces in its design (Edit in 3D); missing to add a room.
+ * @returns The room.
+ */
+export function generatePanorama(
+  planId: string,
+  guide: Blob,
+  boxes: ItemBox[],
+  spot: OutlinePoint,
+  startYaw: number,
+  style: PhotoStyle,
+  instructions: string,
+  replaces?: string
+): Promise<Room> {
+  const form = new FormData()
+
+  form.append("guide", guide, "panorama.png")
+  form.append("boxes", JSON.stringify(boxes))
+  form.append("spotX", String(Math.round(spot.x)))
+  form.append("spotY", String(Math.round(spot.y)))
+  form.append("startYaw", String(startYaw))
+  form.append("style", style)
+
+  if (instructions.trim()) {
+    form.append("instructions", instructions.trim())
+  }
+
+  if (replaces) {
+    form.append("replaces", replaces)
+  }
+
+  return sendForm<Room>(API.planPanorama(planId), form)
+}
+
+/**
  * Saves a built room as the user left it.
  * @param plan - The plan.
  * @returns The saved plan.
@@ -286,7 +341,8 @@ export function describeObject(planId: string, description: string): Promise<Cat
  * @param shot - The view the guide was drawn from, when it isn't the plan's own (the plan keeps its own); missing for
  *   the plan's own view.
  * @param photos - The room of the run's earlier photos (missing for its first), what this photo is (its view's name),
- *   and, for the run's first, the room of the plan its new room replaces (missing to add a room).
+ *   for the run's first, the room of the plan its new room replaces (missing to add a room), and for the others, where
+ *   each object is in the run's first photo, from which the AI copies them (the same objects and decorations in every view).
  * @returns The room (waiting for the user to start its analysis).
  */
 export function generateRoom(
@@ -297,7 +353,7 @@ export function generateRoom(
   seed?: number,
   boxes?: ItemBox[],
   shot?: PlanShot,
-  photos?: { roomId?: string; note?: string; replaces?: string }
+  photos?: { roomId?: string; note?: string; replaces?: string; referenceBoxes?: ItemBox[] }
 ): Promise<Room> {
   const form = new FormData()
 
@@ -312,6 +368,10 @@ export function generateRoom(
 
   if (photos?.replaces) {
     form.append("replaces", photos.replaces)
+  }
+
+  if (photos?.referenceBoxes) {
+    form.append("referenceBoxes", JSON.stringify(photos.referenceBoxes))
   }
 
   if (shot) {

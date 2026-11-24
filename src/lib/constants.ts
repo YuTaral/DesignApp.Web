@@ -39,6 +39,10 @@ export const API = {
   plan: (id: string) => `/api/plans/${id}`,
   planDescribe: (id: string) => `/api/plans/${id}/describe`,
   planGenerate: (id: string) => `/api/plans/${id}/generate`,
+  /** A plan's 360° photo, made as a new room. */
+  planPanorama: (id: string) => `/api/plans/${id}/panorama`,
+  /** A view of a room's 360° photo, saved as one of its photos. */
+  roomPanoramaViews: (id: string) => `/api/rooms/${id}/panorama/views`,
   library: "/api/library",
   libraryLayoutCopy: (designId: string, roomId: string, layoutId: string) => `/api/library/${designId}/${roomId}/${layoutId}/copy`,
   libraryDesignCopy: (designId: string) => `/api/library/${designId}/copy`,
@@ -410,6 +414,47 @@ export const TIME_OF_DAY_NAMES: Record<TimeOfDay, { name: string; looks: string 
  * centimetres; positions snap to the grid; the 3D view sent for a photo is `guide` pixels (the photo's 4:3, and
  * under the one megapixel the image model charges for).
  */
+/**
+ * A room's 360° photo: one equirectangular picture from one spot, drawn from the 3D room as six cube faces, made into a
+ * photo by the image model, and looked around in the viewer, whose views can be saved as the room's photos.
+ */
+export const PANORAMA = {
+  /** The 360° view sent to the image model, twice as wide as it is tall (API Constants.Panoramas.Width / Height). */
+  width: 4096,
+  height: 2048,
+  /** Each cube face's width and height when drawing it, in pixels (more than the panorama's 11 px per degree). */
+  faceSize: 1536,
+  /** The fewest pixels an object must show in the 360° view to get a box. */
+  minBoxPixels: 200,
+  /** How far the camera keeps from the walls, in cm. */
+  wallGap: 70,
+  /** How far from furniture is clear enough, in cm. */
+  enoughClear: 100,
+  /** The grid the camera's spot is picked on, in cm. */
+  spotStep: 10,
+  /** How strongly the spot is drawn to the room's middle among equally clear points (cm of clearance per cm off-centre). */
+  middlePull: 0.15,
+  /** The furthest the view may start from the panorama's middle, in degrees (Domain Constants.Rooms.MaxPanoramaStartYaw). */
+  maxStartYaw: 120,
+  /** The steps the start is chosen in, in degrees. */
+  startStep: 5,
+  /** How far off the start an object still counts towards it, in degrees. */
+  startReach: 60,
+  /** The viewer's lens across its height, at the start and its limits, in degrees (API Constants.Panoramas.MinFov / MaxFov). */
+  startFov: 75,
+  minFov: 35,
+  maxFov: 90,
+  /** The viewer's tilt at the start, and its limit, in degrees. */
+  startPitch: -6,
+  maxPitch: 80,
+  /** How many degrees the view's edge keeps from the seam behind, where the 360° photo's ends meet. */
+  seamMargin: 4,
+  /** How many degrees an arrow key turns or tilts the view. */
+  keyStep: 5,
+  /** How many degrees of lens a wheel step changes, per pixel of scrolling. */
+  wheelZoom: 0.03,
+} as const
+
 export const BUILDER = {
   wall: { min: 1, max: 30 },
   /** A room's outline: its most corners, and its shortest wall in centimetres (Domain Constants.Plans.MaxCorners, MinWallSegmentCentimetres). */
@@ -470,6 +515,10 @@ export const BUILDER = {
   viewPictureWidth: 240,
   /** How many photos are made at the same time when several views are picked. */
   photosAtOnce: 3,
+  /** About what the 360° view costs with the real AI, in cents (a 4K photo: $0.036). */
+  panoramaCents: 4,
+  /** The largest seed of a Generate run (all its photos share one, picked at random): the API's int. */
+  maxRunSeed: 2_147_483_647,
   /**
    * The word in a round object's name that makes it a stool in 3D: a round seat on legs, rather than the solid cylinder
    * of a side table or bin (the image model turned solid cylinders into tree-stump stools).
@@ -667,6 +716,10 @@ export const MESSAGES = {
   photoChanged: "The changed photo is ready.",
   photosFailed: (count: number, why: string) => `${count === 1 ? "One photo" : `${count} photos`} couldn't be made: ${why}`,
   savedToPlanDesign: "Saved to the room's design.",
+  /** A view of a room's 360° photo saved as one of its photos. */
+  panoramaViewSaved: "Saved as one of the room's photos.",
+  /** A room's 360° photo that can't be shown. */
+  panoramaLoadFailed: "Couldn't show the 360° photo. Reload the page to try again.",
   photoPlanLeftOut: (names: string[]) => `Left out, as they didn't fit the room: ${names.join(", ")}. Add them from the left if you want them.`,
   replaceAnalysis: "Analyze this photo instead? The outlines and colors made for the other photo are replaced.",
   colorsSaved: "Colors saved",

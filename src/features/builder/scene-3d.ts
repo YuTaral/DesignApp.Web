@@ -1,8 +1,10 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, WALL_FINISH } from "@/lib/constants"
-import type { ItemBox, Plan, PlanItem, PlanShot } from "./api"
+import { BUILDER, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH } from "@/lib/constants"
+import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot } from "./api"
+import { CUBE_FACES, type Vec3 } from "./panorama"
+import type { PanoramaJob } from "./panorama.worker"
 import { hasParts, isMountedShape, isWallItem, legSide, partsOf } from "./builder-store"
 import { cameraStand, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
@@ -44,6 +46,41 @@ export class PlanScene {
     this.camera = camera(plan, width, height)
     this.renderer.render(scene, this.camera)
     dispose(scene)
+  }
+
+  /**
+   * Draws the room, every wall included, from one point in the six directions of a cube camera.
+   * @param plan - The room.
+   * @param at - Where the camera stands, in the scene's metres.
+   * @param size - Each face's width and height, in pixels.
+   * @returns Each face's pixels (RGBA, row by row from the top), in `CUBE_FACES` order; the page gets a frame between
+   *   faces, so it keeps responding.
+   */
+  async renderFaces(plan: Plan, at: THREE.Vector3, size: number): Promise<Uint8ClampedArray[]> {
+    const copy = document.createElement("canvas")
+    const context = copy.getContext("2d", { willReadFrequently: true })
+    const scene = buildScene(plan, this.renderer.capabilities.getMaxAnisotropy(), true)
+    const faces: Uint8ClampedArray[] = []
+
+    if (!context) {
+      throw new Error("No 2D canvas")
+    }
+
+    this.renderer.setPixelRatio(1)
+    this.renderer.setSize(size, size, false)
+    copy.width = size
+    copy.height = size
+
+    for (const { forward, up } of CUBE_FACES) {
+      this.renderer.render(scene, cubeCamera(at, forward, up))
+      context.drawImage(this.renderer.domElement, 0, 0)
+      faces.push(context.getImageData(0, 0, size, size).data)
+      await nextFrame()
+    }
+
+    dispose(scene)
+
+    return faces
   }
 
   /**
@@ -114,6 +151,88 @@ export async function renderGuide(plan: Plan): Promise<Blob> {
 }
 
 /**
+ * The room's 360° view from one spot, for the image model: an equirectangular PNG (its middle facing the back wall, its
+ * ends meeting behind), with each object's box in it. It is drawn as the six faces of a cube camera at eye height,
+ * every wall included, joined into one picture; the boxes come from the same faces drawn in flat object colors. The
+ * joining runs in a worker, so the page keeps responding.
+ * @param plan - The room.
+ * @param spot - Where the camera stands, in cm on the plan.
+ * @returns The PNG and the boxes.
+ * @throws Error when WebGL is missing or the picture can't be made.
+ */
+export async function renderPanorama(plan: Plan, spot: OutlinePoint): Promise<{ guide: Blob; boxes: ItemBox[] }> {
+  const { width, height, faceSize } = PANORAMA
+  const at = new THREE.Vector3(spot.x / 100, eyeHeight(plan), spot.y / 100)
+  const canvas = document.createElement("canvas")
+  const view = new PlanScene(canvas)
+  const ids: Uint8Array[] = []
+  let colors: Uint8ClampedArray[]
+
+  try {
+    colors = await view.renderFaces(plan, at, faceSize)
+  } finally {
+    view.dispose(true)
+  }
+
+  // One face at a time, with a frame between, so the page keeps responding.
+  for (const { forward, up } of CUBE_FACES) {
+    ids.push(...drawIds(plan, [cubeCamera(at, forward, up)], faceSize, faceSize, true))
+    await nextFrame()
+  }
+
+  const job: PanoramaJob = { colors, ids, size: faceSize, width, height, items: plan.items.length, minPixels: PANORAMA.minBoxPixels }
+  // Started only once the faces are drawn, so a failed drawing leaves no worker behind.
+  const worker = new Worker(new URL("./panorama.worker.ts", import.meta.url), { type: "module" })
+
+  try {
+    return await new Promise<{ guide: Blob; boxes: ItemBox[] }>((resolve, reject) => {
+      worker.onmessage = (event: MessageEvent<{ guide: Blob; boxes: ItemBox[] } | { error: string }>) => {
+        if ("error" in event.data) {
+          reject(new Error(event.data.error))
+
+          return
+        }
+
+        resolve(event.data)
+      }
+      worker.onerror = (event) => reject(new Error(event.message))
+      worker.postMessage(job, [...colors.map((face) => face.buffer), ...ids.map((face) => face.buffer)])
+    })
+  } finally {
+    worker.terminate()
+  }
+}
+
+/** Waits for the browser's next frame, so a long drawing lets the page respond between its parts. */
+function nextFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+/**
+ * A square 90° camera looking one way, for one face of a cube camera.
+ * @param at - Where it stands.
+ * @param forward - Where it looks.
+ * @param up - Which way is up in its picture.
+ */
+function cubeCamera(at: THREE.Vector3, forward: Vec3, up: Vec3) {
+  const face = new THREE.PerspectiveCamera(90, 1, 0.05, 100)
+
+  face.position.copy(at)
+  face.up.set(...up)
+  face.lookAt(at.x + forward[0], at.y + forward[1], at.z + forward[2])
+
+  return face
+}
+
+/**
+ * A photographer's eye height in the room, in metres: below its ceiling.
+ * @param plan - The room.
+ */
+function eyeHeight(plan: Pick<Plan, "height">) {
+  return Math.min(BUILDER.scene.eyeHeight, plan.height - 0.3)
+}
+
+/**
  * The camera: across the room from the middle of the wall in view, just inside the room (`cameraStand`), at a
  * photographer's height, held level and looking straight at the wall in view. Its lens shows the room's whole width from halfway to the far wall
  * (within an interior photographer's widest range), so the side walls and what stands by them are in the picture, and
@@ -125,7 +244,7 @@ export async function renderGuide(plan: Plan): Promise<Blob> {
  * @param height - The picture's height.
  */
 export function camera(plan: Plan, width: number, height: number) {
-  const eye = Math.min(BUILDER.scene.eyeHeight, plan.height - 0.3)
+  const eye = eyeHeight(plan)
   const stand = cameraStand(plan)
   const [across, away] = [stand.across / 100, stand.stand / 100]
   const [x, z] = [stand.x / 100, stand.y / 100]
@@ -153,8 +272,9 @@ export function camera(plan: Plan, width: number, height: number) {
  * wall).
  * @param plan - The room.
  * @param anisotropy - The sharpest texture filtering the GPU offers.
+ * @param allWalls - Whether to draw the wall behind the camera too (for a 360° view, which has no behind).
  */
-function buildScene(plan: Plan, anisotropy: number) {
+function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   const { width, length, height, finish } = plan
   const mood = BUILDER.scene.moods[finish.timeOfDay]
   const scene = new THREE.Scene()
@@ -170,7 +290,7 @@ function buildScene(plan: Plan, anisotropy: number) {
     new THREE.MeshStandardMaterial({ color: finish.ceilingColor, emissive: finish.ceilingColor, emissiveIntensity: 0.55, roughness: 0.9 })
   )
   // Every wall but the one behind the camera is drawn, with the windows and doors on them.
-  const behind = cameraStand(plan).behind
+  const behind = allWalls ? -1 : cameraStand(plan).behind
 
   scene.background = new THREE.Color(BUILDER.scene.background)
   scene.add(new THREE.HemisphereLight(BUILDER.scene.sky, BUILDER.scene.ground, mood.sky), new THREE.AmbientLight(BUILDER.scene.sky, mood.ambient))
@@ -326,12 +446,28 @@ export const MASK_ID = { floor: 250, wall: 251, ceiling: 252 } as const
  * @throws Error when the browser has no WebGL.
  */
 export function renderMasks(plan: Plan, width: number, height: number) {
-  const renderer = new THREE.WebGLRenderer({ antialias: false })
-  const scene = buildScene(plan, 1)
   const view = camera(plan, width, height)
+  const [ids] = drawIds(plan, [view], width, height, false)
+
+  return { ids, camera: view }
+}
+
+/**
+ * The room with every object in its own flat color and no light or shadow, seen by each camera: for each pixel, which
+ * object is there.
+ * @param plan - The room.
+ * @param cameras - The cameras.
+ * @param width - Each picture's width, in pixels.
+ * @param height - Each picture's height, in pixels.
+ * @param allWalls - Whether the wall behind the plan's own camera is drawn too.
+ * @returns For each camera, row by row from the top, 1 + the object's index, a `MASK_ID` surface, or 0.
+ * @throws Error when the browser has no WebGL.
+ */
+function drawIds(plan: Plan, cameras: THREE.Camera[], width: number, height: number, allWalls: boolean) {
+  const renderer = new THREE.WebGLRenderer({ antialias: false })
+  const scene = buildScene(plan, 1, allWalls)
   const target = new THREE.WebGLRenderTarget(width, height)
   const rgba = new Uint8Array(width * height * 4)
-  const ids = new Uint8Array(width * height)
   const flat = new Map<number, THREE.MeshBasicMaterial>()
   /** The flat material of an id, whose red channel is the id exactly. */
   const look = (id: number) => {
@@ -365,15 +501,21 @@ export function renderMasks(plan: Plan, width: number, height: number) {
     object.material = look(id)
   })
   renderer.setRenderTarget(target)
-  renderer.render(scene, view)
-  renderer.readRenderTargetPixels(target, 0, 0, width, height, rgba)
+  const pictures = cameras.map((view) => {
+    const ids = new Uint8Array(width * height)
 
-  // WebGL reads rows from the bottom.
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      ids[y * width + x] = rgba[((height - 1 - y) * width + x) * 4]
+    renderer.render(scene, view)
+    renderer.readRenderTargetPixels(target, 0, 0, width, height, rgba)
+
+    // WebGL reads rows from the bottom.
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        ids[y * width + x] = rgba[((height - 1 - y) * width + x) * 4]
+      }
     }
-  }
+
+    return ids
+  })
 
   target.dispose()
   dispose(scene)
@@ -386,7 +528,7 @@ export function renderMasks(plan: Plan, width: number, height: number) {
   // Frees the WebGL context now rather than when it is collected: browsers allow only a few at once.
   renderer.forceContextLoss()
 
-  return { ids, camera: view }
+  return pictures
 }
 
 /**

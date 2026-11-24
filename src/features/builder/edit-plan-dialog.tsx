@@ -38,6 +38,8 @@ export function EditPlanDialog({
 }) {
   const navigate = useNavigate()
   const [choice, setChoice] = useState<NewPhotos | null>(null)
+  // Each opening starts with nothing picked (Replace deletes photos, so it is never picked for the user).
+  const [shownOpen, setShownOpen] = useState(open)
   const options = [
     {
       value: "replace",
@@ -57,6 +59,14 @@ export function EditPlanDialog({
 
   const open3d = () => {
     void navigate({ to: ROUTES.plan, params: { planId }, search: { replace: choice === "replace" ? roomId : undefined } })
+  }
+
+  if (shownOpen !== open) {
+    setShownOpen(open)
+
+    if (open) {
+      setChoice(null)
+    }
   }
 
   return (

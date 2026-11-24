@@ -215,6 +215,14 @@ try {
   await page.waitForSelector('[data-edit-plan-dialog]')
   const openWaits = await page.$eval('[data-open-builder]', (b) => b.disabled)
 
+  // Closed after picking Replace, the dialog opens again with nothing picked.
+  await page.click('[data-new-photos=replace]')
+  await page.keyboard.press('Escape')
+  await until(page, () => !document.querySelector('[data-edit-plan-dialog]'), { label: 'dialog closed' })
+  await page.click('[data-edit-in-3d]')
+  await page.waitForSelector('[data-edit-plan-dialog]')
+  const freshChoice = await page.$$eval('[data-new-photos][aria-checked=true]', (picked) => picked.length === 0)
+
   await page.click('[data-new-photos=replace]')
   await page.click('[data-open-builder]')
   await page.waitForSelector('[data-replace-banner]')
@@ -228,8 +236,8 @@ try {
   const afterReplace = await page.evaluate(async (id) => (await (await fetch(`/api/designs/${id}`)).json()).rooms.map((r) => r.roomId), design)
 
   step('Edit in 3D with Replace makes the next photo a new room in the old one’s place',
-    openWaits && replacedBy !== builtRoom && afterReplace.length === 3 && afterReplace[withBuilt.rooms.findIndex((r) => r.roomId === builtRoom)] === replacedBy
-      && !afterReplace.includes(builtRoom), `${afterReplace.length} rooms`)
+    openWaits && freshChoice && replacedBy !== builtRoom && afterReplace.length === 3 && afterReplace[withBuilt.rooms.findIndex((r) => r.roomId === builtRoom)] === replacedBy
+      && !afterReplace.includes(builtRoom), `${afterReplace.length} rooms, fresh choice ${freshChoice}`)
 
   // 10. My designs: the card; phone layouts.
   await page.goto(`${WEB}/designs`, { waitUntil: 'networkidle0' })

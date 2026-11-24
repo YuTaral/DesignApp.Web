@@ -275,6 +275,47 @@ try {
   await shot('room-photos-phone')
   step('The builder, the photo page and the design’s room photos fit a phone screen', builderOverflow <= 0 && overflow <= 0 && designOverflow <= 0,
     `builder ${builderOverflow} px, photo page ${overflow} px, design page ${designOverflow} px too wide`)
+
+  // 10. The 360° view (fake AI: the 360° 3D view itself): Generate makes it as a new room in the plan's design; the photo
+  //     page looks around it, turning stops before the seam behind, and Save this view adds a photo cut from it.
+  await page.setViewport({ width: 1280, height: 820 })
+  await page.goto(`${WEB}/build/${plan.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-plan-canvas]')
+  await page.click('::-p-text(Generate photo)')
+  await until(page, () => document.querySelectorAll('[data-generate-dialog] [data-view-pick]').length >= 4, { timeout: 30000, label: 'views drawn' })
+  await page.click('[data-panorama-choice]')
+  await page.click('[data-generate-dialog] [data-view-pick][aria-checked=true]')
+  await sleep(300)
+  await page.click('[data-generate-confirm]')
+  await until(page, () => location.pathname.endsWith('/photos'), { timeout: 120000, label: '360 photo page' })
+  const panoramaRoom = new URL(page.url()).pathname.split('/').at(-2)
+
+  await page.waitForSelector('[data-room-view="360"]', { timeout: 20000 })
+  await page.click('[data-room-view="360"]')
+  await until(page, () => document.querySelector('[data-panorama-save]') && !document.querySelector('[data-panorama-save]').disabled, { timeout: 20000, label: '360 loaded' })
+  await page.focus('[data-panorama-canvas]')
+
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press('ArrowRight')
+  }
+
+  const stopped = await page.evaluate(() => ({
+    angle: Number(document.querySelector('[data-panorama-angle]').dataset.panoramaAngle),
+    limit: Number(document.querySelector('[data-panorama-angle] span').textContent.replace(/[^0-9]/g, '')),
+  }))
+
+  await shot('photos-360')
+  await page.click('[data-panorama-save]')
+  await until(page, () => document.body.innerText.includes("Saved as one of the room's photos"), { timeout: 15000, label: 'view saved' })
+  const panoramaTakes = await page.evaluate(async (id) => (await fetch(`/api/rooms/${id}/takes`)).json(), panoramaRoom)
+  const designRooms = await page.evaluate(async (id) => (await (await fetch(`/api/designs/${id}`)).json()).rooms.map((r) => r.roomId), design.id)
+
+  await page.goto(`${WEB}/designs/${design.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-room-photos] [data-room-view="360"]')
+  step('A 360° view is made as a room of the design: turning stops before the seam, and a saved view becomes one of its photos',
+    stopped.angle === stopped.limit && stopped.limit > 90 && stopped.limit < 180 && panoramaTakes.length === 2 && panoramaTakes[1].note.startsWith('360° view')
+      && designRooms.includes(panoramaRoom),
+    `stopped at ${stopped.angle}° of ${stopped.limit}°, ${panoramaTakes.map((t) => t.note).join(' | ')}`)
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('photos-stopped').catch(() => {})

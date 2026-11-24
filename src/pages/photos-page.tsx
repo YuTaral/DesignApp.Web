@@ -13,7 +13,9 @@ import { usePlan } from "@/features/builder/api"
 import { useDesign } from "@/features/designs/api"
 import { ConfirmDialog } from "@/features/designs/components"
 import { AnalyzeOption, ChangeOption } from "@/features/photos/photo-options"
+import { PanoramaViewer } from "@/features/photos/panorama-viewer"
 import { PhotoViewer } from "@/features/photos/photo-viewer"
+import { RoomViewSwitch, type RoomView } from "@/features/photos/room-view-switch"
 import { chooseRoomTake, saveRoomToPlanDesign, startRoomAnalysis, useRoom, useRoomTakes } from "@/features/rooms/api"
 import type { PhotoTake } from "@/features/rooms/types"
 import { errorMessage } from "@/lib/api"
@@ -36,6 +38,8 @@ export function PhotosPage() {
   const plan = usePlan(room.data?.planId ?? undefined)
   const design = useDesign(signedIn ? (plan.data?.designId ?? undefined) : undefined)
   const [shownId, setShownId] = useState<string | null>(null)
+  // The photos, or the room's 360° photo to look around and save views of.
+  const [view, setView] = useState<RoomView>("photos")
   // The photo the "Analyze this photo instead?" question is about, while it is asked.
   const [confirmFor, setConfirmFor] = useState<PhotoTake | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -184,10 +188,15 @@ export function PhotosPage() {
           </div>
         </div>
 
-        <PhotoViewer takes={list} shown={index} onShow={show} imageClassName="max-h-[70dvh]">
-          {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Ready && <Badge variant="secondary">Analyzed</Badge>}
-          {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Failed && <Badge variant="destructive">Analysis failed</Badge>}
-        </PhotoViewer>
+        {room.data.panorama && <RoomViewSwitch value={view} options={["photos", "360"]} onPick={setView} />}
+        {room.data.panorama && view === "360" ? (
+          <PanoramaViewer roomId={room.data.id} panorama={room.data.panorama} />
+        ) : (
+          <PhotoViewer takes={list} shown={index} onShow={show} imageClassName="max-h-[70dvh]">
+            {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Ready && <Badge variant="secondary">Analyzed</Badge>}
+            {shown.id === room.data.chosenTakeId && room.data.status === ROOM_STATUS.Failed && <Badge variant="destructive">Analysis failed</Badge>}
+          </PhotoViewer>
+        )}
       </section>
 
       <aside className="flex flex-col gap-3" aria-label="What to do with this photo">

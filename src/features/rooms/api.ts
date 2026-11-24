@@ -240,6 +240,27 @@ export function useChangeTake(roomId: string) {
 }
 
 /**
+ * Saves a view of a room's 360° photo as one of its photos (cut from the same picture, without AI), adding it to the
+ * room's photos.
+ * @param roomId - The room.
+ */
+export function useSavePanoramaView(roomId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (view: PanoramaView) => {
+      return sendJson<PhotoTake>("POST", API.roomPanoramaViews(roomId), view)
+    },
+    onSuccess: (take) => {
+      queryClient.setQueryData<PhotoTake[]>(QUERY_KEYS.roomTakes(roomId), (takes) => [...(takes ?? []), take])
+    },
+  })
+}
+
+/** Which way a view of a 360° photo looks, in degrees (mirrors the API's PanoramaViewRequest): right and up are positive. */
+export type PanoramaView = { yaw: number; pitch: number; fov: number }
+
+/**
  * Makes one of a room's photos the room's photo, the one its analysis uses (an analyzed room waits for it again).
  * @param roomId - The room.
  * @param takeId - The photo.
