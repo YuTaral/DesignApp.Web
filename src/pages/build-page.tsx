@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useNavigate, useSearch } from "@tanstack/react-router"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { ArrowLeftIcon, ArrowRightIcon, BoxIcon, ImageIcon, LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
@@ -12,6 +12,11 @@ import { FloorChoice, FloorColorChoice } from "@/features/builder/floor-choice"
 import { PhotoStart } from "@/features/builder/photo-start"
 import { useDesign } from "@/features/designs/api"
 import { TargetBanner } from "@/features/designs/target-banner"
+import { NewDesignDialog } from "@/features/designs/new-design-dialog"
+import { useAccount } from "@/features/account/api"
+import { useDesigns } from "@/features/designs/api"
+import { DesignPicker } from "@/features/builder/design-picker"
+import type { DesignChoice, NewDesign } from "@/features/builder/api"
 import { ColorChoice, NumberField } from "@/features/builder/fields"
 import { useAiAvailability } from "@/features/rooms/api"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
@@ -49,6 +54,9 @@ export function BuildPage() {
   const [ai] = useAiChoice(availability)
   const search = useSearch({ from: ROUTES.build })
   const target = useDesign(search.design).data
+  const account = useAccount().data
+  const signedIn = account?.signedIn === true
+  const designs = useDesigns(signedIn).data
   const [roomType, setRoomType] = useState<RoomType>(BUILDER.start.roomType)
   const [name, setName] = useState("")
   const [walls, setWalls] = useState<{ width: number; length: number; height: number }>({ width: BUILDER.start.width, length: BUILDER.start.length, height: BUILDER.start.height })
@@ -56,13 +64,32 @@ export function BuildPage() {
   const [floor, setFloor] = useState<{ type: FloorType; color: string }>({ type: BUILDER.start.floorType, color: BUILDER.start.floor })
   const [furnish, setFurnish] = useState(true)
   const [busy, setBusy] = useState(false)
-  const step: Step = search.step ?? "start"
-  // Started from a design (Add room on its page): the room's photos go into it, as the banner says.
-  const banner = target && <TargetBanner design={target} what={"room\u2019s photos"} />
+  // The New design dialog: asked for, or closed by the user (it opens by itself while they have no design).
+  const [asking, setAsking] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+  const newDesign: NewDesign | undefined = !search.design && search.newDesign ? { name: search.newDesign, description: search.newDescription ?? "" } : undefined
+  const choice: DesignChoice = { designId: search.design, newDesign }
+  // A signed-in user chooses the design first (guests have none: their rooms are kept when they sign up).
+  const needsChoice = signedIn && !search.design && !newDesign
+  const step: Step = needsChoice ? "start" : (search.step ?? "start")
+  const shownDesign = target ?? (newDesign && { name: newDesign.name })
+  const banner = shownDesign && <TargetBanner design={shownDesign} what={"room\u2019s photos"} />
+  const askingNew = asking || (signedIn && designs?.length === 0 && needsChoice && !dismissed)
 
   /** Goes to a step, as a new page in the browser's history (so Back comes back). */
   const setStep = (next: Step) => {
-    void navigate({ to: ROUTES.build, search: { step: next === "start" ? undefined : next, design: search.design } })
+    void navigate({ to: ROUTES.build, search: { ...search, step: next === "start" ? undefined : next } })
+  }
+
+  /**
+   * Chooses the design the room goes into: one of the user's, or a new one.
+   * @param chosen - The design's id, or the new design's name and description.
+   */
+  const chooseDesign = (chosen: { designId: string } | NewDesign) => {
+    const picked = "designId" in chosen ? { design: chosen.designId, newDesign: undefined, newDescription: undefined } : { design: undefined, newDesign: chosen.name, newDescription: chosen.description || undefined }
+
+    setAsking(false)
+    void navigate({ to: ROUTES.build, search: { ...search, ...picked }, replace: true })
   }
 
   const start = async () => {
@@ -70,7 +97,7 @@ export function BuildPage() {
 
     try {
       const plan = await createPlan(
-        { name: name.trim(), roomType, ...walls, wallColor, floorColor: floor.color, floorType: floor.type, furnish, designId: search.design },
+        { name: name.trim(), roomType, ...walls, wallColor, floorColor: floor.color, floorType: floor.type, furnish, ...choice },
         availability?.canChoose ? ai : undefined
       )
 
@@ -102,15 +129,33 @@ export function BuildPage() {
               : "A photo of the whole room, taken from near a wall, works best. The plan opens seen from where the photo was taken, with your photo beside it."}
           </p>
         </div>
-        {banner}
+        {step !== "start" && banner}
+        {step === "start" && signedIn && designs && (
+          <DesignPicker
+            designs={designs}
+            designId={search.design}
+            newDesign={newDesign}
+            onPick={(designId) => chooseDesign({ designId })}
+            onNew={() => setAsking(true)}
+          />
+        )}
+        {step === "start" && account && !signedIn && (
+          <p className="rounded-2xl border bg-muted/40 p-4 text-sm text-muted-foreground" data-guest-design-hint>
+            <Link to={ROUTES.signIn} search={{ redirect: ROUTES.build }} className="font-medium text-foreground underline-offset-4 hover:underline">
+              Sign in
+            </Link>{" "}
+            to choose the design the room goes into. Without an account, its photos are kept and saved when you sign up.
+          </p>
+        )}
         {step === "start" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             {STARTS.map(({ step: next, icon: Icon, title, text }) => (
               <button
                 key={next}
                 type="button"
+                disabled={!account || needsChoice}
                 onClick={() => setStep(next)}
-                className="flex flex-col gap-2 rounded-2xl border bg-card p-5 text-left shadow-soft outline-none transition-colors hover:border-primary hover:bg-accent/40 focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="flex flex-col gap-2 rounded-2xl border bg-card p-5 text-left shadow-soft outline-none transition-colors hover:border-primary hover:bg-accent/40 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:bg-card"
                 data-build-choice={next}
               >
                 <Icon className="size-6 text-primary" aria-hidden />
@@ -121,10 +166,19 @@ export function BuildPage() {
           </div>
         ) : (
           <>
-            <PhotoStart ai={availability?.canChoose ? ai : undefined} designId={search.design} />
+            <PhotoStart ai={availability?.canChoose ? ai : undefined} choice={choice} />
             {back("start")}
           </>
         )}
+        <NewDesignDialog
+          open={askingNew}
+          onOpenChange={(open) => {
+            setAsking(open)
+            setDismissed(!open)
+          }}
+          initial={newDesign}
+          onSave={(details) => chooseDesign(details)}
+        />
       </div>
     )
   }

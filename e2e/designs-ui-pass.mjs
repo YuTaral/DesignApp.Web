@@ -179,8 +179,8 @@ try {
   //     (through its steps), and the room made from its first photo is in the design.
   await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
   await page.click('[data-add-room]')
-  await until(page, () => location.pathname === '/build' && document.body.innerText.includes('will be added to'), { label: 'build banner' })
-  const buildBanner = await hasText('The room’s photos will be added to Flat, final.')
+  await until(page, `location.pathname === '/build' && document.querySelector('[data-design-select]')?.value === '${design}'`, { label: 'design chosen' })
+  const buildBanner = await page.$eval('[data-design-select]', (e) => e.selectedOptions[0].textContent.startsWith('Flat, final'))
 
   await page.click('[data-build-choice=walls]')
   await page.waitForSelector('form[data-build-step=walls]')
@@ -200,7 +200,7 @@ try {
   const builtRoom = new URL(page.url()).pathname.split('/').at(-2)
   const withBuilt = await page.evaluate(async (id) => (await (await fetch(`/api/designs/${id}`)).json()), design)
 
-  step('Add room at the top builds a room for the design: Build a room says so, and its photo’s room is in the design',
+  step('Add room at the top builds a room for the design: Build a room has it chosen, and its photo’s room is in the design',
     buildBanner && stepsBanner && builtPlan.designId === design && withBuilt.rooms.some((r) => r.roomId === builtRoom) && withBuilt.rooms.length === 3,
     `banner ${buildBanner}/${stepsBanner}, plan design ${builtPlan.designId === design}, ${withBuilt.rooms.length} rooms`)
   await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })

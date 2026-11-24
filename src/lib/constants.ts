@@ -71,9 +71,6 @@ export const HTTP_STATUS = {
 /** The query parameter that names a room's photo set in its photo and outline addresses (API Constants.Routes.PhotoSetQuery). */
 export const PHOTO_SET_QUERY = "set"
 
-/** The query of `API.roomPlan` naming the design the plan's photos go into (Add room on a design's page). */
-export const DESIGN_ID_QUERY = "designId"
-
 /** The app's pages. */
 export const ROUTES = {
   home: "/",

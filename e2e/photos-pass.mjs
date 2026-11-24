@@ -189,6 +189,13 @@ try {
   await shot('photos-build-choices')
   step('Build a room offers both ways to start, each with what it does, and the editor no longer has Build in 3D',
     choices.length === 2 && choices.every((c) => c.length > 60) && editorOffers === null, choices.join(' | '))
+  // A signed-in user picks the design the room goes into first: the choices wait for it.
+  const lockedFirst = await page.$eval('[data-build-choice=photo]', (e) => e.disabled)
+  const pick = await page.$eval('[data-design-select]', (e) => [...e.options].find((o) => o.value && o.value !== 'new' && !o.disabled)?.value)
+
+  await page.select('[data-design-select]', pick)
+  await until(page, () => !document.querySelector('[data-build-choice=photo]').disabled, { label: 'choices on' })
+  step('A signed-in user must choose the design first: the choices are off until one is picked', lockedFirst && Boolean(pick))
   await page.click('[data-build-choice=photo]')
   await page.waitForSelector('[data-photo-start]')
   const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click('::-p-text(Choose photo)')])

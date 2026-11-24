@@ -8,16 +8,16 @@ import { uploadRoom } from "@/features/rooms/api"
 import { PhotoDropzone } from "@/features/upload/photo-dropzone"
 import { errorMessage } from "@/lib/api"
 import { AI_MODE, MESSAGES, QUERY_KEYS, ROUTES, type AiMode } from "@/lib/constants"
-import { buildPlanFromRoom } from "./api"
+import { buildPlanFromRoom, type DesignChoice } from "./api"
 
 /**
  * Building a room from a photo (the reverse of building one and photographing it): the photo is uploaded without its
  * analysis (only the plan is wanted), the AI reads it into a room plan, and the plan opens in the builder, seen from
  * where the photo was taken, with the photo beside the 3D view. Says what was left out, if anything.
  * @param props.ai - The AI to read it with; the API's default when missing.
- * @param props.designId - The design the room is started from, whose photos go into it; none when missing.
+ * @param props.choice - The design its photos go into, or a new one.
  */
-export function PhotoStart({ ai, designId }: { ai?: AiMode; designId?: string }) {
+export function PhotoStart({ ai, choice }: { ai?: AiMode; choice: DesignChoice }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [progress, setProgress] = useState<number | null>(null)
@@ -29,7 +29,7 @@ export function PhotoStart({ ai, designId }: { ai?: AiMode; designId?: string })
 
       setProgress(null)
 
-      return await buildPlanFromRoom(room.id, designId)
+      return await buildPlanFromRoom(room.id, choice)
     },
     onMutate: () => {
       setProgress(0)

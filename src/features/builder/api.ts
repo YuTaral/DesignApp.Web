@@ -4,7 +4,6 @@ import type { Room } from "@/features/rooms/types"
 import { getJson, sendForm, sendJson } from "@/lib/api"
 import {
   API,
-  DESIGN_ID_QUERY,
   QUERY_KEYS,
   type CeilingLight,
   type FloorType,
@@ -193,7 +192,15 @@ export type NewPlan = Pick<Plan, "name" | "roomType" | "width" | "length" | "hei
   furnish: boolean
   /** The design the room is started from (Add room on its page): its photos go into it. */
   designId?: string
+  /** Without a design: the new design its photos go into, made with the first one (mirrors NewDesignRequest). */
+  newDesign?: NewDesign
 }
+
+/** A new design a room is built for: made, with this name and description, when the room's first photo is made. */
+export type NewDesign = { name: string; description: string }
+
+/** Which design a new room's photos go into: one of the user's, or a new one. */
+export type DesignChoice = { designId?: string; newDesign?: NewDesign }
 
 /**
  * Loads a built room.
@@ -237,11 +244,11 @@ export function createPlan(plan: NewPlan, ai?: string): Promise<Plan> {
 /**
  * Reads an uploaded room's photo into a new plan, with the room's AI.
  * @param roomId - The room.
- * @param designId - The design the room is started from, whose photos go into it; none when missing.
+ * @param choice - The design its photos go into, or a new one; none when empty.
  * @returns The plan and what was left out.
  */
-export function buildPlanFromRoom(roomId: string, designId?: string): Promise<PhotoPlan> {
-  return sendJson<PhotoPlan>("POST", designId ? `${API.roomPlan(roomId)}?${DESIGN_ID_QUERY}=${encodeURIComponent(designId)}` : API.roomPlan(roomId))
+export function buildPlanFromRoom(roomId: string, choice: DesignChoice = {}): Promise<PhotoPlan> {
+  return sendJson<PhotoPlan>("POST", API.roomPlan(roomId), choice)
 }
 
 /**

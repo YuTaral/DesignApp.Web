@@ -135,7 +135,7 @@ function DesignView({ design }: { design: Design }) {
               </Button>
             ) : (
               <Button asChild>
-                <Link to={ROUTES.build} search={{ step: undefined, design: design.id }} data-add-room>
+                <Link to={ROUTES.build} search={{ step: undefined, design: design.id, newDesign: undefined, newDescription: undefined }} data-add-room>
                   <PlusIcon data-icon="inline-start" />
                   Add room
                 </Link>
