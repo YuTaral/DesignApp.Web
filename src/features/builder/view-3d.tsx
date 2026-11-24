@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 
 import { BUILDER, MESSAGES } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { useBuilderStore } from "./builder-store"
 import { PhotoReference } from "./photo-reference"
 import { wallName } from "./room-outline"
-import { blockingItem, PlanScene } from "./scene-3d"
+import { blockingItem } from "./scene-3d"
+import { usePlanScene } from "./use-plan-scene"
 import { ViewChoice } from "./view-choice"
 
 /**
@@ -19,26 +20,9 @@ export function View3d({ plan }: { plan: Plan }) {
   const setRoom = useBuilderStore((state) => state.setRoom)
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsRef = useRef<HTMLDivElement>(null)
-  const sceneRef = useRef<PlanScene | null>(null)
+  const { canvasRef, sceneRef, failed } = usePlanScene()
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const [failed, setFailed] = useState(false)
   const [hover, setHover] = useState(false)
-
-  // The renderer lives as long as its canvas.
-  const canvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
-    sceneRef.current?.dispose()
-    sceneRef.current = null
-
-    if (!canvas) {
-      return
-    }
-
-    try {
-      sceneRef.current = new PlanScene(canvas)
-    } catch {
-      setFailed(true)
-    }
-  }, [])
 
   // Measured before the first paint, so the room shows at once rather than a frame later, then again on every resize.
   useLayoutEffect(() => {
@@ -74,7 +58,7 @@ export function View3d({ plan }: { plan: Plan }) {
     if (sceneRef.current && size.width > 0) {
       sceneRef.current.render(plan, size.width, size.height)
     }
-  }, [plan, size])
+  }, [plan, size, sceneRef])
 
   // Whether something blocks the view (a cabinet in the corner the photo is taken from), checked once the room stops
   // changing, as each check draws the room again.

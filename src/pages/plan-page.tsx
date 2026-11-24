@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Link, useNavigate, useParams } from "@tanstack/react-router"
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import { AlertTriangleIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ImageIcon, LoaderCircleIcon, MapIcon, PanelTopIcon, RulerIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -12,10 +12,12 @@ import { CatalogPanel } from "@/features/builder/catalog-panel"
 import { GenerateDialog } from "@/features/builder/generate-dialog"
 import { Inspector } from "@/features/builder/inspector"
 import { PlanCanvas } from "@/features/builder/plan-canvas"
+import { ReplaceBanner } from "@/features/builder/replace-banner"
 import { objectBoxes, renderGuide } from "@/features/builder/scene-3d"
 import { View3d } from "@/features/builder/view-3d"
 import { useBuilderShortcuts } from "@/features/builder/use-builder-shortcuts"
 import { WallView } from "@/features/builder/wall-view"
+import { useRoom } from "@/features/rooms/api"
 import { errorMessage } from "@/lib/api"
 import { AI_MODE, BUILDER, MESSAGES, QUERY_KEYS, ROOM_TYPE_NAMES, ROUTES, type PhotoStyle } from "@/lib/constants"
 
@@ -26,7 +28,8 @@ type View = "plan" | "wall" | "3d"
  * Route `/build/$planId`: step 3 of building a room. Windows, doors and common objects on the left; the floor plan, a
  * wall seen straight on (where windows and doors are placed) or the 3D view in the middle; the selected object or the
  * room on the right. Every change is saved shortly after it is made. Generate photo turns the 3D view into a realistic
- * photo and opens it in the editor as a new room.
+ * photo and opens it in the editor as a new room; with `?replace=` (Edit in 3D on a design's page), the new room
+ * replaces that room in its design.
  */
 export function PlanPage() {
   const { planId } = useParams({ from: "/build/$planId" })
@@ -63,8 +66,11 @@ function Builder({ plan }: { plan: Plan }) {
   // Room shape mode on the plan: the walls are edited instead of the objects.
   const [shaping, setShaping] = useState(false)
   const [wall, setWall] = useState<number>(plan.view)
+  const { replace } = useSearch({ from: ROUTES.plan })
+  // The room the next photos replace, while it still exists (a run replaces it once).
+  const replacing = useRoom(replace).data
   const { saving, failed, flush } = useAutosave(plan)
-  const make = usePhotoMaker(plan, flush)
+  const make = usePhotoMaker(plan, flush, replacing?.id)
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
 
@@ -132,6 +138,7 @@ function Builder({ plan }: { plan: Plan }) {
             {failed ? "Not saved" : saving ? "Saving…" : "Saved"}
           </span>
         </div>
+        {replacing && <ReplaceBanner planId={plan.id} room={replacing} />}
         {/*
           The tabs come first on a row of their own, so they stay put whichever tab is open; Room shape (on the plan
           only) and Generate photo follow them.
@@ -336,16 +343,19 @@ function useAutosave(plan: Plan) {
  * of it in the chosen style, as a new room. The plan keeps its own view.
  * @param plan - The room.
  * @param flush - Saves the plan now.
+ * @param replaces - The room a run's new room replaces in its design; missing to add a room.
  * @returns The function that makes a photo of one view.
  */
-function usePhotoMaker(plan: Plan, flush: () => Promise<void>) {
+function usePhotoMaker(plan: Plan, flush: () => Promise<void>, replaces?: string) {
   return async (shot: PlanShot, style: PhotoStyle, instructions: string, photos: { roomId?: string; note: string }) => {
     const seen = { ...plan, ...shot }
+    // Only a run's first photo makes the room, which replaces the old one.
+    const run = { ...photos, replaces: photos.roomId ? undefined : replaces }
 
     await flush()
     const guide = await renderGuide(seen)
 
     // Each object's box in the view keeps the image model to the plan's layout (it kept sizes and places better so).
-    return generateRoom(plan.id, guide, style, instructions, undefined, objectBoxes(seen), shot, photos)
+    return generateRoom(plan.id, guide, style, instructions, undefined, objectBoxes(seen), shot, run)
   }
 }

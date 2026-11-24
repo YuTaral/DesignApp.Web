@@ -207,6 +207,30 @@ try {
   await until(page, () => document.body.innerText.includes('3 rooms'), { label: '3 rooms again' })
   await shot('designs-add-room')
 
+  // 9c. Edit in 3D on that room asks what new photos do; Replace opens the builder saying so, and the photo made there
+  //     is a new room in the old one's place (the old one is gone from the design).
+  await page.click('[data-room-photos] [data-room-view="3d"]')
+  await page.waitForSelector('[data-edit-in-3d]')
+  await page.click('[data-edit-in-3d]')
+  await page.waitForSelector('[data-edit-plan-dialog]')
+  const openWaits = await page.$eval('[data-open-builder]', (b) => b.disabled)
+
+  await page.click('[data-new-photos=replace]')
+  await page.click('[data-open-builder]')
+  await page.waitForSelector('[data-replace-banner]')
+  await page.waitForSelector('[data-plan-canvas]')
+  await page.click('::-p-text(Generate photo)')
+  await page.waitForSelector('[data-generate-confirm]')
+  await sleep(800)
+  await page.click('[data-generate-confirm]')
+  await until(page, () => location.pathname.endsWith('/photos'), { timeout: 60000, label: 'photo page after replacing' })
+  const replacedBy = new URL(page.url()).pathname.split('/').at(-2)
+  const afterReplace = await page.evaluate(async (id) => (await (await fetch(`/api/designs/${id}`)).json()).rooms.map((r) => r.roomId), design)
+
+  step('Edit in 3D with Replace makes the next photo a new room in the old one’s place',
+    openWaits && replacedBy !== builtRoom && afterReplace.length === 3 && afterReplace[withBuilt.rooms.findIndex((r) => r.roomId === builtRoom)] === replacedBy
+      && !afterReplace.includes(builtRoom), `${afterReplace.length} rooms`)
+
   // 10. My designs: the card; phone layouts.
   await page.goto(`${WEB}/designs`, { waitUntil: 'networkidle0' })
   await until(page, () => document.body.innerText.includes('Flat, final'), { label: 'card' })

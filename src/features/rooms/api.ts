@@ -26,12 +26,13 @@ export function useAiAvailability() {
 /**
  * Loads a room from the API and caches it. A 404 is not retried. While the analysis runs it also
  * re-checks every few seconds, a fallback for when live updates ({@link useLiveRoom}) can't connect.
- * @param id - The room's id.
+ * @param id - The room's id; nothing is loaded without one.
  */
-export function useRoom(id: string) {
+export function useRoom(id: string | undefined) {
   return useQuery({
-    queryKey: QUERY_KEYS.room(id),
-    queryFn: ({ signal }) => getJson<Room>(API.room(id), signal),
+    queryKey: QUERY_KEYS.room(id ?? ""),
+    queryFn: ({ signal }) => getJson<Room>(API.room(id ?? ""), signal),
+    enabled: id !== undefined,
     // A missing room won't appear by asking again.
     retry: (failureCount, error) => !(error instanceof ApiError && error.status === HTTP_STATUS.notFound) && failureCount < LIMITS.roomRetries,
     refetchInterval: (query) => (query.state.data && !isAnalysisFinished(query.state.data.status) ? TIMINGS.roomPollMs : false),

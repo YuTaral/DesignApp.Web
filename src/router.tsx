@@ -70,7 +70,13 @@ const routeTree = rootRoute.addChildren([
     }),
     component: BuildPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: ROUTES.plan, component: PlanPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: ROUTES.plan,
+    // ?replace= the design's room which the photos generated next replace (Edit in 3D on a design's page).
+    validateSearch: (search: Record<string, unknown>): { replace?: string } => ({ replace: optionalText(search.replace) }),
+    component: PlanPage,
+  }),
   signInRoute,
   signUpRoute,
 ])

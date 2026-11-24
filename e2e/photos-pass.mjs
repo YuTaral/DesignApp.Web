@@ -152,6 +152,38 @@ try {
   await sleep(200)
   const designKey = await roomCaption()
 
+  // 7b. The switch shows the room in 3D instead, drawn; Photos brings the photos back.
+  await page.click('[data-room-photos] [data-room-view="3d"]')
+  await page.waitForSelector('[data-plan-preview-canvas]')
+  await sleep(500)
+  const preview = await page.evaluate(() => {
+    const canvas = document.querySelector('[data-plan-preview-canvas]')
+
+    return { width: canvas.width, photos: document.querySelectorAll('[data-room-photos] [data-photo-shown]').length }
+  })
+
+  await shot('design-room-3d')
+  await page.click('[data-room-photos] [data-room-view="photos"]')
+  await page.waitForSelector('[data-room-photos] [data-photo-shown]')
+  step('A built room on the design’s page switches to its 3D view, and back to its photos', preview.width > 0 && preview.photos === 0, JSON.stringify(preview))
+
+  // 7c. Edit in 3D asks first: Replace opens the builder with a note saying so, which "Add a new room instead" drops.
+  await page.click('[data-room-photos] [data-room-view="3d"]')
+  await page.waitForSelector('[data-edit-in-3d]')
+  await page.click('[data-edit-in-3d]')
+  await page.waitForSelector('[data-edit-plan-dialog]')
+  await page.click('[data-new-photos=replace]')
+  await page.click('[data-open-builder]')
+  await page.waitForSelector('[data-replace-banner]')
+  const replaceUrl = new URL(page.url())
+
+  await page.click('[data-add-instead]')
+  await until(page, () => !document.querySelector('[data-replace-banner]'), { label: 'replace note gone' })
+  step('Edit in 3D asks whether new photos replace the room; the builder says so until "Add a new room instead"',
+    replaceUrl.pathname === `/build/${plan.id}` && replaceUrl.searchParams.get('replace') === roomId && !new URL(page.url()).searchParams.has('replace'), replaceUrl.search)
+  await page.goto(`${WEB}/designs/${design.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-room-photos] [data-photo-shown]')
+
   await page.click('[data-room-photos-page]')
   await until(page, () => location.pathname.endsWith('/photos'), { label: 'photo page from the design' })
   step('The design’s page shows all the room’s photos, switched by the arrows and the arrow keys',

@@ -254,7 +254,7 @@ function RoomCard({ design, room, number }: { design: Design; room: DesignRoom; 
   return (
     <li className={cn("group relative overflow-hidden rounded-2xl border bg-card shadow-soft", photos && "sm:col-span-2 lg:col-span-3")}>
       {details && photos ? (
-        <RoomPhotos room={details} takes={takes} designId={design.id} actions={cardButtons}>
+        <RoomPhotos room={details} takes={takes} designId={design.id} label={label} canAdd={design.rooms.length < LIMITS.design.rooms} actions={cardButtons}>
           {summary}
         </RoomPhotos>
       ) : (

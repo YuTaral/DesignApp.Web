@@ -285,7 +285,8 @@ export function describeObject(planId: string, description: string): Promise<Cat
  * @param boxes - Where each object is in the 3D view (`objectBoxes`), which the image model keeps them in; missing for none.
  * @param shot - The view the guide was drawn from, when it isn't the plan's own (the plan keeps its own); missing for
  *   the plan's own view.
- * @param photos - The room of the run's earlier photos (missing for its first) and what this photo is (its view's name).
+ * @param photos - The room of the run's earlier photos (missing for its first), what this photo is (its view's name),
+ *   and, for the run's first, the room of the plan its new room replaces (missing to add a room).
  * @returns The room (waiting for the user to start its analysis).
  */
 export function generateRoom(
@@ -296,7 +297,7 @@ export function generateRoom(
   seed?: number,
   boxes?: ItemBox[],
   shot?: PlanShot,
-  photos?: { roomId?: string; note?: string }
+  photos?: { roomId?: string; note?: string; replaces?: string }
 ): Promise<Room> {
   const form = new FormData()
 
@@ -307,6 +308,10 @@ export function generateRoom(
 
   if (photos?.note) {
     form.append("note", photos.note)
+  }
+
+  if (photos?.replaces) {
+    form.append("replaces", photos.replaces)
   }
 
   if (shot) {
