@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { SearchIcon } from "lucide-react"
+import { SearchIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Input } from "@/components/ui/input"
@@ -60,7 +60,8 @@ export function NumberField({
 }
 
 /**
- * A search box with a magnifier, cleared by its own button.
+ * A search box with a magnifier, and a button that clears it while something is typed (Firefox draws none of its own,
+ * and a word left in it quietly empties the lists it filters).
  * @param props.value - What is typed.
  * @param props.onChange - Takes what is typed.
  * @param props.label - What it searches, for screen readers.
@@ -88,10 +89,22 @@ export function SearchField({
         value={value}
         placeholder={placeholder}
         aria-label={label}
-        className="pl-8"
+        className="pr-8 pl-8 [&::-webkit-search-cancel-button]:hidden"
         onChange={(event) => onChange(event.target.value)}
         {...{ [`data-${attribute}`]: true }}
       />
+      {value && (
+        <button
+          type="button"
+          aria-label="Clear the search"
+          title="Clear the search"
+          onClick={() => onChange("")}
+          className="absolute inset-y-0 right-1.5 my-auto grid size-6 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          data-search-clear
+        >
+          <XIcon className="size-3.5" aria-hidden />
+        </button>
+      )}
     </div>
   )
 }

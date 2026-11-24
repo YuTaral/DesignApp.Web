@@ -728,6 +728,10 @@ export const MESSAGES = {
   planLoadFailed: "Couldn't open this room. It may have been deleted.",
   planSaveFailed: "Couldn't save the room. It is tried again every few seconds; leave the page open until it says Saved.",
   catalogLoadFailed: "Couldn't load the common objects. Reload the page.",
+  /** A builder list the search leaves empty. */
+  searchNoMatch: (noun: string, query: string) => `No ${noun} match “${query}”.`,
+  /** A builder list that is empty with nothing searched. */
+  listNoMatch: "None here; try Other below.",
   guideFailed: "Couldn't draw the 3D view of the room.",
   objectDescribed: (label: string) => `Added the ${label}. Drag it where it belongs.`,
   wallItemAdded: (label: string, wall: string) => `Added the ${label} to the ${wall.toLowerCase()}. Drag it into place.`,

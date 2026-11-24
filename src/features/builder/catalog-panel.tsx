@@ -37,6 +37,7 @@ export function CatalogPanel({ plan, wall, onOpenWall }: { plan: Plan; wall: num
         {
           name: "objects",
           title: `${ROOM_TYPE_NAMES[plan.roomType]} objects`,
+          noun: "objects",
           objects: found.filter((o) => !isWallShape(o.shape)),
           hint: "Click one to choose its type, color and size, or drag it onto the plan.",
         },
@@ -45,12 +46,14 @@ export function CatalogPanel({ plan, wall, onOpenWall }: { plan: Plan; wall: num
         {
           name: "openings",
           title: "Windows and doors",
+          noun: "windows or doors",
           objects: found.filter((o) => isOpeningShape(o.shape)),
           hint: "Click one to add it to this wall, or drag it onto the wall.",
         },
         {
           name: "mounted",
           title: "On the walls",
+          noun: "things to hang",
           objects: found.filter((o) => isMountedShape(o.shape)),
           hint: "Paintings, mirrors, shelves and cabinets. Click one to add it to this wall, or drag it onto the wall.",
         },
@@ -68,7 +71,17 @@ export function CatalogPanel({ plan, wall, onOpenWall }: { plan: Plan; wall: num
       {catalog.isError && <p className="text-sm text-destructive">{MESSAGES.catalogLoadFailed}</p>}
       {lists.map((list) => (
         <Section key={list.name} name={list.name} title={list.title} hint={list.hint}>
-          {list.objects.length === 0 && catalog.data && <p className="text-sm text-muted-foreground">None here matches; try Other below.</p>}
+          {list.objects.length === 0 && catalog.data && (
+            // A word left in the search empties every list, on every tab: say so, with a way out.
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground" data-list-empty={list.name}>
+              {query.trim() ? MESSAGES.searchNoMatch(list.noun, query.trim()) : MESSAGES.listNoMatch}
+              {query.trim() && (
+                <Button variant="outline" size="xs" onClick={() => search("")} data-clear-search>
+                  Clear search
+                </Button>
+              )}
+            </p>
+          )}
           <ObjectList objects={list.objects.slice(0, shownIn(list.name))} disabled={() => full} onChoose={setChosen} />
           {list.objects.length > shownIn(list.name) && (
             <Button

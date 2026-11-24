@@ -102,13 +102,22 @@ try {
   await page.type('[data-catalog-search]', 'lamp')
   const lamps = await listed()
 
-  await page.click('[data-catalog-search]', { count: 3 })
-  await page.keyboard.press('Backspace')
+  // The × clears the search; a search that empties a list says so, with a button that clears it.
+  await page.click('[data-search-clear]')
+  const cleared = await page.$eval('[data-catalog-search]', (e) => e.value)
+
+  await page.type('[data-catalog-search]', 'zzz')
+  const emptyText = await page.$eval('[data-list-empty=objects]', (e) => e.textContent.trim())
+
+  await page.click('[data-list-empty=objects] [data-clear-search]')
+  const afterClear = await listed()
 
   step('The plan opens with the living room\u2019s objects only (no windows or things to hang), ten at a time, and a search',
     planSections === 'objects' && firstPage.length === 10 && firstPage.includes('sofa') && !firstPage.includes('window')
       && secondPage.length === 18 && moreLeft === null && lamps.join() === 'floor-lamp' && outline[1] === '200px' && floorType === 'Tiles',
     `${planSections}: ${firstPage.length} then ${secondPage.length}, lamps ${lamps}, outline ${outline}, floor ${floorType}`)
+  step('A search that empties a list says so and clears with one click (or the box’s ×)',
+    cleared === '' && emptyText.startsWith('No objects match “zzz”') && afterClear.length === 10, `${emptyText} | ${afterClear.length} after clearing`)
 
   // 1b. A furnished room (the default): a 4 × 4 m bedroom gets a door, windows on the back wall and a bed with two
   //     nightstands, all inside the walls.
