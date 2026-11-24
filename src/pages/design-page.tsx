@@ -126,15 +126,41 @@ function DesignView({ design }: { design: Design }) {
             {roomCount(design.rooms.length)} · Saved {dateFormat.format(new Date(design.updatedAt))}
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <Button variant="outline" onClick={() => setDialog("edit")}>
-            <PencilIcon data-icon="inline-start" />
-            Edit details
-          </Button>
-          <Button variant="destructive" onClick={() => setDialog("delete")}>
-            <Trash2Icon data-icon="inline-start" />
-            Delete
-          </Button>
+        <div className="flex shrink-0 flex-col gap-1.5 sm:items-end">
+          <div className="flex flex-wrap gap-2">
+            {full ? (
+              <Button disabled title={`A design holds up to ${LIMITS.design.rooms} rooms.`}>
+                <PlusIcon data-icon="inline-start" />
+                Add room
+              </Button>
+            ) : (
+              <Button asChild>
+                <Link to={ROUTES.build} search={{ step: undefined, design: design.id }} data-add-room>
+                  <PlusIcon data-icon="inline-start" />
+                  Add room
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setDialog("edit")}>
+              <PencilIcon data-icon="inline-start" />
+              Edit details
+            </Button>
+            <Button variant="destructive" onClick={() => setDialog("delete")}>
+              <Trash2Icon data-icon="inline-start" />
+              Delete
+            </Button>
+          </div>
+          {full ? (
+            <p className="text-xs text-muted-foreground">This design is full: it holds up to {LIMITS.design.rooms} rooms.</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Builds a room in 3D for this design, or{" "}
+              <Link to={ROUTES.home} search={{ design: design.id }} className="font-medium text-foreground underline-offset-4 hover:underline" data-upload-room>
+                upload a photo to restyle
+              </Link>
+              .
+            </p>
+          )}
         </div>
       </div>
 
@@ -142,26 +168,6 @@ function DesignView({ design }: { design: Design }) {
         {design.rooms.map((room, i) => (
           <RoomCard key={room.roomId} design={design} room={room} number={i + 1} />
         ))}
-        <li>
-          {full ? (
-            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">This design is full</p>
-              <p>A design holds up to {LIMITS.design.rooms} rooms.</p>
-            </div>
-          ) : (
-            <Link
-              to={ROUTES.home}
-              search={{ design: design.id }}
-              className="flex aspect-[4/3] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed text-muted-foreground outline-none transition-colors hover:border-primary hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-muted">
-                <PlusIcon className="size-5" />
-              </span>
-              <span className="font-medium">Add room</span>
-              <span className="text-xs">Upload another photo into this design</span>
-            </Link>
-          )}
-        </li>
       </ul>
 
       <DesignDetailsDialog design={design} open={dialog === "edit"} onOpenChange={(open) => setDialog(open ? "edit" : null)} />

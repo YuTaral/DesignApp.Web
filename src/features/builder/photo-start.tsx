@@ -15,8 +15,9 @@ import { buildPlanFromRoom } from "./api"
  * analysis (only the plan is wanted), the AI reads it into a room plan, and the plan opens in the builder, seen from
  * where the photo was taken, with the photo beside the 3D view. Says what was left out, if anything.
  * @param props.ai - The AI to read it with; the API's default when missing.
+ * @param props.designId - The design the room is started from, whose photos go into it; none when missing.
  */
-export function PhotoStart({ ai }: { ai?: AiMode }) {
+export function PhotoStart({ ai, designId }: { ai?: AiMode; designId?: string }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [progress, setProgress] = useState<number | null>(null)
@@ -28,7 +29,7 @@ export function PhotoStart({ ai }: { ai?: AiMode }) {
 
       setProgress(null)
 
-      return await buildPlanFromRoom(room.id)
+      return await buildPlanFromRoom(room.id, designId)
     },
     onMutate: () => {
       setProgress(0)

@@ -111,8 +111,8 @@ try {
   step('Design page shows name, description, 1 room; its only room can\'t be removed', (await hasText('Whole flat')) && (await hasText('1 room')) && onlyRemove === true)
   await shot('designs-page-1')
 
-  // 5. Add room from the design's page: upload goes straight into the design.
-  await page.click('::-p-text(Add room)')
+  // 5. "Upload a photo to restyle" under Add room on the design's page: the upload goes straight into the design.
+  await page.click('[data-upload-room]')
   await until(page, () => location.pathname === '/' && document.body.innerText.includes('will be added to'), { label: 'add-room banner' })
   step('Home shows which design the photo goes into', await hasText('The photo will be added to Whole flat.'))
   await upload('bedroom.png')
@@ -175,10 +175,42 @@ try {
   await until(page, () => document.querySelector('aside [data-recolored]')?.dataset.recolored === '3', { timeout: 10000, label: '3 colors' }).catch(() => {})
   step('Room 1 opens with its 3 saved colors, counted as saved', (await recolored()) === 3 && (await saveText()) === 'Saved', `${await recolored()} colors, ${await saveText()}`)
 
+  // 9b. Add room at the top of the design's page builds a room in 3D for it: Build a room says where its photos go
+  //     (through its steps), and the room made from its first photo is in the design.
+  await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
+  await page.click('[data-add-room]')
+  await until(page, () => location.pathname === '/build' && document.body.innerText.includes('will be added to'), { label: 'build banner' })
+  const buildBanner = await hasText('The room’s photos will be added to Flat, final.')
+
+  await page.click('[data-build-choice=walls]')
+  await page.waitForSelector('form[data-build-step=walls]')
+  const stepsBanner = await hasText('will be added to Flat, final')
+
+  await page.click('form[aria-label="New room"] button[type=submit]')
+  await page.waitForSelector('form[data-build-step=floor]')
+  await page.click('form[aria-label="New room"] button[type=submit]')
+  await until(page, () => /^\/build\/[0-9a-f-]{36}$/.test(location.pathname), { timeout: 20000, label: 'builder' })
+  const builtPlan = await page.evaluate(async () => (await fetch(`/api/plans/${location.pathname.split('/').at(-1)}`)).json())
+
+  await page.click('::-p-text(Generate photo)')
+  await page.waitForSelector('[data-generate-confirm]')
+  await sleep(800)
+  await page.click('[data-generate-confirm]')
+  await until(page, () => location.pathname.endsWith('/photos'), { timeout: 60000, label: 'photo page' })
+  const builtRoom = new URL(page.url()).pathname.split('/').at(-2)
+  const withBuilt = await page.evaluate(async (id) => (await (await fetch(`/api/designs/${id}`)).json()), design)
+
+  step('Add room at the top builds a room for the design: Build a room says so, and its photo’s room is in the design',
+    buildBanner && stepsBanner && builtPlan.designId === design && withBuilt.rooms.some((r) => r.roomId === builtRoom) && withBuilt.rooms.length === 3,
+    `banner ${buildBanner}/${stepsBanner}, plan design ${builtPlan.designId === design}, ${withBuilt.rooms.length} rooms`)
+  await page.goto(`${WEB}/designs/${design}`, { waitUntil: 'networkidle0' })
+  await until(page, () => document.body.innerText.includes('3 rooms'), { label: '3 rooms again' })
+  await shot('designs-add-room')
+
   // 10. My designs: the card; phone layouts.
   await page.goto(`${WEB}/designs`, { waitUntil: 'networkidle0' })
   await until(page, () => document.body.innerText.includes('Flat, final'), { label: 'card' })
-  step('My designs shows the card with description and room count', (await hasText('Greens and oak')) && (await hasText('2 rooms')))
+  step('My designs shows the card with description and room count', (await hasText('Greens and oak')) && (await hasText('3 rooms')))
   await shot('designs-list')
   await page.setViewport({ width: 390, height: 844 })
 

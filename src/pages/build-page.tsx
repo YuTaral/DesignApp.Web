@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label"
 import { createPlan } from "@/features/builder/api"
 import { FloorChoice, FloorColorChoice } from "@/features/builder/floor-choice"
 import { PhotoStart } from "@/features/builder/photo-start"
+import { useDesign } from "@/features/designs/api"
+import { TargetBanner } from "@/features/designs/target-banner"
 import { ColorChoice, NumberField } from "@/features/builder/fields"
 import { useAiAvailability } from "@/features/rooms/api"
 import { useAiChoice } from "@/features/upload/use-ai-choice"
@@ -45,7 +47,8 @@ export function BuildPage() {
   const navigate = useNavigate()
   const availability = useAiAvailability().data
   const [ai] = useAiChoice(availability)
-  const step: Step = useSearch({ from: ROUTES.build }).step ?? "start"
+  const search = useSearch({ from: ROUTES.build })
+  const target = useDesign(search.design).data
   const [roomType, setRoomType] = useState<RoomType>(BUILDER.start.roomType)
   const [name, setName] = useState("")
   const [walls, setWalls] = useState<{ width: number; length: number; height: number }>({ width: BUILDER.start.width, length: BUILDER.start.length, height: BUILDER.start.height })
@@ -53,10 +56,13 @@ export function BuildPage() {
   const [floor, setFloor] = useState<{ type: FloorType; color: string }>({ type: BUILDER.start.floorType, color: BUILDER.start.floor })
   const [furnish, setFurnish] = useState(true)
   const [busy, setBusy] = useState(false)
+  const step: Step = search.step ?? "start"
+  // Started from a design (Add room on its page): the room's photos go into it, as the banner says.
+  const banner = target && <TargetBanner design={target} what={"room\u2019s photos"} />
 
   /** Goes to a step, as a new page in the browser's history (so Back comes back). */
   const setStep = (next: Step) => {
-    void navigate({ to: ROUTES.build, search: { step: next === "start" ? undefined : next } })
+    void navigate({ to: ROUTES.build, search: { step: next === "start" ? undefined : next, design: search.design } })
   }
 
   const start = async () => {
@@ -64,7 +70,7 @@ export function BuildPage() {
 
     try {
       const plan = await createPlan(
-        { name: name.trim(), roomType, ...walls, wallColor, floorColor: floor.color, floorType: floor.type, furnish },
+        { name: name.trim(), roomType, ...walls, wallColor, floorColor: floor.color, floorType: floor.type, furnish, designId: search.design },
         availability?.canChoose ? ai : undefined
       )
 
@@ -96,6 +102,7 @@ export function BuildPage() {
               : "A photo of the whole room, taken from near a wall, works best. The plan opens seen from where the photo was taken, with your photo beside it."}
           </p>
         </div>
+        {banner}
         {step === "start" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             {STARTS.map(({ step: next, icon: Icon, title, text }) => (
@@ -114,7 +121,7 @@ export function BuildPage() {
           </div>
         ) : (
           <>
-            <PhotoStart ai={availability?.canChoose ? ai : undefined} />
+            <PhotoStart ai={availability?.canChoose ? ai : undefined} designId={search.design} />
             {back("start")}
           </>
         )}
@@ -147,6 +154,7 @@ export function BuildPage() {
               : "What the floor is made of, and its color. You can change both later."}
           </p>
         </div>
+        {banner}
 
         {step === BUILD_STEP.Walls ? (
           <>

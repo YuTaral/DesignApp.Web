@@ -60,8 +60,12 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: ROUTES.build,
-    // ?step= is the step after the start (walls, floor or photo), so Back goes back a step.
-    validateSearch: (search: Record<string, unknown>) => ({ step: isEnumValue(BUILD_STEP, search.step) ? search.step : undefined }),
+    // ?step= is the step after the start (walls, floor or photo), so Back goes back a step; ?design= the design the room
+    // is added to (Add room on a design's page).
+    validateSearch: (search: Record<string, unknown>) => ({
+      step: isEnumValue(BUILD_STEP, search.step) ? search.step : undefined,
+      design: optionalText(search.design),
+    }),
     component: BuildPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: ROUTES.plan, component: PlanPage }),

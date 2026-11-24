@@ -4,6 +4,7 @@ import type { Room } from "@/features/rooms/types"
 import { getJson, sendForm, sendJson } from "@/lib/api"
 import {
   API,
+  DESIGN_ID_QUERY,
   QUERY_KEYS,
   type CeilingLight,
   type FloorType,
@@ -190,6 +191,8 @@ export type CatalogVariant = {
 export type NewPlan = Pick<Plan, "name" | "roomType" | "width" | "length" | "height" | "wallColor" | "floorColor" | "floorType"> & {
   /** Start with furniture, windows and a door sized for the room (the API's default), or empty. */
   furnish: boolean
+  /** The design the room is started from (Add room on its page): its photos go into it. */
+  designId?: string
 }
 
 /**
@@ -234,10 +237,11 @@ export function createPlan(plan: NewPlan, ai?: string): Promise<Plan> {
 /**
  * Reads an uploaded room's photo into a new plan, with the room's AI.
  * @param roomId - The room.
+ * @param designId - The design the room is started from, whose photos go into it; none when missing.
  * @returns The plan and what was left out.
  */
-export function buildPlanFromRoom(roomId: string): Promise<PhotoPlan> {
-  return sendJson<PhotoPlan>("POST", API.roomPlan(roomId))
+export function buildPlanFromRoom(roomId: string, designId?: string): Promise<PhotoPlan> {
+  return sendJson<PhotoPlan>("POST", designId ? `${API.roomPlan(roomId)}?${DESIGN_ID_QUERY}=${encodeURIComponent(designId)}` : API.roomPlan(roomId))
 }
 
 /**
