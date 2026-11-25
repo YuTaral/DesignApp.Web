@@ -343,6 +343,8 @@ export function describeObject(planId: string, description: string): Promise<Cat
  * @param photos - The room of the run's earlier photos (missing for its first), what this photo is (its view's name),
  *   for the run's first, the room of the plan its new room replaces (missing to add a room), and for the others, where
  *   each object is in the run's first photo, from which the AI copies them (the same objects and decorations in every view).
+ * @param masks - Which object or surface each pixel of the 3D view shows (`renderMaskPng`), by which the API brings the
+ *   photo's colors back to the room as planned; missing to keep them as the AI made them.
  * @returns The room (waiting for the user to start its analysis).
  */
 export function generateRoom(
@@ -353,7 +355,8 @@ export function generateRoom(
   seed?: number,
   boxes?: ItemBox[],
   shot?: PlanShot,
-  photos?: { roomId?: string; note?: string; replaces?: string; referenceBoxes?: ItemBox[] }
+  photos?: { roomId?: string; note?: string; replaces?: string; referenceBoxes?: ItemBox[] },
+  masks?: Blob
 ): Promise<Room> {
   const form = new FormData()
 
@@ -389,6 +392,10 @@ export function generateRoom(
 
   form.append("guide", guide, "guide.png")
   form.append("style", style)
+
+  if (masks) {
+    form.append("masks", masks, "masks.png")
+  }
 
   if (instructions.trim()) {
     form.append("instructions", instructions.trim())

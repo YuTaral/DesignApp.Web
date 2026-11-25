@@ -14,7 +14,7 @@ import { GenerateDialog } from "@/features/builder/generate-dialog"
 import { Inspector } from "@/features/builder/inspector"
 import { PlanCanvas } from "@/features/builder/plan-canvas"
 import { ReplaceBanner } from "@/features/builder/replace-banner"
-import { objectBoxes, renderGuide, renderPanorama } from "@/features/builder/scene-3d"
+import { objectBoxes, renderGuide, renderMaskPng, renderPanorama } from "@/features/builder/scene-3d"
 import { View3d } from "@/features/builder/view-3d"
 import { useBuilderShortcuts } from "@/features/builder/use-builder-shortcuts"
 import { WallView } from "@/features/builder/wall-view"
@@ -374,9 +374,10 @@ function usePanoramaMaker(plan: Plan, flush: () => Promise<void>, replaces?: str
 }
 
 /**
- * Makes one photo for Generate photo: saves the plan, draws the 3D view of the chosen view, and has the AI make a photo
- * of it in the chosen style, as a new room; a run's later photos send where each object is in its first photo, for the
- * AI to copy them from it. The plan keeps its own view.
+ * Makes one photo for Generate photo: saves the plan, draws the 3D view of the chosen view and its object masks, and has
+ * the AI make a photo of it in the chosen style, as a new room, its colors brought back to the plan's by the masks; a
+ * run's later photos send where each object is in its first photo, for the AI to copy them from it. The plan keeps its
+ * own view.
  * @param plan - The room.
  * @param flush - Saves the plan now.
  * @param replaces - The room a run's new room replaces in its design; missing to add a room.
@@ -395,8 +396,9 @@ function usePhotoMaker(plan: Plan, flush: () => Promise<void>, replaces?: string
 
     await flush()
     const guide = await renderGuide(seen)
+    const masks = await renderMaskPng(seen)
 
     // Each object's box in the view keeps the image model to the plan's layout (it kept sizes and places better so).
-    return generateRoom(plan.id, guide, style, instructions, photos.seed, objectBoxes(seen), shot, run)
+    return generateRoom(plan.id, guide, style, instructions, photos.seed, objectBoxes(seen), shot, run, masks)
   }
 }

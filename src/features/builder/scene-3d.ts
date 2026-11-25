@@ -455,15 +455,44 @@ export const MASK_ID = { floor: 250, wall: 251, ceiling: 252 } as const
  * @param plan - The room.
  * @param width - The picture's width, in pixels.
  * @param height - The picture's height, in pixels.
+ * @param framesOnly - Whether a picture is only its frame (its art, screen or mirror is 0), for correcting colors:
+ *   the plan's color is the frame's, and the photo fills the rest.
  * @returns For each pixel, row by row from the top, 1 + the object's index, a `MASK_ID` surface, or 0; and the camera
  *   it was seen with (three.js metres: x across the plan, y up, z down the plan).
  * @throws Error when the browser has no WebGL.
  */
-export function renderMasks(plan: Plan, width: number, height: number) {
+export function renderMasks(plan: Plan, width: number, height: number, framesOnly = false) {
   const view = camera(plan, width, height)
-  const [ids] = drawIds(plan, [view], width, height, false)
+  const [ids] = drawIds(plan, [view], width, height, false, framesOnly)
 
   return { ids, camera: view }
+}
+
+/**
+ * The object masks sent with a photo's 3D view, by which the API brings the photo's colors back to the room as
+ * planned: `renderMasks` at the 3D view's size, as a PNG whose red channel is each pixel's id (the API's
+ * `Builder.MaskIds` must match `MASK_ID`).
+ * @param plan - The room, seen from the photo's view.
+ * @returns The PNG.
+ * @throws Error when the browser has no WebGL or the picture can't be made.
+ */
+export async function renderMaskPng(plan: Plan): Promise<Blob> {
+  const { width, height } = BUILDER.guide
+  const { ids } = renderMasks(plan, width, height, true)
+  const canvas = document.createElement("canvas")
+  const context = canvas.getContext("2d")!
+  const image = context.createImageData(width, height)
+
+  canvas.width = width
+  canvas.height = height
+
+  for (let i = 0; i < ids.length; i++) {
+    image.data.set([ids[i], ids[i], ids[i], 255], i * 4)
+  }
+
+  context.putImageData(image, 0, 0)
+
+  return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("No masks"))), "image/png"))
 }
 
 /**
@@ -474,10 +503,11 @@ export function renderMasks(plan: Plan, width: number, height: number) {
  * @param width - Each picture's width, in pixels.
  * @param height - Each picture's height, in pixels.
  * @param allWalls - Whether the wall behind the plan's own camera is drawn too.
+ * @param framesOnly - Whether a picture's art, screen or mirror is 0, leaving only its frame.
  * @returns For each camera, row by row from the top, 1 + the object's index, a `MASK_ID` surface, or 0.
  * @throws Error when the browser has no WebGL.
  */
-function drawIds(plan: Plan, cameras: THREE.Camera[], width: number, height: number, allWalls: boolean) {
+function drawIds(plan: Plan, cameras: THREE.Camera[], width: number, height: number, allWalls: boolean, framesOnly = false) {
   const renderer = new THREE.WebGLRenderer({ antialias: false })
   const scene = buildScene(plan, 1, allWalls)
   const target = new THREE.WebGLRenderTarget(width, height)
@@ -505,7 +535,8 @@ function drawIds(plan: Plan, cameras: THREE.Camera[], width: number, height: num
       owner = owner.parent
     }
 
-    const id = owner?.userData.item !== undefined ? owner.userData.item + 1 : (owner?.userData.surface ?? 0)
+    const owned = owner?.userData.item !== undefined ? owner.userData.item + 1 : (owner?.userData.surface ?? 0)
+    const id = framesOnly && object.userData.content ? 0 : owned
 
     for (const m of [object.material].flat() as THREE.MeshStandardMaterial[]) {
       m.map?.dispose()
@@ -787,6 +818,8 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
         : material(BUILDER.scene.art)
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(w - 2 * frame, h - 2 * frame), face)
 
+    // What the photo fills in (art, a screen, a mirror): not the plan's color, which is the frame's.
+    panel.userData.content = true
     block(w, h, d, 0, bottom + h / 2, d / 2)
     panel.position.set(0, bottom + h / 2, d + 0.002)
     group.add(panel)
