@@ -49,14 +49,27 @@ const ROOM_HINTS: Record<InspectorFocus, string> = {
  * @param props.plan - The room being built.
  * @param props.focus - What is in view beside it.
  * @param props.shownWall - The wall shown in the Wall tab; null elsewhere.
+ * @param props.onShowWall - Shows another wall in the Wall tab.
  * @param props.onPlan - Opens the plan (after adding a floor area from the 3D view, to place it).
  */
-export function Inspector({ plan, focus, shownWall, onPlan }: { plan: Plan; focus: InspectorFocus; shownWall: number | null; onPlan: () => void }) {
+export function Inspector({
+  plan,
+  focus,
+  shownWall,
+  onShowWall,
+  onPlan,
+}: {
+  plan: Plan
+  focus: InspectorFocus
+  shownWall: number | null
+  onShowWall: (wall: number) => void
+  onPlan: () => void
+}) {
   const selected = useBuilderStore((state) => state.selected)
   const item = plan.items[selected]
 
   if (!item) {
-    return <RoomInspector plan={plan} focus={focus} shownWall={shownWall} onPlan={onPlan} />
+    return <RoomInspector plan={plan} focus={focus} shownWall={shownWall} onShowWall={onShowWall} onPlan={onPlan} />
   }
 
   return isWallItem(item) ? <WallItemInspector plan={plan} index={selected} /> : <ItemInspector plan={plan} index={selected} />
@@ -340,9 +353,22 @@ function ItemDecorations({ plan, index }: { plan: Plan; index: number }) {
  * @param props.plan - The room.
  * @param props.focus - What is in view beside it.
  * @param props.shownWall - The wall shown in the Wall tab; null elsewhere.
+ * @param props.onShowWall - Shows another wall in the Wall tab.
  * @param props.onPlan - Opens the plan.
  */
-function RoomInspector({ plan, focus, shownWall, onPlan }: { plan: Plan; focus: InspectorFocus; shownWall: number | null; onPlan: () => void }) {
+function RoomInspector({
+  plan,
+  focus,
+  shownWall,
+  onShowWall,
+  onPlan,
+}: {
+  plan: Plan
+  focus: InspectorFocus
+  shownWall: number | null
+  onShowWall: (wall: number) => void
+  onPlan: () => void
+}) {
   const setRoom = useBuilderStore((state) => state.setRoom)
   const resetShape = useBuilderStore((state) => state.resetShape)
   const addZone = useBuilderStore((state) => state.addZone)
@@ -406,7 +432,7 @@ function RoomInspector({ plan, focus, shownWall, onPlan }: { plan: Plan; focus: 
         </>
       )}
       {(shows.walls || shows.ceiling || shows.light) && (
-        <FinishFields plan={plan} walls={shows.walls} ceiling={shows.ceiling} light={shows.light} shownWall={shownWall} />
+        <FinishFields plan={plan} walls={shows.walls} ceiling={shows.ceiling} light={shows.light} shownWall={shownWall} onShowWall={onShowWall} />
       )}
     </div>
   )

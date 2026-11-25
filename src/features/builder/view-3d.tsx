@@ -13,10 +13,11 @@ import { ViewChoice } from "./view-choice"
  * The room in 3D, from where the photo will be taken: the middle of the wall opposite the one in view, at a
  * photographer's height. Clicking a wall turns the view to look at it (the camera moves to the opposite wall); the
  * buttons below do the same. It is redrawn as the plan changes, and it is exactly the picture Generate sends to the
- * image model.
+ * image model (but in the Ceiling tab, which tilts it up to show the ceiling and its light).
  * @param props.plan - The room.
+ * @param props.tilt - How far to tilt the view up, in degrees; 0 (the photo's view) when missing.
  */
-export function View3d({ plan }: { plan: Plan }) {
+export function View3d({ plan, tilt = 0 }: { plan: Plan; tilt?: number }) {
   const setRoom = useBuilderStore((state) => state.setRoom)
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsRef = useRef<HTMLDivElement>(null)
@@ -56,9 +57,9 @@ export function View3d({ plan }: { plan: Plan }) {
 
   useLayoutEffect(() => {
     if (sceneRef.current && size.width > 0) {
-      sceneRef.current.render(plan, size.width, size.height)
+      sceneRef.current.render(plan, size.width, size.height, undefined, tilt)
     }
-  }, [plan, size, sceneRef])
+  }, [plan, size, sceneRef, tilt])
 
   // Whether something blocks the view (a cabinet in the corner the photo is taken from), checked once the room stops
   // changing, as each check draws the room again.

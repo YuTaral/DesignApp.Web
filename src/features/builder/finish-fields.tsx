@@ -30,6 +30,7 @@ const TIME_CHIPS = Object.values(TIME_OF_DAY).map((time) => ({ value: time, name
  * @param props.ceiling - Whether to show "Ceiling".
  * @param props.light - Whether to show "Light & mood".
  * @param props.shownWall - The wall shown in the Wall tab, which "Walls" starts on; null elsewhere (it starts on All).
+ * @param props.onShowWall - Shows a wall in the Wall tab: picking a wall in the list shows it (All keeps the one shown).
  */
 export function FinishFields({
   plan,
@@ -37,12 +38,14 @@ export function FinishFields({
   ceiling: showCeiling,
   light: showLight,
   shownWall = null,
+  onShowWall,
 }: {
   plan: Plan
   walls: boolean
   ceiling: boolean
   light: boolean
   shownWall?: number | null
+  onShowWall?: (wall: number) => void
 }) {
   const { setRoom, addZone } = useBuilderStore()
   const [open, setOpen] = useState(false)
@@ -61,6 +64,14 @@ export function FinishFields({
   ]
   const set = (change: Partial<RoomFinish>) => {
     setRoom({ finish: { ...finish, ...change } })
+  }
+  // In the Wall tab a wall picked in the list is shown; All keeps the wall shown.
+  const choose = (value: string) => {
+    setPicked(value)
+
+    if (value !== BUILDER.allWalls && shownWall !== null) {
+      onShowWall?.(Number(value))
+    }
   }
   // A change for All goes to every wall: the walls' own looks give way to it. One wall's change is its own look,
   // unless it is the room's look again. Picking what is already picked changes nothing.
@@ -96,7 +107,7 @@ export function FinishFields({
             label="Wall"
             chips={wallChips}
             value={target}
-            onPick={setPicked}
+            onPick={choose}
             attribute="finish-wall"
             after={
               shownWall !== null && (

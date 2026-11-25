@@ -1,12 +1,12 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
+import { BUILDER, CEILING_LIGHT, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
 import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot } from "./api"
 import { CUBE_FACES, type Vec3 } from "./panorama"
 import type { PanoramaJob } from "./panorama.worker"
 import { hasParts, isMountedShape, isWallItem, legSide, partsOf } from "./builder-store"
-import { cameraStand, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
+import { cameraStand, contains, extent, fitInside, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
 import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
 
@@ -37,13 +37,15 @@ export class PlanScene {
    * @param width - The width to draw, in CSS px.
    * @param height - The height to draw, in CSS px.
    * @param ratio - Device pixels per CSS pixel.
+   * @param tilt - How far to tilt the photo's camera up, in degrees (the Ceiling tab looks up at it); 0 for the photo's view.
    */
-  render(plan: Plan, width: number, height: number, ratio = window.devicePixelRatio || 1) {
+  render(plan: Plan, width: number, height: number, ratio = window.devicePixelRatio || 1, tilt = 0) {
     this.renderer.setPixelRatio(ratio)
     this.renderer.setSize(width, height, false)
     const scene = buildScene(plan, this.renderer.capabilities.getMaxAnisotropy())
 
     this.camera = camera(plan, width, height)
+    this.camera.rotateX(THREE.MathUtils.degToRad(tilt))
     this.renderer.render(scene, this.camera)
     dispose(scene)
   }
@@ -268,6 +270,106 @@ export function camera(plan: Plan, width: number, height: number) {
 }
 
 /**
+ * The room's ceiling light as a simple stand-in, so the 3D view and the photo's guide show which it is: a pendant's
+ * cord and shade or a chandelier's ring of candle lights hung at the room's middle, a flush light's glowing disc there,
+ * spotlights set into the ceiling across the room, or a rail of track lights; nothing for none.
+ * @param plan - The room.
+ * @returns The light, in metres from the plan's top-left corner.
+ */
+function ceilingLight(plan: Plan) {
+  const L = BUILDER.scene.lights
+  const group = new THREE.Group()
+  const top = plan.height
+  const size = extent(plan)
+  const middle = fitInside(plan, size.width / 2, size.length / 2, L.clear, L.clear)
+  const [cx, cz] = [middle.x / 100, middle.y / 100]
+  // A shade is open below: seen from under it, its inside shows.
+  const shadeMaterial = new THREE.MeshStandardMaterial({ color: L.shade, side: THREE.DoubleSide, roughness: 0.8 })
+  const metal = material(L.metal)
+  const glow = new THREE.MeshStandardMaterial({ color: L.glow, emissive: L.glow, emissiveIntensity: 0.9 })
+  const put = (geometry: THREE.BufferGeometry, look: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geometry, look)
+
+    mesh.position.set(x, y, z)
+    group.add(mesh)
+
+    return mesh
+  }
+
+  switch (plan.finish.ceilingLight) {
+    case CEILING_LIGHT.Pendant: {
+      const { drop, cord, radius, height } = L.pendant
+
+      put(new THREE.CylinderGeometry(cord, cord, drop - height), metal, cx, top - (drop - height) / 2, cz)
+      put(new THREE.CylinderGeometry(radius * 0.25, radius, height, 32, 1, true), shadeMaterial, cx, top - drop + height / 2, cz)
+      put(new THREE.SphereGeometry(radius * 0.3, 16, 12), glow, cx, top - drop + radius * 0.25, cz)
+      break
+    }
+
+    case CEILING_LIGHT.Chandelier: {
+      const { drop, ring, arms, candle } = L.chandelier
+
+      put(new THREE.CylinderGeometry(0.008, 0.008, drop), metal, cx, top - drop / 2, cz)
+      put(new THREE.TorusGeometry(ring, 0.012, 8, 48), metal, cx, top - drop, cz).rotation.x = Math.PI / 2
+
+      for (let arm = 0; arm < arms; arm++) {
+        const turn = (arm / arms) * Math.PI * 2
+
+        put(new THREE.SphereGeometry(candle, 12, 10), glow, cx + Math.cos(turn) * ring, top - drop + candle, cz + Math.sin(turn) * ring)
+      }
+
+      break
+    }
+
+    case CEILING_LIGHT.FlushLight: {
+      const { radius, depth } = L.flush
+
+      put(new THREE.CylinderGeometry(radius, radius * 0.9, depth, 40), glow, cx, top - depth / 2, cz)
+      break
+    }
+
+    case CEILING_LIGHT.Spotlights: {
+      const { radius, spacing, margin } = L.spots
+      const [across, along] = [size.width / 100, size.length / 100]
+      const [columns, rows] = [Math.max(1, Math.round((across - 2 * margin) / spacing) + 1), Math.max(1, Math.round((along - 2 * margin) / spacing) + 1)]
+
+      for (let c = 0; c < columns; c++) {
+        for (let r = 0; r < rows; r++) {
+          const x = columns === 1 ? across / 2 : margin + (c * (across - 2 * margin)) / (columns - 1)
+          const z = rows === 1 ? along / 2 : margin + (r * (along - 2 * margin)) / (rows - 1)
+
+          // Only over the room (an L-shaped room has none over its missing corner).
+          if (contains(plan, x * 100, z * 100)) {
+            put(new THREE.CylinderGeometry(radius, radius, 0.01, 24), glow, x, top - 0.005, z)
+          }
+        }
+      }
+
+      break
+    }
+
+    case CEILING_LIGHT.TrackLights: {
+      const { length, rail, spots, can } = L.track
+
+      put(new THREE.BoxGeometry(length, rail, rail), metal, cx, top - rail / 2, cz)
+
+      for (let s = 0; s < spots; s++) {
+        const x = cx - length / 2 + (length * (s + 0.5)) / spots
+
+        put(new THREE.CylinderGeometry(can, can * 0.8, can * 2.4, 16), metal, x, top - rail - can * 1.2, cz).rotation.z = (s % 2 === 0 ? 1 : -1) * 0.35
+      }
+
+      break
+    }
+
+    default:
+      break
+  }
+
+  return group
+}
+
+/**
  * The room as a three.js scene, in metres: x across (0 at the left wall), y up, z towards the front (0 at the back
  * wall).
  * @param plan - The room.
@@ -307,7 +409,7 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   ceiling.rotation.x = Math.PI / 2
   ceiling.position.set(0, height, 0)
   ceiling.userData.surface = MASK_ID.ceiling
-  scene.add(floor, ceiling)
+  scene.add(floor, ceiling, ceilingLight(plan))
 
   for (const wall of walls(plan).filter((w) => w.index !== behind)) {
     const mesh = wallMesh(plan, wall, wallPaint(plan, wall, anisotropy))

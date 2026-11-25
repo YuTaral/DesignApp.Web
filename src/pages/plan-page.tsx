@@ -234,8 +234,8 @@ function Builder({ plan }: { plan: Plan }) {
           ) : view === "wall" ? (
             <WallView plan={plan} wall={wall} onWall={showWall} />
           ) : (
-            // The ceiling's own tab shows the room in 3D, where its color and light are seen.
-            <View3d plan={plan} />
+            // The ceiling's own tab shows the room in 3D tilted up, where its color and light are seen.
+            <View3d plan={plan} tilt={view === "ceiling" ? BUILDER.scene.ceilingTilt : 0} />
           )}
         </div>
         <p className="text-xs text-muted-foreground">
@@ -263,7 +263,7 @@ function Builder({ plan }: { plan: Plan }) {
       />
 
       <aside aria-label="Inspector" className="rounded-2xl border bg-card p-4 shadow-soft lg:w-80 lg:shrink-0 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
-        <Inspector plan={plan} focus={view === "plan" && shaping ? "shape" : view} shownWall={view === "wall" ? wall : null} onPlan={() => open("plan")} />
+        <Inspector plan={plan} focus={view === "plan" && shaping ? "shape" : view} shownWall={view === "wall" ? wall : null} onShowWall={showWall} onPlan={() => open("plan")} />
       </aside>
     </div>
   )

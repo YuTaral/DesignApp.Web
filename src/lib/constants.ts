@@ -592,6 +592,21 @@ export const BUILDER = {
      * model a picture to copy (it copied a patterned face almost exactly).
      */
     art: "#8E9296",
+    /**
+     * The ceiling light's stand-in, at the room's middle, in metres: a pendant's cord and shade, a chandelier's ring of
+     * candle lights, a flush light's disc, spotlights set into the ceiling a spacing apart, or a rail of track lights.
+     * `clear` is the room it needs around its middle, in cm.
+     */
+    /** How far the Ceiling tab tilts the 3D view up from the photo's, in degrees, so the ceiling and its light show. */
+    ceilingTilt: 32,
+    lights: {
+      shade: "#F4F1EA", metal: "#3A3A3A", glow: "#FFF1CC", clear: 60,
+      pendant: { drop: 0.55, cord: 0.006, radius: 0.2, height: 0.22 },
+      chandelier: { drop: 0.6, ring: 0.32, arms: 6, candle: 0.04 },
+      flush: { radius: 0.22, depth: 0.06 },
+      spots: { radius: 0.045, spacing: 1.2, margin: 0.5 },
+      track: { length: 1.6, rail: 0.03, spots: 4, can: 0.05 },
+    },
     eyeHeight: 1.45, inset: 0.05, minFov: 80, maxFov: 100, fitDepthShare: 0.5, lensShift: 0.28,
     /**
      * A corner camera's fixed horizontal view and how far it is turned from looking straight at the wall in view, in
