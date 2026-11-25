@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { AlertTriangleIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ImageIcon, LoaderCircleIcon, MapIcon, PanelTopIcon, RulerIcon } from "lucide-react"
+import { AlertTriangleIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ImageIcon, LampCeilingIcon, LoaderCircleIcon, MapIcon, PanelTopIcon, RulerIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -16,6 +16,7 @@ import { PlanCanvas } from "@/features/builder/plan-canvas"
 import { ReplaceBanner } from "@/features/builder/replace-banner"
 import { objectBoxes, renderGuide, renderMaskPng, renderPanorama } from "@/features/builder/scene-3d"
 import { View3d } from "@/features/builder/view-3d"
+import { ViewChoice } from "@/features/builder/view-choice"
 import { useBuilderShortcuts } from "@/features/builder/use-builder-shortcuts"
 import { WallView } from "@/features/builder/wall-view"
 import { useRoom } from "@/features/rooms/api"
@@ -23,7 +24,7 @@ import { errorMessage } from "@/lib/api"
 import { AI_MODE, BUILDER, MESSAGES, QUERY_KEYS, ROOM_TYPE_NAMES, ROUTES, type PhotoStyle } from "@/lib/constants"
 
 /** The middle of the builder: the floor plan, one wall seen straight on, or the 3D view. */
-type View = "plan" | "wall" | "3d"
+type View = "plan" | "wall" | "ceiling" | "3d"
 
 /**
  * Route `/build/$planId`: step 3 of building a room. Windows, doors and common objects on the left; the floor plan, a
@@ -100,8 +101,13 @@ function Builder({ plan }: { plan: Plan }) {
    * @param next - The tab.
    */
   const open = (next: View) => {
-    if (next === "wall" && opening && !isWallItem(opening)) {
+    if ((next === "wall" && opening && !isWallItem(opening)) || (next === "ceiling" && opening)) {
       select(-1)
+    }
+
+    // Room shape mode belongs to the plan: coming back (as Add a floor area in 3D does) shows the objects.
+    if (next !== "plan") {
+      setShaping(false)
     }
 
     setView(next)
@@ -158,11 +164,12 @@ function Builder({ plan }: { plan: Plan }) {
           only) and Generate photo follow them.
         */}
         <div className="flex flex-wrap items-center gap-2">
-          <div role="tablist" aria-label="View" className="grid grid-cols-3 gap-1 rounded-xl border bg-muted/40 p-1 text-sm">
+          <div role="tablist" aria-label="View" className="flex w-full gap-1 rounded-xl border bg-muted/40 p-1 text-sm sm:w-auto">
             {(
               [
                 ["plan", "Plan", MapIcon],
                 ["wall", "Wall", PanelTopIcon],
+                ["ceiling", "Ceiling", LampCeilingIcon],
                 ["3d", "3D view", BoxIcon],
               ] as const
             ).map(([value, label, Icon]) => (
@@ -173,7 +180,7 @@ function Builder({ plan }: { plan: Plan }) {
                 aria-selected={view === value}
                 onClick={() => open(value)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-1 font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                  "flex flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 font-medium sm:px-3 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
                   view === value ? "bg-card shadow-soft" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -204,19 +211,30 @@ function Builder({ plan }: { plan: Plan }) {
           </div>
         </div>
         {/* The 3D view needs room for its 4:3 picture and the choices under it, which wrap on a phone. */}
-        <div className={cn("relative min-h-80 flex-1 overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft lg:min-h-0", view === "3d" && "min-h-[28rem]")}>
+        <div className={cn("relative min-h-80 flex-1 overflow-hidden rounded-2xl border bg-muted/40 p-2 shadow-soft lg:min-h-0", (view === "3d" || view === "ceiling") && "min-h-[28rem]")}>
           {view === "plan" ? (
-            <PlanCanvas
-              plan={plan}
-              shaping={shaping}
-              onWall={(next) => {
-                showWall(next)
-                open("wall")
-              }}
-            />
+            // The plan, and under it the view the photo takes (marked on the plan), as under the 3D view.
+            <div className="flex size-full flex-col gap-3">
+              <div className="min-h-0 flex-1">
+                <PlanCanvas
+                  plan={plan}
+                  shaping={shaping}
+                  onWall={(next) => {
+                    showWall(next)
+                    open("wall")
+                  }}
+                />
+              </div>
+              {!shaping && (
+                <div className="pb-2" data-plan-view-choice>
+                  <ViewChoice plan={plan} place="view" />
+                </div>
+              )}
+            </div>
           ) : view === "wall" ? (
             <WallView plan={plan} wall={wall} onWall={showWall} />
           ) : (
+            // The ceiling's own tab shows the room in 3D, where its color and light are seen.
             <View3d plan={plan} />
           )}
         </div>
@@ -245,7 +263,7 @@ function Builder({ plan }: { plan: Plan }) {
       />
 
       <aside aria-label="Inspector" className="rounded-2xl border bg-card p-4 shadow-soft lg:w-80 lg:shrink-0 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
-        <Inspector plan={plan} focus={view === "plan" && shaping ? "shape" : view} />
+        <Inspector plan={plan} focus={view === "plan" && shaping ? "shape" : view} shownWall={view === "wall" ? wall : null} onPlan={() => open("plan")} />
       </aside>
     </div>
   )

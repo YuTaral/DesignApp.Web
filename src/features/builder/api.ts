@@ -54,16 +54,23 @@ export type PlanItem = {
   material?: string
 }
 
+/** A wall of a built room in its own finish and color, instead of the room's (mirrors WallLookRequest). */
+export type WallLook = {
+  /** The wall's number. */
+  wall: number
+  finish: WallFinish
+  color: string
+}
+
 /**
  * How a built room's walls and ceiling are finished and lit, and when its photo is taken (mirrors RoomFinishRequest):
- * the walls' finish, one accent wall in its own color and finish, the ceiling's and the skirting boards' colors.
+ * the walls' finish (in the room's wall color), the walls in their own finish and color, the ceiling's and the
+ * skirting boards' colors.
  */
 export type RoomFinish = {
   walls: WallFinish
-  /** The number of the wall in its own color and finish; null for none. */
-  accentWall: number | null
-  accentColor: string
-  accentFinish: WallFinish
+  /** The walls in their own finish and color, each at most once. */
+  ownWalls: WallLook[]
   ceilingColor: string
   /** The skirting boards' color (windows and doors keep their own colors). */
   trimColor: string

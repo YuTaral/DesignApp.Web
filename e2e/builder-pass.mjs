@@ -134,8 +134,9 @@ try {
     && furnished.items.some((i) => i.shape === 'Bed') && kinds.filter((k) => k === 'nightstand').length === 2, kinds.join(', '))
   step('It comes dressed: curtains, decorations, materials, art above the bed, and the wall behind the bed in its own color',
     furnished.items.filter((i) => i.shape === 'Window').every((w) => w.decorations?.includes('sheer curtains')) && bed?.decorations?.includes('decorative pillows')
-      && bed?.material === 'linen upholstered' && furnished.items.some((i) => i.label === 'set of three framed prints' && i.wall === 1) && furnished.finish.accentWall === 1,
-    `bed ${bed?.material} ${bed?.decorations}, accent wall ${furnished.finish.accentWall}`)
+      && bed?.material === 'linen upholstered' && furnished.items.some((i) => i.label === 'set of three framed prints' && i.wall === 1)
+      && furnished.finish.ownWalls.length === 1 && furnished.finish.ownWalls[0].wall === 1,
+    `bed ${bed?.material} ${bed?.decorations}, own walls ${JSON.stringify(furnished.finish.ownWalls)}`)
 
   // 2. Dropping the sofa from the catalog onto the plan puts it where it is let go (on the 10 cm grid).
   const sofa = await page.evaluate(() => fetch('/api/builder/catalog/LivingRoom').then((r) => r.json()).then((list) => list.find((o) => o.key === 'sofa')))
@@ -614,20 +615,21 @@ try {
   step('Straight on puts the camera back', backPicture === straightPicture && backMarker.turn === straightMarker.turn && (await stored()).corner === 'None',
     JSON.stringify(backMarker))
 
-  // 10c. The room's finish: brick walls redraw the 3D view, a plaster accent on the wall in view too, and the evening
-  //     darkens it; all saved. The sections start closed, their headings saying what is chosen.
+  // 10c. The room's finish in the 3D view: brick on all walls redraws it, plaster on one wall of its own too, and the
+  //     evening darkens it; all saved. The wall list starts on All here (no wall is shown), and the light's section
+  //     starts closed, its heading saying what is chosen.
   await page.keyboard.press('Escape')
-  await page.waitForSelector('[data-finish-toggle=walls]')
-  const closedHeading = await page.$eval('[data-finish-toggle=walls]', (b) => b.textContent.trim())
+  await page.waitForSelector('[data-finish-section=walls]')
+  const startsOn = await page.$eval('[data-finish-wall][aria-checked=true]', (b) => b.dataset.finishWall)
+  const closedHeading = await page.$eval('[data-finish-toggle=light]', (b) => b.textContent.trim())
 
-  await page.click('[data-finish-toggle=walls]')
   await page.click('[data-wall-finish=Brick]')
   await saved()
   await sleep(600)
   const brickPicture = await picture()
 
-  await page.click('[data-accent-wall="3"]')
-  await page.click('[data-accent-finish=Plaster]')
+  await page.click('[data-finish-wall="3"]')
+  await page.click('[data-wall-finish=Plaster]')
   await saved()
   await sleep(600)
   const accentPicture = await picture()
@@ -640,10 +642,11 @@ try {
   const finish = (await stored()).finish
 
   await shot('builder-finish')
-  step('Brick walls, an accent wall and the evening each redraw the 3D view, and are saved',
-    closedHeading === 'Walls & ceiling: Paint' && new Set([backPicture, brickPicture, accentPicture, eveningPicture]).size === 4
-      && finish.walls === 'Brick' && finish.accentWall === 3 && finish.accentFinish === 'Plaster' && finish.timeOfDay === 'Evening',
-    `${closedHeading} | ${JSON.stringify(finish)}`)
+  step('Brick on all walls, plaster on one of its own and the evening each redraw the 3D view, and are saved',
+    startsOn === 'all' && closedHeading === 'Light & mood: Midday' && new Set([backPicture, brickPicture, accentPicture, eveningPicture]).size === 4
+      && finish.walls === 'Brick' && finish.ownWalls.length === 1 && finish.ownWalls[0].wall === 3 && finish.ownWalls[0].finish === 'Plaster'
+      && finish.timeOfDay === 'Evening',
+    `starts on ${startsOn}, ${closedHeading} | ${JSON.stringify(finish)}`)
 
   // 10d. The floor's colors are its type's own, each swatch drawn in its pattern: carpet offers carpet colors, and one
   //     picked is saved.

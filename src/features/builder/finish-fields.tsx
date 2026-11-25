@@ -1,13 +1,8 @@
 import { useState } from "react"
+import { PlusIcon } from "lucide-react"
 
-import {
-  BUILDER,
-  CEILING_LIGHT,
-  CEILING_LIGHT_NAMES,
-  TIME_OF_DAY,
-  TIME_OF_DAY_NAMES,
-  WALL_FINISH_NAMES,
-} from "@/lib/constants"
+import { Button } from "@/components/ui/button"
+import { BUILDER, CEILING_LIGHT, CEILING_LIGHT_NAMES, TIME_OF_DAY, TIME_OF_DAY_NAMES, type WallFinish } from "@/lib/constants"
 import type { Plan, RoomFinish } from "./api"
 import { useBuilderStore } from "./builder-store"
 import { ChoiceChips } from "./choice-chips"
@@ -15,6 +10,7 @@ import { ColorChoice } from "./fields"
 import { FINISH_CHIPS } from "./finish-chips"
 import { FoldToggle } from "./fold-toggle"
 import { wallName, walls } from "./room-outline"
+import { wallSurface } from "./wall-texture"
 
 /** The ceiling lights as chips. */
 const LIGHT_CHIPS = Object.values(CEILING_LIGHT).map((light) => ({ value: light, name: CEILING_LIGHT_NAMES[light] }))
@@ -23,74 +19,126 @@ const LIGHT_CHIPS = Object.values(CEILING_LIGHT).map((light) => ({ value: light,
 const TIME_CHIPS = Object.values(TIME_OF_DAY).map((time) => ({ value: time, name: TIME_OF_DAY_NAMES[time].name, title: TIME_OF_DAY_NAMES[time].looks }))
 
 /**
- * The room's finish, in two sections that open and close (both closed at first, their headings saying what is chosen):
- * "Walls & ceiling" (the walls' finish, an accent wall in its own finish and color, the ceiling's and the skirting's
- * colors) and "Light & mood" (the ceiling light and the time of day the photo is taken at).
+ * The room's finish, in up to three sections:
+ * - "Walls": which wall to change (All, or one wall: at first the one shown, in the Wall tab), its finish and color,
+ *   and the skirting's color. A wall changed on its own keeps its own look; a change for All goes to every wall. In the
+ *   Wall tab, "Add a wall area" ends the list.
+ * - "Ceiling": its color and its light.
+ * - "Light & mood" (opens and closes, its heading saying what is chosen): the time of day the photo is taken at.
  * @param props.plan - The room.
- * @param props.walls - Whether to show "Walls & ceiling".
+ * @param props.walls - Whether to show "Walls".
+ * @param props.ceiling - Whether to show "Ceiling".
  * @param props.light - Whether to show "Light & mood".
+ * @param props.shownWall - The wall shown in the Wall tab, which "Walls" starts on; null elsewhere (it starts on All).
  */
-export function FinishFields({ plan, walls: showWalls, light: showLight }: { plan: Plan; walls: boolean; light: boolean }) {
-  const setRoom = useBuilderStore((state) => state.setRoom)
-  const [open, setOpen] = useState<"walls" | "light" | null>(null)
+export function FinishFields({
+  plan,
+  walls: showWalls,
+  ceiling: showCeiling,
+  light: showLight,
+  shownWall = null,
+}: {
+  plan: Plan
+  walls: boolean
+  ceiling: boolean
+  light: boolean
+  shownWall?: number | null
+}) {
+  const { setRoom, addZone } = useBuilderStore()
+  const [open, setOpen] = useState(false)
+  const startOn = shownWall === null ? BUILDER.allWalls : String(shownWall)
+  const [picked, setPicked] = useState<string>(startOn)
+  const [pickedFor, setPickedFor] = useState(shownWall)
   const finish = plan.finish
-  const accent = finish.accentWall
-  const accentChips = [
-    { value: BUILDER.none, name: "None" },
+  // A wall the room no longer has (its shape changed) falls back to All.
+  const target = picked !== BUILDER.allWalls && Number(picked) >= walls(plan).length ? BUILDER.allWalls : picked
+  const wall = target === BUILDER.allWalls ? null : Number(target)
+  const own = wall === null ? undefined : finish.ownWalls.find((w) => w.wall === wall)
+  const [look, color] = wall === null ? [finish.walls, plan.wallColor] : wallSurface(plan, wall)
+  const wallChips = [
+    { value: BUILDER.allWalls, name: "All" },
     ...walls(plan).map(({ index }) => ({ value: String(index), name: wallName(plan, index).replace(" wall", "") })),
   ]
-  const wallsSummary = accent === null ? WALL_FINISH_NAMES[finish.walls] : `${WALL_FINISH_NAMES[finish.walls]}, ${wallName(plan, accent).toLowerCase()} accent`
   const set = (change: Partial<RoomFinish>) => {
     setRoom({ finish: { ...finish, ...change } })
   }
-  const toggle = (section: "walls" | "light") => {
-    setOpen(open === section ? null : section)
+  // A change for All goes to every wall: the walls' own looks give way to it. One wall's change is its own look,
+  // unless it is the room's look again. Picking what is already picked changes nothing.
+  const pick = (change: { finish?: WallFinish; color?: string }) => {
+    const next = { finish: change.finish ?? look, color: change.color ?? color }
+    const others = finish.ownWalls.filter((w) => w.wall !== wall)
+    const asRoom = next.finish === finish.walls && next.color === plan.wallColor
+
+    if (next.finish === look && next.color === color) {
+      return
+    }
+
+    if (wall === null) {
+      setRoom({ wallColor: next.color, finish: { ...finish, walls: next.finish, ownWalls: [] } })
+
+      return
+    }
+
+    set({ ownWalls: asRoom ? others : [...others, { wall, ...next }].sort((a, b) => a.wall - b.wall) })
+  }
+
+  // Showing another wall in the Wall tab starts the list on it again (adjusted while rendering).
+  if (pickedFor !== shownWall) {
+    setPickedFor(shownWall)
+    setPicked(startOn)
   }
 
   return (
     <>
       {showWalls && (
-        <section className="space-y-3" aria-label="Walls and ceiling" data-finish-section="walls">
-          <FoldToggle open={open === "walls"} controls="finish-walls" onToggle={() => toggle("walls")} className="text-sm" data-finish-toggle="walls">
-            <span className="min-w-0">
-              <span className="font-medium">Walls &amp; ceiling</span>
-              <span className="text-muted-foreground">: {wallsSummary}</span>
-            </span>
-          </FoldToggle>
-          {open === "walls" && (
-            <div id="finish-walls" className="space-y-4">
-              <ChoiceChips label="Wall finish" chips={FINISH_CHIPS} value={finish.walls} onPick={(walls) => set({ walls })} attribute="wall-finish" />
-              <ChoiceChips
-                label="Accent wall"
-                chips={accentChips}
-                value={accent === null ? BUILDER.none : String(accent)}
-                onPick={(wall) => set({ accentWall: wall === BUILDER.none ? null : Number(wall) })}
-                attribute="accent-wall"
-              />
-              {accent !== null && (
-                <>
-                  <ChoiceChips label="Accent finish" chips={FINISH_CHIPS} value={finish.accentFinish} onPick={(accentFinish) => set({ accentFinish })} attribute="accent-finish" />
-                  <ColorChoice label="Accent" value={finish.accentColor} colors={BUILDER.wallColors} onPick={(accentColor) => set({ accentColor })} />
-                </>
-              )}
-              <ColorChoice label="Ceiling" value={finish.ceilingColor} colors={BUILDER.ceilingColors} onPick={(ceilingColor) => set({ ceilingColor })} />
-              <ColorChoice label="Skirting" value={finish.trimColor} colors={BUILDER.frameColors} onPick={(trimColor) => set({ trimColor })} />
-            </div>
+        <section className="space-y-4" aria-label="Walls" data-finish-section="walls">
+          <ChoiceChips
+            label="Wall"
+            chips={wallChips}
+            value={target}
+            onPick={setPicked}
+            attribute="finish-wall"
+            after={
+              shownWall !== null && (
+                <Button variant="outline" size="sm" className="h-auto rounded-lg px-2.5 py-1 font-normal" onClick={() => addZone("wall", shownWall)} data-add-wall-zone>
+                  <PlusIcon data-icon="inline-start" />
+                  Add a wall area
+                </Button>
+              )
+            }
+          />
+          {wall === null && finish.ownWalls.length > 0 && (
+            <p className="text-xs text-muted-foreground" data-all-walls-note>
+              A change here goes to every wall, also the {finish.ownWalls.length === 1 ? "one" : finish.ownWalls.length} in {finish.ownWalls.length === 1 ? "its" : "their"} own finish.
+            </p>
           )}
+          <ChoiceChips label="Finish" chips={FINISH_CHIPS} value={look} onPick={(next) => pick({ finish: next })} attribute="wall-finish" />
+          <ColorChoice label={wall === null ? "Walls" : wallName(plan, wall)} value={color} colors={BUILDER.wallColors} onPick={(next) => pick({ color: next })} />
+          {own && (
+            <Button variant="ghost" size="sm" onClick={() => set({ ownWalls: finish.ownWalls.filter((w) => w.wall !== wall) })} data-match-walls>
+              Same as the other walls
+            </Button>
+          )}
+          <ColorChoice label="Skirting" value={finish.trimColor} colors={BUILDER.frameColors} onPick={(trimColor) => set({ trimColor })} />
+        </section>
+      )}
+      {showCeiling && (
+        <section className="space-y-4" aria-label="Ceiling" data-finish-section="ceiling">
+          <ColorChoice label="Ceiling" value={finish.ceilingColor} colors={BUILDER.ceilingColors} onPick={(ceilingColor) => set({ ceilingColor })} />
+          <ChoiceChips label="Ceiling light" chips={LIGHT_CHIPS} value={finish.ceilingLight} onPick={(ceilingLight) => set({ ceilingLight })} attribute="ceiling-light" />
         </section>
       )}
       {showLight && (
         <section className="space-y-3" aria-label="Light and mood" data-finish-section="light">
-          <FoldToggle open={open === "light"} controls="finish-light" onToggle={() => toggle("light")} className="text-sm" data-finish-toggle="light">
+          <FoldToggle open={open} controls="finish-light" onToggle={() => setOpen(!open)} className="text-sm" data-finish-toggle="light">
             <span className="min-w-0">
               <span className="font-medium">Light &amp; mood</span>
-              <span className="text-muted-foreground">: {TIME_OF_DAY_NAMES[finish.timeOfDay].name}, {CEILING_LIGHT_NAMES[finish.ceilingLight].toLowerCase()}</span>
+              <span className="text-muted-foreground">: {TIME_OF_DAY_NAMES[finish.timeOfDay].name}</span>
             </span>
           </FoldToggle>
-          {open === "light" && (
+          {open && (
             <div id="finish-light" className="space-y-4">
               <ChoiceChips label="Time of day" chips={TIME_CHIPS} value={finish.timeOfDay} onPick={(timeOfDay) => set({ timeOfDay })} attribute="time-of-day" />
-              <ChoiceChips label="Ceiling light" chips={LIGHT_CHIPS} value={finish.ceilingLight} onPick={(ceilingLight) => set({ ceilingLight })} attribute="ceiling-light" />
             </div>
           )}
         </section>

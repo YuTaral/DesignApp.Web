@@ -152,6 +152,12 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
 
         return inside({ ...item, wall: placed.wall, x: placed.along }, next)
       })
+      // A wall's own look goes with its middle, as its windows do; where two land on one wall, the first is kept.
+      const moved = base.finish.ownWalls
+        .filter((own) => own.wall < walls(base).length)
+        .map((own) => ({ ...own, wall: follow(own.wall, wallPoint(base, own.wall, wallLength(base, own.wall) / 2)).wall }))
+
+      next.finish = { ...base.finish, ownWalls: moved.filter((own, i) => moved.findIndex((o) => o.wall === own.wall) === i).sort((a, b) => a.wall - b.wall) }
       set({ plan: next, unsaved: get().unsaved + 1 })
 
       return shift

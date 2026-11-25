@@ -54,7 +54,7 @@ try {
 
   await page.goto(`${WEB}/build/${id}`, { waitUntil: 'networkidle0' })
   await page.waitForSelector('[data-plan-canvas] [data-opening=Window]')
-  const names = await page.$$eval('[data-inspector-room] [data-wall-choice]', (buttons) => buttons.map((b) => b.textContent))
+  const names = await page.$$eval('[data-plan-view-choice] [data-wall-choice]', (buttons) => buttons.map((b) => b.textContent))
 
   step('A new room is a rectangle with four walls, Back, Right, Front and Left', names.join() === 'Back,Right,Front,Left' && (await stored()).outline.length === 4, names.join())
 
@@ -90,9 +90,9 @@ try {
 
   // 4. The photo can look at the alcove's wall (wall 3, the second right wall); the wall view and 3D view draw it.
   await page.click('[data-shape-toggle]')
-  const alcoveNames = await page.$$eval('[data-inspector-room] [data-wall-choice]', (buttons) => buttons.map((b) => b.textContent))
+  const alcoveNames = await page.$$eval('[data-plan-view-choice] [data-wall-choice]', (buttons) => buttons.map((b) => b.textContent))
 
-  await page.click('[data-inspector-room] [data-wall-choice="3"]')
+  await page.click('[data-plan-view-choice] [data-wall-choice="3"]')
   await frame()
   await saved()
   await page.click('::-p-text(Wall)')

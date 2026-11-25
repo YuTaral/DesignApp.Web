@@ -15,29 +15,31 @@ import { MaterialChips } from "./material-chips"
 import { hasParts, isMountedShape, isWallItem, isZoneShape, partsOf, toVariation, useBuilderStore, variationOf } from "./builder-store"
 import { wallLength } from "./room-outline"
 import { FloorChoice, FloorColorChoice } from "./floor-choice"
-import { ViewChoice } from "./view-choice"
 import { WallChoice } from "./wall-choice"
 
-/** What is in view beside the right column: the plan, the plan while its shape is edited, a wall, or the 3D view. */
-export type InspectorFocus = "plan" | "shape" | "wall" | "3d"
+/** What is in view beside the right column: the plan, the plan while its shape is edited, a wall, the ceiling, or the 3D view. */
+export type InspectorFocus = "plan" | "shape" | "wall" | "ceiling" | "3d"
 
 /**
  * Which of the room's settings each view shows while nothing is selected: only those about what is in it. The plan has
- * the floor (and the view the photo takes, marked on it), a wall its finish, the room's shape only its size, and the 3D
- * view, which shows it all, everything but the view (chosen under the 3D view itself).
+ * the floor and the light, a wall the walls' finishes, the ceiling its color and light, the room's shape only its size,
+ * and the 3D view, which shows it all, everything but the ceiling (only in its own tab). The plan and the 3D view
+ * choose the photo's view under the picture.
  */
-const ROOM_SECTIONS: Record<InspectorFocus, { name: boolean; walls: boolean; floor: boolean; light: boolean; view: boolean }> = {
-  plan: { name: true, walls: false, floor: true, light: true, view: true },
-  shape: { name: false, walls: false, floor: false, light: false, view: false },
-  wall: { name: false, walls: true, floor: false, light: false, view: false },
-  "3d": { name: true, walls: true, floor: true, light: true, view: false },
+const ROOM_SECTIONS: Record<InspectorFocus, { name: boolean; walls: boolean; ceiling: boolean; floor: boolean; light: boolean }> = {
+  plan: { name: true, walls: false, ceiling: false, floor: true, light: true },
+  shape: { name: false, walls: false, ceiling: false, floor: false, light: false },
+  wall: { name: false, walls: true, ceiling: false, floor: false, light: false },
+  ceiling: { name: false, walls: false, ceiling: true, floor: false, light: false },
+  "3d": { name: true, walls: true, ceiling: false, floor: true, light: true },
 }
 
 /** The hint above the room's settings, for each view. */
 const ROOM_HINTS: Record<InspectorFocus, string> = {
   plan: "Click an object on the plan to change it. Drag objects from the left to add them. Click a wall to open it, add windows, doors and things to hang, and look at it in the photo. Ctrl+C and Ctrl+V copy an object, Delete removes it.",
   shape: "Drag a wall to push or pull it, or a corner to move the two walls that meet there. Done shaping goes back to the objects.",
-  wall: "Click a window, door or hung thing to change it. Drag them from the left onto the wall. Add a wall area for part of it in another finish. Ctrl+C and Ctrl+V copy one, Delete removes it.",
+  wall: "Click a window, door or hung thing to change it. Drag them from the left onto the wall. Each wall can have its own finish and color, and areas in another. Ctrl+C and Ctrl+V copy one, Delete removes it.",
+  ceiling: "The ceiling's color and its light. The 3D view shows them as the photo will.",
   "3d": "The room as the photo sees it. Pick the wall and the camera's place under the view; the room's walls, floor and light are here.",
 }
 
@@ -46,13 +48,15 @@ const ROOM_HINTS: Record<InspectorFocus, string> = {
  * with nothing selected, the room's settings about what is in view (see `ROOM_SECTIONS`).
  * @param props.plan - The room being built.
  * @param props.focus - What is in view beside it.
+ * @param props.shownWall - The wall shown in the Wall tab; null elsewhere.
+ * @param props.onPlan - Opens the plan (after adding a floor area from the 3D view, to place it).
  */
-export function Inspector({ plan, focus }: { plan: Plan; focus: InspectorFocus }) {
+export function Inspector({ plan, focus, shownWall, onPlan }: { plan: Plan; focus: InspectorFocus; shownWall: number | null; onPlan: () => void }) {
   const selected = useBuilderStore((state) => state.selected)
   const item = plan.items[selected]
 
   if (!item) {
-    return <RoomInspector plan={plan} focus={focus} />
+    return <RoomInspector plan={plan} focus={focus} shownWall={shownWall} onPlan={onPlan} />
   }
 
   return isWallItem(item) ? <WallItemInspector plan={plan} index={selected} /> : <ItemInspector plan={plan} index={selected} />
@@ -60,12 +64,13 @@ export function Inspector({ plan, focus }: { plan: Plan; focus: InspectorFocus }
 
 /**
  * The selected window's, door's or hung object's settings: its wall, its exact place (from the wall's left corner, and
- * a window's or hung object's height above the floor), its size (and how far a hung object sticks out) and color.
+ * a window's or hung object's height above the floor), its size (and how far a hung object sticks out) and color; and
+ * adding a wall area on its wall, as the room's settings offer with nothing selected.
  * @param props.plan - The room.
  * @param props.index - Its position in the plan's objects.
  */
 function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
-  const { update, remove } = useBuilderStore()
+  const { update, remove, addZone } = useBuilderStore()
   const item = plan.items[index]
   const wall = item.wall!
   const [length, ceiling] = [wallLength(plan, wall), plan.height * 100]
@@ -117,10 +122,16 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
           onPick={(color) => update(index, { color })}
         />
       )}
-      <Button variant="outline" className="w-full" onClick={() => remove(index)}>
-        <Trash2Icon data-icon="inline-start" />
-        Delete
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" onClick={() => addZone("wall", wall)} data-add-wall-zone>
+          <PlusIcon data-icon="inline-start" />
+          Add a wall area
+        </Button>
+        <Button variant="outline" onClick={() => remove(index)}>
+          <Trash2Icon data-icon="inline-start" />
+          Delete
+        </Button>
+      </div>
     </div>
   )
 }
@@ -328,8 +339,10 @@ function ItemDecorations({ plan, index }: { plan: Plan; index: number }) {
  * The room's settings, shown while no object is selected: those about what is in view.
  * @param props.plan - The room.
  * @param props.focus - What is in view beside it.
+ * @param props.shownWall - The wall shown in the Wall tab; null elsewhere.
+ * @param props.onPlan - Opens the plan.
  */
-function RoomInspector({ plan, focus }: { plan: Plan; focus: InspectorFocus }) {
+function RoomInspector({ plan, focus, shownWall, onPlan }: { plan: Plan; focus: InspectorFocus; shownWall: number | null; onPlan: () => void }) {
   const setRoom = useBuilderStore((state) => state.setRoom)
   const resetShape = useBuilderStore((state) => state.resetShape)
   const addZone = useBuilderStore((state) => state.addZone)
@@ -364,7 +377,6 @@ function RoomInspector({ plan, focus }: { plan: Plan; focus: InspectorFocus }) {
           </>
         )}
       </fieldset>
-      {shows.walls && <ColorChoice label="Walls" value={plan.wallColor} colors={BUILDER.wallColors} onPick={(wallColor) => setRoom({ wallColor })} />}
       {shows.floor && (
         <>
           <div className="space-y-2">
@@ -373,7 +385,19 @@ function RoomInspector({ plan, focus }: { plan: Plan; focus: InspectorFocus }) {
           </div>
           <FloorColorChoice type={plan.floorType} value={plan.floorColor} onPick={(floorColor) => setRoom({ floorColor })} />
           <div className="space-y-1">
-            <Button variant="outline" size="sm" onClick={() => addZone("floor")} data-add-floor-zone>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                addZone("floor")
+
+                // The 3D view can't place it: the plan can.
+                if (focus === "3d") {
+                  onPlan()
+                }
+              }}
+              data-add-floor-zone
+            >
               <PlusIcon data-icon="inline-start" />
               Add a floor area
             </Button>
@@ -381,8 +405,9 @@ function RoomInspector({ plan, focus }: { plan: Plan; focus: InspectorFocus }) {
           </div>
         </>
       )}
-      {(shows.walls || shows.light) && <FinishFields plan={plan} walls={shows.walls} light={shows.light} />}
-      {shows.view && <ViewChoice plan={plan} place="panel" />}
+      {(shows.walls || shows.ceiling || shows.light) && (
+        <FinishFields plan={plan} walls={shows.walls} ceiling={shows.ceiling} light={shows.light} shownWall={shownWall} />
+      )}
     </div>
   )
 }

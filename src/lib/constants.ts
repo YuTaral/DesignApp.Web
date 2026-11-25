@@ -649,8 +649,10 @@ export const BUILDER = {
     "#FFFFFF", "#FAFAF7", "#F4F1EA", "#EFE6CF", "#E8DCC8", "#E8E2D6", "#D8C3A5", "#C8C8C8",
     "#A8B89A", "#9DB4C0", "#4A6274", "#2E4057", "#8A8580", "#5A5A5A", "#3A3A3A", "#1E1E1E",
   ],
-  /** The one choice the "None" chip of a material or an accent wall stands for. */
+  /** The one choice the "None" chip of a material stands for. */
   none: "none",
+  /** The choice the "All" chip of the walls' finish stands for: a change for every wall. */
+  allWalls: "all",
   /** Colors offered for windows and doors: frames and door leaves. */
   frameColors: [
     "#FFFFFF", "#F4F1EA", "#E8DCC8", "#C8C8C8", "#8A8580", "#3A3A3A", "#1E1E1E", "#B8864B",

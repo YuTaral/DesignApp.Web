@@ -1,8 +1,6 @@
 import { useMemo, useRef, type DragEvent, type PointerEvent as ReactPointerEvent } from "react"
 
-import { PlusIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import { BUILDER, ITEM_SHAPE, WALL_FINISH, type WallFinish } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
@@ -50,7 +48,7 @@ const CORNERS = [
  * @param props.onWall - Shows another wall.
  */
 export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onWall: (wall: number) => void }) {
-  const { selected, select, update, add, addZone } = useBuilderStore()
+  const { selected, select, update, add } = useBuilderStore()
   const svgRef = useRef<SVGSVGElement>(null)
   const gesture = useRef<Gesture | null>(null)
   const [surface, color] = wallSurface(plan, wall)
@@ -158,10 +156,6 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
           {Math.round(length)} × {Math.round(height)} cm
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => addZone("wall", wall)} data-add-wall-zone>
-            <PlusIcon data-icon="inline-start" />
-            Add a wall area
-          </Button>
           <WallChoice plan={plan} value={wall} label="Wall shown" onPick={onWall} />
         </div>
       </div>

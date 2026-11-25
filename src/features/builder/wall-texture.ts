@@ -6,15 +6,15 @@ import { FLOOR_TILE_METRES, paintFloor, seeded, shade } from "./floor-texture"
 export const WALL_TILE_METRES = FLOOR_TILE_METRES
 
 /**
- * What a wall is finished in and its color: the accent wall's own, or the room's.
+ * What a wall is finished in and its color: its own, or the room's.
  * @param plan - The room.
  * @param wall - The wall's number.
  * @returns The finish and the color.
  */
 export function wallSurface(plan: Pick<Plan, "finish" | "wallColor">, wall: number): readonly [WallFinish, string] {
-  const { finish } = plan
+  const own = plan.finish.ownWalls.find((w) => w.wall === wall)
 
-  return finish.accentWall === wall ? [finish.accentFinish, finish.accentColor] : [finish.walls, plan.wallColor]
+  return own ? [own.finish, own.color] : [plan.finish.walls, plan.wallColor]
 }
 
 /** The wall tiles already painted as pictures, by finish and color (the Wall tab redraws its areas on every drag). */
