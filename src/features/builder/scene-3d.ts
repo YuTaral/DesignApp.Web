@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH } from "@/lib/constants"
+import { BUILDER, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
 import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot } from "./api"
 import { CUBE_FACES, type Vec3 } from "./panorama"
 import type { PanoramaJob } from "./panorama.worker"
@@ -318,6 +318,20 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   }
 
   for (const [index, item] of plan.items.entries()) {
+    // An area of the floor or a wall is part of that surface (in the masks too), not an object.
+    if (item.shape === ITEM_SHAPE.FloorZone) {
+      scene.add(floorZone(item, anisotropy))
+      continue
+    }
+
+    if (item.shape === ITEM_SHAPE.WallZone) {
+      if (isWallItem(item) && item.wall !== behind) {
+        scene.add(wallZone(plan, item, anisotropy))
+      }
+
+      continue
+    }
+
     const drawn = !isWallItem(item) ? model(item) : item.wall !== behind ? (isMountedShape(item.shape) ? hung(plan, item) : opening(plan, item)) : null
 
     if (!drawn) {
@@ -545,6 +559,53 @@ function wallMesh(plan: Plan, wall: OutlineWall, paint: THREE.Material) {
   mesh.userData.wall = wall.index
 
   return mesh
+}
+
+/**
+ * An area of the floor in its own material and color: the material's texture at its real size, lying just above the
+ * floor (under rugs) and turned as on the plan. It counts as the floor in the masks.
+ * @param item - The area.
+ * @param anisotropy - The sharpest texture filtering the GPU offers.
+ */
+function floorZone(item: PlanItem, anisotropy: number) {
+  const [w, d] = [item.width / 100, item.depth / 100]
+  const paint = tileMaterial((context, size) => paintFloor(context, item.material as FloorType, item.color, size), w / FLOOR_TILE_METRES, d / FLOOR_TILE_METRES, anisotropy, 0.7)
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), paint)
+
+  mesh.rotation.set(-Math.PI / 2, 0, -THREE.MathUtils.degToRad(item.rotation))
+  mesh.position.set(item.x / 100, ZONE.lift, item.y / 100)
+  mesh.receiveShadow = true
+  mesh.userData.surface = MASK_ID.floor
+
+  return mesh
+}
+
+/**
+ * An area of a wall in its own finish and color: the finish's texture at its real size (plain paint is its color),
+ * just in front of the wall, under its windows, doors, skirting and what hangs on it. It counts as the wall in the masks.
+ * @param plan - The room.
+ * @param item - The area.
+ * @param anisotropy - The sharpest texture filtering the GPU offers.
+ */
+function wallZone(plan: Plan, item: PlanItem & { wall: number }, anisotropy: number) {
+  const [w, h] = [item.width / 100, item.height / 100]
+  const finish = item.material as WallFinish
+  const paint =
+    finish === WALL_FINISH.Paint
+      ? material(item.color)
+      : tileMaterial((context, size) => paintWall(context, finish, item.color, size), w / WALL_TILE_METRES, h / WALL_TILE_METRES, anisotropy)
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), paint)
+  const group = new THREE.Group()
+  const at = wallPoint(plan, item.wall, item.x)
+
+  mesh.position.set(0, item.elevation / 100 + h / 2, ZONE.lift)
+  mesh.receiveShadow = true
+  group.add(mesh)
+  group.position.set(at.x / 100, 0, at.y / 100)
+  group.rotation.y = wallTurn(wallOf(plan, item.wall))
+  group.userData.surface = MASK_ID.wall
+
+  return group
 }
 
 /**

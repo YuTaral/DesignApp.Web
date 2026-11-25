@@ -1,6 +1,6 @@
 import { ITEM_SHAPE, PANORAMA } from "@/lib/constants"
 import type { OutlinePoint, Plan } from "./api"
-import { isWallItem } from "./builder-store"
+import { isWallItem, isZoneShape } from "./builder-store"
 import { contains, extent } from "./room-outline"
 
 /**
@@ -13,7 +13,7 @@ import { contains, extent } from "./room-outline"
 export function panoramaSpot(plan: Pick<Plan, "outline" | "items">): OutlinePoint {
   const { width, length } = extent(plan)
   const footprints = plan.items
-    .filter((item) => !isWallItem(item) && item.shape !== ITEM_SHAPE.Rug)
+    .filter((item) => !isWallItem(item) && item.shape !== ITEM_SHAPE.Rug && !isZoneShape(item.shape))
     .map((item) => {
       const turned = item.rotation % 180 !== 0
       const [w, d] = turned ? [item.depth, item.width] : [item.width, item.depth]
@@ -52,7 +52,7 @@ export function panoramaSpot(plan: Pick<Plan, "outline" | "items">): OutlinePoin
  */
 export function panoramaStartYaw(plan: Pick<Plan, "items">, spot: OutlinePoint) {
   const objects = plan.items
-    .filter((item) => !isWallItem(item) && item.shape !== ITEM_SHAPE.Rug)
+    .filter((item) => !isWallItem(item) && item.shape !== ITEM_SHAPE.Rug && !isZoneShape(item.shape))
     .map((item) => ({ yaw: (Math.atan2(item.x - spot.x, spot.y - item.y) * 180) / Math.PI, size: item.width * item.depth }))
   let best = { yaw: 0, score: -1 }
 

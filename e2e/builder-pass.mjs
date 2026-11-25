@@ -385,7 +385,7 @@ try {
   const added = (await stored()).items[3]
   /** The page point of a wall point: along the wall from its left corner, and up from the floor (centimetres). */
   const onWall = (along, up) => page.evaluate((along, up) => {
-    const svg = document.querySelector('[data-wall-view] svg')
+    const svg = document.querySelector('[data-wall-view] svg[role=application]')
     const height = svg.viewBox.baseVal.height - 120
     const p = new DOMPoint(along, height - up).matrixTransform(svg.getScreenCTM())
 
@@ -409,7 +409,7 @@ try {
   await shot('builder-wall')
   // The room's objects are drawn after (in front of) the windows and doors, and the chosen one's handle after them.
   const order = await page.evaluate(() => {
-    const kids = [...document.querySelector('[data-wall-view] svg').children]
+    const kids = [...document.querySelector('[data-wall-view] svg[role=application]').children]
     const last = (selector) => kids.reduce((at, kid, i) => (kid.matches(selector) ? i : at), -1)
     const first = (selector) => kids.findIndex((kid) => kid.matches(selector))
 
@@ -450,7 +450,7 @@ try {
   const startWindow = (await stored()).items[3]
   const sizeHandle = await page.$eval('[data-wall-view] [data-resize=ne]', (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
   // The drawing's top-right corner: past the wall's end and above the ceiling (its margin), yet on screen.
-  const farAway = await page.$eval('[data-wall-view] svg', (e) => { const r = e.getBoundingClientRect(); return { x: r.right - 3, y: r.top + 3 } })
+  const farAway = await page.$eval('[data-wall-view] svg[role=application]', (e) => { const r = e.getBoundingClientRect(); return { x: r.right - 3, y: r.top + 3 } })
 
   await page.mouse.move(sizeHandle.x, sizeHandle.y); await page.mouse.down()
   await page.mouse.move(farAway.x, farAway.y, { steps: 12 })
@@ -498,7 +498,7 @@ try {
   const door = await page.evaluate(() => fetch('/api/builder/catalog/LivingRoom').then((r) => r.json()).then((list) => list.find((o) => o.key === 'door')))
   const nearLeft = await onWall(250, 100)
 
-  await dropCatalogObject(page, '[data-wall-view] svg', door, nearLeft)
+  await dropCatalogObject(page, '[data-wall-view] svg[role=application]', door, nearLeft)
   await page.waitForSelector('[data-wall-view="3"] [data-opening=Door]')
   await saved()
   const placedDoor = (await stored()).items[4]
@@ -517,7 +517,7 @@ try {
   const hungAdded = (await stored()).items.at(-1)
   const view = (await stored()).view
   const hungOrder = await page.evaluate(() => {
-    const kids = [...document.querySelector('[data-wall-view] svg').children]
+    const kids = [...document.querySelector('[data-wall-view] svg[role=application]').children]
 
     return { hung: kids.findIndex((kid) => kid.matches('[data-hung]')), object: kids.reduce((at, kid, i) => (kid.matches('[data-wall-object]') ? i : at), -1) }
   })
@@ -739,6 +739,41 @@ try {
 
   step('A double-click on Add adds one object', doubled.items.length === keptBehind + 1 && afterDouble === keptBehind + 1, `${keptBehind} → ${afterDouble}`)
   await page.keyboard.press('Escape')
+
+  // 10i. Areas in their own material: a floor area from the room's settings (tiles, drawn under everything on the plan),
+  //     and a wall area from the Wall tab, made wood panelling. Both are saved, and neither is an object the photo's
+  //     boxes name. Then both are deleted again.
+  await page.click('[role=tab]::-p-text(Plan)')
+  await page.waitForSelector('[data-add-floor-zone]')
+  await page.click('[data-add-floor-zone]')
+  await page.waitForSelector('[data-zone-look=floor]')
+  const floorOnPlan = Boolean(await page.$('[data-plan-canvas] [data-zone]'))
+
+  await page.click('[role=tab]::-p-text(Wall)')
+  await page.waitForSelector('[data-add-wall-zone]')
+  await page.click('[data-add-wall-zone]')
+  await page.waitForSelector('[data-zone-look=wall]')
+  await page.click('[data-zone-look=wall] ::-p-text(Wood panels)')
+  const zoned = await storedOnce((plan) => plan.items.some((i) => i.shape === 'WallZone' && i.material === 'WoodPanelling'))
+  const zones = zoned.items.filter((i) => i.shape.endsWith('Zone')).map((i) => `${i.shape} ${i.material}`)
+  const boxed = await page.evaluate(async () => {
+    const { objectBoxes } = await import('/src/features/builder/scene-3d.ts')
+    const plan = await (await fetch(`/api/plans/${location.pathname.split('/').at(-1)}`)).json()
+
+    return objectBoxes(plan).map((b) => plan.items[b.item].shape)
+  })
+
+  await shot('builder-wall-zone')
+  await page.click('[data-inspector-item] ::-p-text(Delete)')
+  await page.click('[role=tab]::-p-text(Plan)')
+  await page.waitForSelector('[data-plan-canvas] [data-zone]')
+  await page.click('[data-plan-canvas] [data-zone]')
+  await page.click('[data-inspector-item] ::-p-text(Delete)')
+  const unzoned = await storedOnce((plan) => !plan.items.some((i) => i.shape.endsWith('Zone')))
+
+  step('A floor area and a wall area in their own materials are saved, and the photo’s boxes leave them out',
+    floorOnPlan && zones.join() === 'FloorZone Tiles,WallZone WoodPanelling' && !boxed.some((shape) => shape.endsWith('Zone')) && unzoned.items.length === keptBehind + 1,
+    `${zones.join(', ')} | boxes ${[...new Set(boxed)].join(', ')}`)
 
   // 11. Generate photo (the fake AI) shows a small picture of every view (each wall from the middle and both near
   //    corners), the room's own picked, and the style closed at "As planned"; with one more picked it makes two photos,

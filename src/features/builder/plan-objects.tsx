@@ -1,14 +1,18 @@
 import type { PointerEvent as ReactPointerEvent, SVGProps } from "react"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE } from "@/lib/constants"
+import { BUILDER, FLOOR_TILE_CM, ITEM_FORM, ITEM_SHAPE, type FloorType } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { cornerOutline, footprint, hasParts, legSide, partsOf } from "./builder-store"
+import { floorTileUrl } from "./floor-texture"
 import { ResizeHandle } from "./resize-handle"
 import { wallOf, wallPoint } from "./room-outline"
 import type { Part } from "./use-plan-gestures"
 
 /** Round or flat shapes that look the same from every side, so they get no front and back marks. */
-const SIDELESS = new Set<string>([ITEM_SHAPE.Rug, ITEM_SHAPE.Plant, ITEM_SHAPE.Cylinder, ITEM_SHAPE.Lamp])
+const SIDELESS = new Set<string>([ITEM_SHAPE.Rug, ITEM_SHAPE.Plant, ITEM_SHAPE.Cylinder, ITEM_SHAPE.Lamp, ITEM_SHAPE.FloorZone])
+
+/** How wide a floor area's edge is to grab, in centimetres: wider than it is drawn, so it is easy to pick. */
+const ZONE_EDGE_GRAB = 14
 
 /** What a window, door or hung thing on the plan is drawn from. */
 type WallMarkProps = {
@@ -54,31 +58,34 @@ export function PlanObject({
   onStart: (event: ReactPointerEvent, kind: "move" | "resize" | Part, corner?: { x: number; y: number }) => void
 }) {
   const { width, depth } = footprint(item)
+  // A floor area shows its material's pattern, at its real size, with a dashed edge.
+  const zone = item.shape === ITEM_SHAPE.FloorZone
+  const pattern = `zone-${index}`
 
   return (
-    <g transform={`translate(${item.x} ${item.y})`} data-item={index} className="cursor-move" onPointerDown={(event) => onStart(event, "move")}>
+    <g transform={`translate(${item.x} ${item.y})`} data-item={index} data-zone={zone || undefined} className="cursor-move" onPointerDown={(event) => onStart(event, "move")}>
+      {zone && (
+        <defs>
+          <pattern id={pattern} patternUnits="userSpaceOnUse" width={FLOOR_TILE_CM} height={FLOOR_TILE_CM}>
+            <image href={floorTileUrl(item.material as FloorType, item.color)} width={FLOOR_TILE_CM} height={FLOOR_TILE_CM} preserveAspectRatio="none" />
+          </pattern>
+        </defs>
+      )}
       <Outline
         item={item}
         width={width}
         depth={depth}
         look={{
-          fill: item.color,
+          fill: zone ? `url(#${pattern})` : item.color,
           fillOpacity: item.shape === ITEM_SHAPE.Rug ? 0.75 : 0.95,
+          strokeDasharray: zone ? "10 6" : undefined,
           strokeWidth: clashing || chosen ? 4 : 1.5,
           className: clashing ? "stroke-destructive" : chosen ? "stroke-primary" : "stroke-black/30",
           "data-clash": clashing || undefined,
           "data-form": item.form,
         }}
       />
-      <text
-        y={text / 3}
-        textAnchor="middle"
-        fontSize={labelSize(item, width, depth, text)}
-        className="pointer-events-none fill-foreground"
-        style={{ paintOrder: "stroke", stroke: "var(--background)", strokeWidth: 3, strokeOpacity: 0.7 }}
-      >
-        {item.label}
-      </text>
+      {(!zone || chosen) && <Label item={item} width={width} depth={depth} text={text} />}
       {!SIDELESS.has(item.shape) && item.form !== ITEM_FORM.Round && <FacingMarks item={item} width={width} depth={depth} text={text} />}
       {chosen &&
         CORNERS.map((corner) => (
@@ -92,6 +99,48 @@ export function PlanObject({
         ))}
       {chosen && hasParts(item) && <PartHandles item={item} onStart={(event, part) => onStart(event, part)} />}
     </g>
+  )
+}
+
+/**
+ * A floor area's dashed edge and name, drawn above the rugs (its fill lies under them): grabbing its edge selects and
+ * moves it even where a rug covers all of it.
+ * @param props.item - The floor area.
+ * @param props.index - Its position in the plan's objects.
+ * @param props.text - The plan's label size, in centimetres.
+ * @param props.onStart - Starts moving it.
+ */
+export function ZoneEdge({ item, index, text, onStart }: { item: PlanItem; index: number; text: number; onStart: (event: ReactPointerEvent) => void }) {
+  const { width, depth } = footprint(item)
+  const box = { x: -width / 2, y: -depth / 2, width, height: depth }
+
+  return (
+    <g transform={`translate(${item.x} ${item.y})`} data-zone-edge={index} className="cursor-move" onPointerDown={onStart}>
+      <rect {...box} fill="none" stroke="transparent" strokeWidth={ZONE_EDGE_GRAB} style={{ pointerEvents: "stroke" }} />
+      <rect {...box} fill="none" strokeWidth={1.5} strokeDasharray="10 6" className="pointer-events-none stroke-black/40" />
+      <Label item={item} width={width} depth={depth} text={text} />
+    </g>
+  )
+}
+
+/**
+ * An object's name in its middle, outlined in the background color so it reads on any fill.
+ * @param props.item - The object.
+ * @param props.width - Its footprint across, in centimetres.
+ * @param props.depth - Its footprint down, in centimetres.
+ * @param props.text - The plan's label size, in centimetres.
+ */
+function Label({ item, width, depth, text }: { item: PlanItem; width: number; depth: number; text: number }) {
+  return (
+    <text
+      y={text / 3}
+      textAnchor="middle"
+      fontSize={labelSize(item, width, depth, text)}
+      className="pointer-events-none fill-foreground"
+      style={{ paintOrder: "stroke", stroke: "var(--background)", strokeWidth: 3, strokeOpacity: 0.7 }}
+    >
+      {item.label}
+    </text>
   )
 }
 

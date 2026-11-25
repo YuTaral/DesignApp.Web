@@ -268,12 +268,38 @@ export const ROOM_TYPE_NAMES: Record<RoomType, string> = {
 
 /**
  * How a built room's object is drawn in 3D (Domain Constants.ItemShape). Windows and doors are in a wall; a Picture
- * (paintings, mirrors, a wall TV) and a WallBox (upper cabinets, shelves, a hood) hang on one.
+ * (paintings, mirrors, a wall TV) and a WallBox (upper cabinets, shelves, a hood) hang on one. A FloorZone and a
+ * WallZone are areas of the floor or a wall in their own material and color: surfaces, not furniture.
  */
 export const ITEM_SHAPE = {
   Box: "Box", Rounded: "Rounded", Cylinder: "Cylinder", Sofa: "Sofa", Bed: "Bed",
   Table: "Table", Chair: "Chair", Rug: "Rug", Plant: "Plant", Lamp: "Lamp",
   Window: "Window", Door: "Door", Picture: "Picture", WallBox: "WallBox",
+  FloorZone: "FloorZone", WallZone: "WallZone",
+} as const
+
+/**
+ * Areas of the floor or a wall in their own material and color. A new one starts in a material other than the room's,
+ * so it shows at once.
+ */
+/** A floor or wall texture tile's side, in cm (`FLOOR_TILE_METRES`), for patterns drawn in plan centimetres. */
+export const FLOOR_TILE_CM = 200
+
+export const ZONE = {
+  /** A new floor area's width and depth, in cm. */
+  floorSize: 100,
+  /** A new wall area's width, in cm (it starts as tall as the wall). */
+  wallWidth: 100,
+  /** How thin an area is, in cm (API: any side of an object is at least 1 cm). */
+  thickness: 1,
+  /** How far an area lies in front of its floor or wall in 3D, in metres: under rugs, windows, frames and skirting. */
+  lift: 0.002,
+  /** The names a new area gets. */
+  labels: { floor: "floor area", wall: "wall area" },
+  /** What a new floor area is made of: tiles, or wood on a tiled floor. */
+  floor: { material: "Tiles", color: "#E8E4DC", otherMaterial: "Wood", otherColor: "#B8864B" },
+  /** What a new wall area is made of: brick, or wood panelling on brick walls. */
+  wall: { material: "Brick", color: "#B5543C", otherMaterial: "WoodPanelling", otherColor: "#B8864B" },
 } as const
 
 export type ItemShape = (typeof ITEM_SHAPE)[keyof typeof ITEM_SHAPE]

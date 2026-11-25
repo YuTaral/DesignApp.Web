@@ -17,19 +17,32 @@ export function wallSurface(plan: Pick<Plan, "finish" | "wallColor">, wall: numb
   return finish.accentWall === wall ? [finish.accentFinish, finish.accentColor] : [finish.walls, plan.wallColor]
 }
 
+/** The wall tiles already painted as pictures, by finish and color (the Wall tab redraws its areas on every drag). */
+const tileUrls = new Map<string, string>()
+
 /**
- * One tile of a wall finish as a picture (a PNG data URL), for the Wall tab's pattern.
+ * One tile of a wall finish as a picture (a PNG data URL), for the Wall tab's pattern; painted once per finish and color.
  * @param finish - The finish (not Paint).
  * @param color - The wall's color.
  * @param size - The tile's size, in pixels.
  */
 export function wallTileUrl(finish: WallFinish, color: string, size = 256) {
+  const key = `${finish}:${color}:${size}`
+  const kept = tileUrls.get(key)
+
+  if (kept) {
+    return kept
+  }
+
   const canvas = document.createElement("canvas")
 
   canvas.width = canvas.height = size
   paintWall(canvas.getContext("2d")!, finish, color, size)
+  const url = canvas.toDataURL("image/png")
 
-  return canvas.toDataURL("image/png")
+  tileUrls.set(key, url)
+
+  return url
 }
 
 /**

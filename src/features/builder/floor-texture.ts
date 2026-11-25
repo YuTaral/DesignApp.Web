@@ -3,6 +3,35 @@ import { FLOOR_TYPE, type FloorType } from "@/lib/constants"
 /** How many metres of floor one painted tile of the pattern covers (it repeats across the room). */
 export const FLOOR_TILE_METRES = 2
 
+/** The floor tiles already painted as pictures, by material and color (a plan redraws its areas on every drag). */
+const tileUrls = new Map<string, string>()
+
+/**
+ * One tile of a floor material as a picture (a PNG data URL), for the plan's floor areas; painted once per material and
+ * color.
+ * @param type - The floor material.
+ * @param color - Its color.
+ * @param size - The tile's size, in pixels.
+ */
+export function floorTileUrl(type: FloorType, color: string, size = 128) {
+  const key = `${type}:${color}:${size}`
+  const kept = tileUrls.get(key)
+
+  if (kept) {
+    return kept
+  }
+
+  const canvas = document.createElement("canvas")
+
+  canvas.width = canvas.height = size
+  paintFloor(canvas.getContext("2d")!, type, color, size)
+  const url = canvas.toDataURL("image/png")
+
+  tileUrls.set(key, url)
+
+  return url
+}
+
 /**
  * Paints one square tile of a floor's pattern in its color: planks, parquet, tiles, stone, concrete or carpet. The
  * tile covers {@link FLOOR_TILE_METRES} metres and repeats seamlessly; the same seed always paints the same tile, so

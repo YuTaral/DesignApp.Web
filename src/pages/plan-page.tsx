@@ -96,6 +96,18 @@ function Builder({ plan }: { plan: Plan }) {
   }
 
   /**
+   * Opens a tab; on the Wall tab an object selected on the floor is let go, so the right column shows the wall's.
+   * @param next - The tab.
+   */
+  const open = (next: View) => {
+    if (next === "wall" && opening && !isWallItem(opening)) {
+      select(-1)
+    }
+
+    setView(next)
+  }
+
+  /**
    * Shows another wall; a window or door selected on the wall left behind is let go.
    * @param next - The wall.
    */
@@ -159,7 +171,7 @@ function Builder({ plan }: { plan: Plan }) {
                 type="button"
                 role="tab"
                 aria-selected={view === value}
-                onClick={() => setView(value)}
+                onClick={() => open(value)}
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1 font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
                   view === value ? "bg-card shadow-soft" : "text-muted-foreground hover:text-foreground"
@@ -199,7 +211,7 @@ function Builder({ plan }: { plan: Plan }) {
               shaping={shaping}
               onWall={(next) => {
                 showWall(next)
-                setView("wall")
+                open("wall")
               }}
             />
           ) : view === "wall" ? (
@@ -233,7 +245,7 @@ function Builder({ plan }: { plan: Plan }) {
       />
 
       <aside aria-label="Inspector" className="rounded-2xl border bg-card p-4 shadow-soft lg:w-80 lg:shrink-0 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
-        <Inspector plan={plan} />
+        <Inspector plan={plan} focus={view === "plan" && shaping ? "shape" : view} />
       </aside>
     </div>
   )

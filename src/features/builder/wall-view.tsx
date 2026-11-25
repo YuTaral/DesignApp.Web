@@ -1,6 +1,9 @@
 import { useMemo, useRef, type DragEvent, type PointerEvent as ReactPointerEvent } from "react"
 
-import { BUILDER, ITEM_SHAPE, WALL_FINISH } from "@/lib/constants"
+import { PlusIcon } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { BUILDER, ITEM_SHAPE, WALL_FINISH, type WallFinish } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { clashingItems, footprint, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
@@ -47,7 +50,7 @@ const CORNERS = [
  * @param props.onWall - Shows another wall.
  */
 export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onWall: (wall: number) => void }) {
-  const { selected, select, update, add } = useBuilderStore()
+  const { selected, select, update, add, addZone } = useBuilderStore()
   const svgRef = useRef<SVGSVGElement>(null)
   const gesture = useRef<Gesture | null>(null)
   const [surface, color] = wallSurface(plan, wall)
@@ -71,7 +74,9 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
     })
     .sort((a, b) => b.gap - a.gap)
   const onThisWall = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => item.wall === wall)
-  const openings = onThisWall.filter(({ item }) => !isMountedShape(item.shape))
+  // The wall's areas in their own finish, then its windows and doors, then what hangs on it.
+  const zones = onThisWall.filter(({ item }) => item.shape === ITEM_SHAPE.WallZone)
+  const openings = onThisWall.filter(({ item }) => !isMountedShape(item.shape) && item.shape !== ITEM_SHAPE.WallZone)
   const hung = onThisWall.filter(({ item }) => isMountedShape(item.shape))
   // Windows, doors and hung things covering one another, outlined in red.
   const clashing = clashingItems(plan)
@@ -152,7 +157,11 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
         <span className="text-muted-foreground tabular-nums">
           {Math.round(length)} × {Math.round(height)} cm
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => addZone("wall", wall)} data-add-wall-zone>
+            <PlusIcon data-icon="inline-start" />
+            Add a wall area
+          </Button>
           <WallChoice plan={plan} value={wall} label="Wall shown" onPick={onWall} />
         </div>
       </div>
@@ -190,6 +199,11 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
         {/* The skirting along the wall's foot, under the doors and windows drawn next. */}
         <rect x={0} y={height - skirting} width={length} height={skirting} fill={plan.finish.trimColor} className="pointer-events-none" data-skirting />
         <rect x={-12} y={height} width={length + 24} height={16} fill={plan.floorColor} stroke="currentColor" strokeOpacity="0.35" strokeWidth="1" />
+
+        {/* The wall's areas in their own finish, under everything else on it. */}
+        {zones.map(({ item, index }) => (
+          <WallZoneFace key={index} item={item} index={index} height={height} onStart={(event) => start(event, index, "move")} />
+        ))}
 
         {/* Windows and doors first, so the room's objects stand in front of them. */}
         {openings.map(({ item, index }) => {
@@ -270,6 +284,44 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
         <p className="text-xs text-muted-foreground">Nothing on this wall yet. Click a window, door or wall object in the list on the left, or drag it onto the wall.</p>
       )}
     </div>
+  )
+}
+
+/**
+ * An area of the wall in its own finish and color, seen straight on: its finish's pattern at its real size (plain paint
+ * is its color), with a dashed edge. Dragging it moves it.
+ * @param props.item - The area.
+ * @param props.index - Its position in the plan's objects.
+ * @param props.height - The wall's height, in centimetres.
+ * @param props.onStart - Starts moving it.
+ */
+function WallZoneFace({ item, index, height, onStart }: { item: PlanItem; index: number; height: number; onStart: (event: ReactPointerEvent) => void }) {
+  const finish = item.material as WallFinish
+  const tileCm = WALL_TILE_METRES * 100
+  const pattern = `wall-zone-${index}`
+  const [left, top] = [item.x - item.width / 2, height - item.elevation - item.height]
+
+  return (
+    <g data-item={index} data-wall-zone={finish} className="cursor-move" onPointerDown={onStart}>
+      {finish !== WALL_FINISH.Paint && (
+        <defs>
+          <pattern id={pattern} patternUnits="userSpaceOnUse" width={tileCm} height={tileCm} y={height}>
+            <image href={wallTileUrl(finish, item.color)} width={tileCm} height={tileCm} preserveAspectRatio="none" />
+          </pattern>
+        </defs>
+      )}
+      <rect
+        x={left}
+        y={top}
+        width={item.width}
+        height={item.height}
+        fill={finish === WALL_FINISH.Paint ? item.color : `url(#${pattern})`}
+        stroke="currentColor"
+        strokeOpacity="0.5"
+        strokeWidth={1.5}
+        strokeDasharray="10 6"
+      />
+    </g>
   )
 }
 

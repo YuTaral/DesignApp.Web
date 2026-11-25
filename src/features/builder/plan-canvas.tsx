@@ -4,7 +4,7 @@ import { ITEM_SHAPE } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { clashingItems, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
-import { Hung, Opening, PlanObject } from "./plan-objects"
+import { Hung, Opening, PlanObject, ZoneEdge } from "./plan-objects"
 import { Camera, PlanWalls, ShapeHandles } from "./plan-room"
 import { fromWall } from "./room-outline"
 import { PLAN_MARGIN, usePlanGestures } from "./use-plan-gestures"
@@ -27,15 +27,33 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
   const { selected, select, add, setRoom } = useBuilderStore()
   const { svgRef, toPlan, held, plus, setPlus, reshaping, start, startShape, startSection, move, end } = usePlanGestures(plan)
   const [roomWidth, roomLength] = [plan.width * 100, plan.length * 100]
-  // Rugs first, so everything else is drawn on top of them; windows and doors are drawn with the walls.
+  // Floor areas first, then rugs, so everything else is drawn on top of them; then the areas' edges, so an area under a
+  // rug can still be grabbed, and a selected area whole, with its handles; then the rest. Windows and doors are drawn
+  // with the walls (a wall's areas are only in the Wall tab).
+  const zoneUnder = (index: number) => (index === selected ? 1 : 3)
+  const under = (shape: string, index: number) => (shape === ITEM_SHAPE.FloorZone ? zoneUnder(index) : shape === ITEM_SHAPE.Rug ? 2 : 0)
   const order = plan.items
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => !isWallItem(item))
-    .sort((a, b) => Number(b.item.shape === ITEM_SHAPE.Rug) - Number(a.item.shape === ITEM_SHAPE.Rug))
-  const openings = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => isWallItem(item))
+    .sort((a, b) => under(b.item.shape, b.index) - under(a.item.shape, a.index))
+  const flat = order.filter(({ item, index }) => under(item.shape, index) >= 2)
+  const standing = order.filter(({ item, index }) => under(item.shape, index) < 2)
+  const edges = flat.filter(({ item }) => item.shape === ITEM_SHAPE.FloorZone)
+  const openings = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => isWallItem(item) && item.shape !== ITEM_SHAPE.WallZone)
   const clashing = clashingItems(plan)
   const text = Math.max(10, Math.min(roomWidth, roomLength) / 28)
   const floor = plan.outline.map((p) => `${p.x},${p.y}`).join(" ")
+  const drawn = ({ item, index }: { item: PlanItem; index: number }) => (
+    <PlanObject
+      key={index}
+      item={item}
+      index={index}
+      chosen={index === selected}
+      clashing={clashing.has(index)}
+      text={text}
+      onStart={(event, kind, corner) => start(event, index, kind, corner)}
+    />
+  )
 
   const drop = (event: DragEvent) => {
     const object = droppedObject(event)
@@ -107,17 +125,11 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
       <polygon points={floor} fill="url(#plan-grid)" className="pointer-events-none text-foreground" />
 
       <g className={shaping ? "pointer-events-none opacity-40" : undefined}>
-        {order.map(({ item, index }) => (
-          <PlanObject
-            key={index}
-            item={item}
-            index={index}
-            chosen={index === selected}
-            clashing={clashing.has(index)}
-            text={text}
-            onStart={(event, kind, corner) => start(event, index, kind, corner)}
-          />
+        {flat.map(drawn)}
+        {edges.map(({ item, index }) => (
+          <ZoneEdge key={index} item={item} index={index} text={text} onStart={(event) => start(event, index, "move")} />
         ))}
+        {standing.map(drawn)}
         {openings.map(({ item, index }) => {
           const OnWall = isMountedShape(item.shape) ? Hung : Opening
 

@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE } from "@/lib/constants"
+import { BUILDER, ITEM_FORM, ITEM_SHAPE, ZONE } from "@/lib/constants"
 import type { CatalogObject, CatalogVariant, ItemParts, Plan, PlanItem } from "./api"
 import { extent, fitInside, fromWall, isValidOutline, nearestWall, normalize, rectangle, stretch, wallLength, wallPoint, walls, type Reshaped } from "./room-outline"
 
@@ -31,6 +31,11 @@ type BuilderState = {
    * on a wall (the one nearest the point, else the wall the photo looks at) at a point along it.
    */
   add: (object: CatalogObject, at?: { x: number; y: number } | { wall: number; along: number }, decorations?: string[]) => void
+  /**
+   * Adds an area in its own material and color, selected: of the floor, in the room's middle, or of a wall (the one
+   * given), as tall as it and in the middle of it.
+   */
+  addZone: (kind: "floor" | "wall", wall?: number) => void
   /**
    * Changes the room's shape, starting from the room as it was (`base`, so a drag never builds on its own steps): the
    * walls that moved take their windows, doors and hung things and the view with them, and floor objects stay inside.
@@ -187,6 +192,38 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
       // A window, door or hung thing goes to the free place on its wall nearest where it was asked for, not on top of
       // another.
       change([...plan.items, isWallItem(placed) ? { ...placed, x: freeAlong(plan, placed) } : placed])
+      set({ selected: plan.items.length })
+    },
+    addZone: (kind, wall) => {
+      const { plan } = get()
+
+      if (!plan || plan.items.length >= BUILDER.maxItems || (kind === "wall" && wall === undefined)) {
+        return
+      }
+
+      const base = { rotation: 0, form: ITEM_FORM.Standard, decorations: [], parts: null }
+      let item: PlanItem
+
+      if (kind === "floor") {
+        const tiled = plan.floorType === ZONE.floor.material
+        const size = ZONE.floorSize
+
+        item = {
+          ...base, label: ZONE.labels.floor, shape: ITEM_SHAPE.FloorZone, x: toGrid(plan.width * 50), y: toGrid(plan.length * 50), width: size, depth: size,
+          height: ZONE.thickness, wall: null, elevation: 0, material: tiled ? ZONE.floor.otherMaterial : ZONE.floor.material,
+          color: tiled ? ZONE.floor.otherColor : ZONE.floor.color,
+        }
+      } else {
+        const brick = plan.finish.walls === ZONE.wall.material
+
+        item = {
+          ...base, label: ZONE.labels.wall, shape: ITEM_SHAPE.WallZone, x: wallLength(plan, wall!) / 2, y: 0, width: ZONE.wallWidth, depth: ZONE.thickness,
+          height: plan.height * 100, wall: wall!, elevation: 0, material: brick ? ZONE.wall.otherMaterial : ZONE.wall.material,
+          color: brick ? ZONE.wall.otherColor : ZONE.wall.color,
+        }
+      }
+
+      change([...plan.items, inside(item, plan)])
       set({ selected: plan.items.length })
     },
     update: (index, update) => {
@@ -392,6 +429,14 @@ export function isMountedShape(shape: string) {
 }
 
 /**
+ * Whether a shape is an area of the floor or a wall in its own material: a surface, not furniture.
+ * @param shape - The shape.
+ */
+export function isZoneShape(shape: string) {
+  return shape === ITEM_SHAPE.FloorZone || shape === ITEM_SHAPE.WallZone
+}
+
+/**
  * Whether an object is on a wall (a window, door or hung object).
  * @param item - The object.
  */
@@ -408,13 +453,18 @@ export function footprint(item: Pick<PlanItem, "width" | "depth" | "rotation">) 
 }
 
 /**
- * Whether two objects get in each other's way: two standing objects whose footprints overlap (rugs lie under things,
- * so they never count), or two things on the same wall (windows, doors, hung things) that cover the same part of it,
+ * Whether two objects get in each other's way: two standing objects whose footprints overlap (rugs and floor or wall
+ * areas lie under things, so they never count), or two things on the same wall (windows, doors, hung things) that cover the same part of it,
  * along it and in height. A standing object and a wall's object never count: a sofa may stand under a window.
  * @param a - One object.
  * @param b - The other.
  */
 export function overlaps(a: PlanItem, b: PlanItem) {
+  // Areas of the floor or walls are surfaces: things stand and hang on them.
+  if (isZoneShape(a.shape) || isZoneShape(b.shape)) {
+    return false
+  }
+
   if (isWallItem(a) && isWallItem(b)) {
     return a.wall === b.wall && Math.abs(a.x - b.x) * 2 < a.width + b.width - 1
       && a.elevation < b.elevation + b.height - 1 && b.elevation < a.elevation + a.height - 1
