@@ -8,13 +8,15 @@ import { useSavePanoramaView } from "@/features/rooms/api"
 import type { RoomPanorama } from "@/features/rooms/types"
 import { apiUrl, errorMessage } from "@/lib/api"
 import { MESSAGES, PANORAMA } from "@/lib/constants"
+import { maxTilt, yawLimit } from "./panorama-limits"
 
 /** Which way the viewer looks: its turn and tilt, and its lens across its height, in degrees. */
 type Look = { yaw: number; pitch: number; fov: number }
 
 /**
  * A room's 360° photo to look around: drag, the arrow keys or the wheel. Its middle faces the room; turning stops before
- * the seam behind, where the photo's ends meet, and a bar below shows where the view faces within that range. Save this
+ * the view's edge (at its tilt) reaches the seam behind, where the photo's ends meet, and tilting stops before straight
+ * up or down, where the whole seam meets; a bar below shows where the view faces within the turn allowed. Save this
  * view adds what is in view to the room's photos, cut from the same picture, so every view shows exactly the same room.
  * The viewer is 4:3, the shape of a saved view, so what is saved is what is seen. It starts where the photo's start
  * faces (towards most of the room), tilted a little down.
@@ -94,13 +96,6 @@ export function PanoramaViewer({ roomId, panorama }: { roomId: string; panorama:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panorama.url])
 
-  /** How far the view may turn either way before its edge reaches the seam behind. */
-  const yawLimit = (camera: THREE.PerspectiveCamera) => {
-    const horizontal = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect))
-
-    return Math.max(0, 180 - horizontal / 2 - PANORAMA.seamMargin)
-  }
-
   /**
    * Turns the view (kept inside the allowed range) and draws it.
    * @param next - The new turn, tilt and lens.
@@ -113,12 +108,14 @@ export function PanoramaViewer({ roomId, panorama }: { roomId: string; panorama:
     }
 
     const fov = Math.min(PANORAMA.maxFov, Math.max(PANORAMA.minFov, next.fov))
+    const tilt = Math.min(maxTilt(fov), Math.max(-maxTilt(fov), next.pitch))
+    // The turn allowed depends on the tilt: tilting at the far left or right turns the view back a little.
+    const most = yawLimit(fov, tilt)
+    const kept = { fov, yaw: Math.min(most, Math.max(-most, next.yaw)), pitch: tilt }
+    const [yaw, pitch] = [THREE.MathUtils.degToRad(kept.yaw), THREE.MathUtils.degToRad(kept.pitch)]
 
     view.camera.fov = fov
     view.camera.updateProjectionMatrix()
-    const most = yawLimit(view.camera)
-    const kept = { fov, yaw: Math.min(most, Math.max(-most, next.yaw)), pitch: Math.min(PANORAMA.maxPitch, Math.max(-PANORAMA.maxPitch, next.pitch)) }
-    const [yaw, pitch] = [THREE.MathUtils.degToRad(kept.yaw), THREE.MathUtils.degToRad(kept.pitch)]
 
     // The photo's middle is on -x in the inside-out sphere; turning right moves towards -z.
     view.camera.lookAt(-Math.cos(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.sin(yaw) * Math.cos(pitch))

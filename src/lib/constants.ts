@@ -470,9 +470,13 @@ export const PANORAMA = {
   startFov: 75,
   minFov: 35,
   maxFov: 90,
-  /** The viewer's tilt at the start, and its limit, in degrees. */
+  /** The viewer's tilt at the start, and its limit, in degrees (a wide lens tilts less: `maxTilt`). */
   startPitch: -6,
   maxPitch: 80,
+  /** Straight up (and down), in degrees of tilt: where every point of the 360° photo's seam meets. */
+  straightUp: 90,
+  /** A saved view's width over its height, which the viewer has too (API Constants.Panoramas.ViewWidth / ViewHeight). */
+  viewAspect: 1024 / 768,
   /** How many degrees the view's edge keeps from the seam behind, where the 360° photo's ends meet. */
   seamMargin: 4,
   /** How many degrees an arrow key turns or tilts the view. */
