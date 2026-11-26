@@ -987,6 +987,51 @@ try {
   await sleep(200)
   step('The 3D view zooms with the wheel, and dragging it pans without turning the view; Fit shows it whole',
     zoomed3d > 3 && viewAfter === viewBefore && (await zoomNow()) === 1, JSON.stringify({ zoomed3d, viewBefore, viewAfter }))
+
+  // 14. A new kitchen in the Wall tab: its windows' blinds, its units' worktops and their upstands on the wall are
+  //     drawn. On the plan the upper cabinets lie over a base cabinet, which takes the click; with "Hung things only"
+  //     the upper cabinets do, and open on their wall.
+  const kitchenId = await page.evaluate(async () => {
+    const created = await fetch('/api/plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Wall tab kitchen', roomType: 'Kitchen', width: 4, length: 5, height: 2.6, wallColor: '#E8E2D6', floorColor: '#B89B7A', furnish: true }),
+    })
+
+    return (await created.json()).id
+  })
+
+  await page.goto(`${WEB}/build/${kitchenId}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-plan-canvas] [data-item]')
+  const kitchenPlan = await stored()
+  const upper = kitchenPlan.items.findIndex((item) => item.shape === 'WallBox' && item.wall === 0)
+  const upperMiddle = await middleOf(`[data-plan-canvas] [data-item="${upper}"]`)
+  const underUpper = (p) => page.evaluate((p) => {
+    const el = document.elementFromPoint(p.x, p.y)
+
+    return el?.dataset.hungHit ?? el?.closest('[data-item]')?.dataset.item ?? null
+  }, p)
+  const beforeKitchen = await underUpper(upperMiddle)
+
+  await page.click('[data-plan-hung-only]')
+  await sleep(200)
+  const withToggle = await underUpper(upperMiddle)
+
+  await page.mouse.click(upperMiddle.x, upperMiddle.y)
+  await page.waitForSelector('[data-wall-view="0"]')
+  await sleep(400)
+  const drawn = await page.evaluate(() => ({
+    coverings: [...document.querySelectorAll('[data-wall-covering]')].map((g) => g.dataset.wallCovering),
+    worktops: document.querySelectorAll('[data-wall-worktop]').length,
+    backsplashes: [...document.querySelectorAll('[data-wall-backsplash]')].map((g) => g.dataset.wallBacksplash),
+  }))
+  const backWindows = kitchenPlan.items.filter((item) => item.shape === 'Window' && item.wall === 0).length
+
+  await shot('builder-wall-kitchen')
+  step('The Wall tab draws the windows’ blinds and the units’ worktops and upstands; "Hung things only" lets the upper cabinets over a base cabinet be picked on the plan',
+    drawn.coverings.length === backWindows && drawn.coverings.every((kind) => kind === 'RollerBlind') && drawn.worktops > 0 && drawn.backsplashes.includes('Upstand')
+      && beforeKitchen !== String(upper) && withToggle === String(upper),
+    JSON.stringify({ drawn, backWindows, upper, beforeKitchen, withToggle }))
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('builder-stopped').catch(() => {})

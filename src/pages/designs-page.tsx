@@ -12,22 +12,27 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccount } from "@/features/account/api"
+import { PlanList } from "@/features/builder/plan-list"
 import { useDesigns, type Design } from "@/features/designs/api"
 import { DeleteDesignDialog, DesignCover, DesignDetailsDialog } from "@/features/designs/components"
 import { dateFormat, roomCount } from "@/features/designs/format"
 import { errorMessage } from "@/lib/api"
 import { MESSAGES, ROUTES } from "@/lib/constants"
 
-/** Route `/designs`: the account's designs, or an invitation to sign in. */
+/** Route `/designs`: the account's designs, then the rooms it builds in 3D, or an invitation to sign in. */
 export function DesignsPage() {
   const account = useAccount()
   const signedIn = account.data?.signedIn === true
   const designs = useDesigns(signedIn)
+  // Where the focus goes when the last built room is deleted.
+  const title = useRef<HTMLHeadingElement>(null)
   const list = designs.data ?? []
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">My designs</h1>
+      <h1 ref={title} tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none">
+        My designs
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">Each design holds one or more rooms, each with its own colors.</p>
 
       {account.isPending || (signedIn && designs.isPending) ? (
@@ -80,6 +85,7 @@ export function DesignsPage() {
           ))}
         </CardGrid>
       )}
+      {signedIn && <PlanList afterLast={title} />}
     </div>
   )
 }

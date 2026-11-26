@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { ApiError, apiUrl, getJson, sendJson, toApiError } from "@/lib/api"
+import { apiUrl, getJson, retryUnlessMissing, sendJson, toApiError } from "@/lib/api"
 import { isAnalysisFinished, type PhotoTake, type Room } from "./types"
-import { type AiMode, type AnalysisScope, API, HTTP_STATUS, LIMITS, MESSAGES, MIME, type ObjectCategory, type OutlineBrushMode, QUERY_KEYS, type StrokeShape, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
+import { type AiMode, type AnalysisScope, API, HTTP_STATUS, MESSAGES, MIME, type ObjectCategory, type OutlineBrushMode, QUERY_KEYS, type StrokeShape, TIMINGS, UPLOAD_FIELDS } from "@/lib/constants"
 
 /** Which AI uploads use, and whether each upload may choose (mirrors AiAvailabilityResponse). */
 export type AiAvailability = {
@@ -34,7 +34,7 @@ export function useRoom(id: string | undefined) {
     queryFn: ({ signal }) => getJson<Room>(API.room(id ?? ""), signal),
     enabled: id !== undefined,
     // A missing room won't appear by asking again.
-    retry: (failureCount, error) => !(error instanceof ApiError && error.status === HTTP_STATUS.notFound) && failureCount < LIMITS.roomRetries,
+    retry: retryUnlessMissing,
     refetchInterval: (query) => (query.state.data && !isAnalysisFinished(query.state.data.status) ? TIMINGS.roomPollMs : false),
   })
 }

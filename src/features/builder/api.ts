@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type { Room } from "@/features/rooms/types"
-import { getJson, sendForm, sendJson } from "@/lib/api"
+import { getJson, retryUnlessMissing, sendForm, sendJson } from "@/lib/api"
 import {
   API,
   QUERY_KEYS,
@@ -250,12 +250,57 @@ export type NewDesign = { name: string; description: string }
 /** Which design a new room's photos go into: one of the user's, or a new one. */
 export type DesignChoice = { designId?: string; newDesign?: NewDesign }
 
+/** A built room in the list of the user's rooms (mirrors the API's PlanSummaryResponse). */
+export type PlanSummary = {
+  id: string
+  name: string
+  roomType: RoomType
+  /** In metres. */
+  width: number
+  length: number
+  /** How many objects are placed in it. */
+  items: number
+  /** How many rooms hold its photos. */
+  photos: number
+  designId: string | null
+  updatedAt: string
+}
+
+/**
+ * Loads the rooms the user builds, the most recently saved first.
+ * @param enabled - Whether to load them (only for an account).
+ */
+export function usePlans(enabled: boolean) {
+  return useQuery({ queryKey: QUERY_KEYS.plans, queryFn: ({ signal }) => getJson<PlanSummary[]>(API.plans, signal), enabled })
+}
+
+/** Deletes a room the user builds; its photos' rooms stay, without its 3D view. */
+export function useDeletePlan() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => sendJson<void>("DELETE", API.plan(id)),
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.plan(id), exact: true })
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.plans, exact: true })
+      // Its photos' rooms no longer show its 3D view.
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rooms })
+    },
+  })
+}
+
 /**
  * Loads a built room.
  * @param id - The plan's id; nothing is loaded without one.
  */
 export function usePlan(id: string | undefined) {
-  return useQuery({ queryKey: QUERY_KEYS.plan(id ?? ""), queryFn: ({ signal }) => getJson<Plan>(API.plan(id ?? ""), signal), enabled: id !== undefined })
+  return useQuery({
+    queryKey: QUERY_KEYS.plan(id ?? ""),
+    queryFn: ({ signal }) => getJson<Plan>(API.plan(id ?? ""), signal),
+    enabled: id !== undefined,
+    // A deleted room won't appear by asking again.
+    retry: retryUnlessMissing,
+  })
 }
 
 /**

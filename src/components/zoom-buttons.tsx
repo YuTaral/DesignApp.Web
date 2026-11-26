@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { MaximizeIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -9,10 +10,24 @@ import { LIMITS } from "@/lib/constants"
  * @param props.onStep - Zooms in (true) or out (false).
  * @param props.onFit - Shows the whole picture again.
  * @param props.fitLabel - What the fit button says to screen readers.
+ * @param props.before - More of the view's own buttons, in the same bar before these (so nothing else covers the view).
  */
-export function ZoomButtons({ zoom, onStep, onFit, fitLabel }: { zoom: number; onStep: (zoomIn: boolean) => void; onFit: () => void; fitLabel: string }) {
+export function ZoomButtons({
+  zoom,
+  onStep,
+  onFit,
+  fitLabel,
+  before,
+}: {
+  zoom: number
+  onStep: (zoomIn: boolean) => void
+  onFit: () => void
+  fitLabel: string
+  before?: ReactNode
+}) {
   return (
     <div className="absolute right-2 bottom-2 flex gap-0.5 rounded-xl bg-background/85 p-0.5 shadow-soft backdrop-blur sm:right-3 sm:bottom-3 sm:gap-1 sm:p-1" data-zoom-buttons data-zoom={zoom}>
+      {before}
       <Button variant="ghost" size="icon" className="max-sm:size-7" aria-label="Zoom out" disabled={zoom <= LIMITS.zoom.min} onClick={() => onStep(false)} data-zoom-out>
         <ZoomOutIcon />
       </Button>

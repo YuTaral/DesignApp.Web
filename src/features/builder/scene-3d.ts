@@ -7,9 +7,10 @@ import { isCurtains } from "./covering"
 import { CUBE_FACES, type Vec3 } from "./panorama"
 import type { PanoramaJob } from "./panorama.worker"
 import { hasParts, isMountedShape, isWallItem, legSide, partsOf } from "./builder-store"
-import { cameraStand, contains, extent, fitInside, fromWall, wallLength, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
+import { cameraStand, contains, extent, fitInside, wallLength, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
 import type { Frame } from "./use-view-zoom"
+import { behindUnit, OPEN_BEHIND, ownSplashColor, splashHeight, type Behind } from "./worktop"
 import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
 
 /**
@@ -474,56 +475,6 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   return scene
 }
 
-/** What is behind a kitchen unit, for its backsplash: whether a wall is, and how high a window there starts (metres). */
-type Behind = { backed: boolean; sill: number }
-
-/** Behind an object standing out in the room: no wall and no window. */
-const OPEN_BEHIND: Behind = { backed: false, sill: Infinity }
-
-/**
- * What is behind a kitchen unit, for its backsplash: whether its back is against a wall (a unit standing out in the
- * room has no backsplash), and how high the lowest window behind it starts, in metres, so the backsplash stops below
- * its sill (Infinity when there is none). A window is behind the unit when a point of it lies within the unit's width,
- * at its back.
- * @param plan - The room.
- * @param item - The unit.
- */
-function behindUnit(plan: Plan, item: PlanItem): Behind {
-  const turn = THREE.MathUtils.degToRad(item.rotation)
-  const [halfWidth, halfDepth] = [item.width / 2, item.depth / 2]
-  const reach = BUILDER.scene.worktop.behind * 100
-  const against = BUILDER.scene.worktop.against * 100
-  // The middle of the unit's back on the plan, as its model is turned.
-  const back = { x: item.x + halfDepth * Math.sin(turn), y: item.y - halfDepth * Math.cos(turn) }
-  const backed = walls(plan).some((wall) => {
-    const { along, away } = fromWall(plan, wall.index, back.x, back.y)
-
-    return along >= 0 && along <= wall.length && Math.abs(away) <= against
-  })
-  let sill = Infinity
-
-  for (const other of plan.items) {
-    if (other.shape !== ITEM_SHAPE.Window || !isWallItem(other)) {
-      continue
-    }
-
-    // Its middle and points near its two ends.
-    for (const share of [-0.45, 0, 0.45]) {
-      const at = wallPoint(plan, other.wall, other.x + other.width * share)
-      const [dx, dy] = [at.x - item.x, at.y - item.y]
-      // The point in the unit's own frame, as its model is turned: across it, and from its middle towards its front.
-      const across = dx * Math.cos(turn) + dy * Math.sin(turn)
-      const out = -dx * Math.sin(turn) + dy * Math.cos(turn)
-
-      if (Math.abs(across) <= halfWidth && out <= 0 && out >= -halfDepth - reach) {
-        sill = Math.min(sill, other.elevation / 100)
-      }
-    }
-  }
-
-  return { backed, sill }
-}
-
 /**
  * Small pictures of several views of the room, drawn by one renderer one at a time (so the page stays responsive),
  * each with whatever blocks it (see `blockingItem`), for choosing which views to make photos of.
@@ -911,15 +862,14 @@ function worktopModel(worktop: Worktop, w: number, d: number, h: number, behind:
     roughness: worktop.backsplash === BACKSPLASH.Glass ? 0.08 : 0.5,
     metalness: worktop.backsplash === BACKSPLASH.Glass ? 0.2 : 0,
   })
-  const height = Math.min(worktop.backsplash === BACKSPLASH.Upstand ? T.upstand : T.splash, behind.sill - h - T.belowSill)
+  const height = splashHeight(worktop, h, behind)
 
   slab.position.set(0, h - T.thickness / 2, T.overhang / 2)
   slab.castShadow = true
   group.add(slab)
 
-  if (behind.backed && worktop.backsplash !== BACKSPLASH.None && height > 0) {
-    const ownColor = worktop.backsplash === BACKSPLASH.Tiles || worktop.backsplash === BACKSPLASH.Glass
-    const splash = new THREE.Mesh(new THREE.BoxGeometry(w, height, 0.012), ownColor ? own : top)
+  if (height > 0) {
+    const splash = new THREE.Mesh(new THREE.BoxGeometry(w, height, 0.012), ownSplashColor(worktop) ? own : top)
 
     splash.position.set(0, h + height / 2, -d / 2 + 0.006)
     group.add(splash)

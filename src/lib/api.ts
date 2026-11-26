@@ -1,4 +1,4 @@
-import { HTTP_STATUS, MESSAGES, MIME } from "@/lib/constants"
+import { HTTP_STATUS, LIMITS, MESSAGES, MIME } from "@/lib/constants"
 
 /**
  * Base URL of DesignApp.Api. Empty by default: the dev server forwards /api to the API, so calls
@@ -151,4 +151,22 @@ export function sendForm<T>(path: string, form: FormData): Promise<T> {
  */
 export function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : MESSAGES.unknownError
+}
+
+/**
+ * Whether the API answered that what was asked for isn't there (deleted, or never the user's).
+ * @param error - Whatever was thrown.
+ */
+export function isMissing(error: unknown) {
+  return error instanceof ApiError && error.status === HTTP_STATUS.notFound
+}
+
+/**
+ * A query's retry rule for something that may have been deleted: a few more tries, but none for a 404, which asking
+ * again won't change.
+ * @param failureCount - How many tries failed so far.
+ * @param error - Why the last one failed.
+ */
+export function retryUnlessMissing(failureCount: number, error: unknown) {
+  return !isMissing(error) && failureCount < LIMITS.roomRetries
 }

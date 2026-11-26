@@ -1,5 +1,7 @@
-import type { DragEvent, PointerEvent as ReactPointerEvent } from "react"
+import { useState, type DragEvent, type PointerEvent as ReactPointerEvent } from "react"
+import { LayersIcon } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { ZoomButtons } from "@/components/zoom-buttons"
 import { ITEM_SHAPE } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
@@ -16,7 +18,9 @@ import { useViewZoom } from "./use-view-zoom"
  * their footprints in their colors (overlapping ones outlined in red), and the windows and doors in the walls. Dragging
  * an object moves it on the 10 cm grid, a corner handle resizes it from that corner, and objects dropped from the catalog land where
  * they are let go (windows, doors and hung things are placed in the Wall tab instead). Clicking a wall opens it in the Wall tab (`onWall`), and the
- * 3D view and the photo turn to look at it; the camera marker shows where the photo is taken from.
+ * 3D view and the photo turn to look at it; the camera marker shows where the photo is taken from. Hung things (upper
+ * cabinets, shelves) are drawn on top but picked only where no floor object is under them; "Hung things only" fades the
+ * floor objects so the hung ones can be picked anywhere.
  *
  * In room shape mode (`shaping`) the objects fade and the walls are edited instead, on the 10 cm grid: dragging a wall
  * pushes or pulls it, dragging a corner moves it, and the "+" that follows the pointer along a wall pushes out (or in)
@@ -28,6 +32,8 @@ import { useViewZoom } from "./use-view-zoom"
 export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shaping?: boolean; onWall?: (wall: number) => void }) {
   const { selected, select, add, setRoom } = useBuilderStore()
   const { svgRef, toPlan, held, plus, setPlus, reshaping, start, startShape, startSection, move, end } = usePlanGestures(plan)
+  // Whether the floor objects are faded and let clicks through, to pick hung things over them.
+  const [hungOnly, setHungOnly] = useState(false)
   // Zoomed into the room, or into the frame held still while the shape is dragged.
   const zoom = useViewZoom(
     held
@@ -53,6 +59,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
   const openings = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => isWallItem(item) && item.shape !== ITEM_SHAPE.WallZone)
   const hung = openings.filter(({ item }) => isMountedShape(item.shape))
   const clashing = clashingItems(plan)
+  const faded = hungOnly && !shaping ? "pointer-events-none opacity-30" : undefined
   // Labels and handles keep their size on the screen as the plan zooms.
   const text = Math.max(10, Math.min(roomWidth, roomLength) / 28) / zoom.scale
   const floor = plan.outline.map((p) => `${p.x},${p.y}`).join(" ")
@@ -150,19 +157,49 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
         <polygon points={floor} fill="url(#plan-grid)" className="pointer-events-none text-foreground" />
 
         <g className={shaping ? "pointer-events-none opacity-40" : undefined}>
-          {flat.map(drawn)}
-          {edges.map(({ item, index }) => (
-            <ZoneEdge key={index} item={item} index={index} text={text} onStart={(event) => start(event, index, "move")} />
-          ))}
+          <g className={faded}>
+            {flat.map(drawn)}
+            {edges.map(({ item, index }) => (
+              <ZoneEdge key={index} item={item} index={index} text={text} onStart={(event) => start(event, index, "move")} />
+            ))}
+          </g>
           {hung.map(({ item, index }) => mark(item, index, "hit"))}
-          {standing.map(drawn)}
+          <g className={faded} data-floor-objects>
+            {standing.map(drawn)}
+          </g>
           {openings.map(({ item, index }) => mark(item, index, "look"))}
         </g>
 
         <Camera plan={plan} text={text} />
         {shaping && <ShapeHandles plan={plan} text={text} plus={plus} onCorner={(event, corner) => startShape(event, "corner", corner)} onPlus={startSection} />}
       </svg>
-      <ZoomButtons zoom={zoom.scale} onStep={zoom.step} onFit={zoom.fit} fitLabel="Show the whole plan" />
+      <ZoomButtons
+        zoom={zoom.scale}
+        onStep={zoom.step}
+        onFit={zoom.fit}
+        fitLabel="Show the whole plan"
+        before={
+          hung.length > 0 &&
+          !shaping && (
+            <Button
+              variant={hungOnly ? "default" : "ghost"}
+              size="sm"
+              className="max-sm:size-7 max-sm:px-0"
+              aria-pressed={hungOnly}
+              aria-label="Hung things only"
+              title="Fade the floor objects, to pick what hangs on the walls over them"
+              onClick={() => {
+                setHungOnly(!hungOnly)
+                select(-1)
+              }}
+              data-plan-hung-only
+            >
+              <LayersIcon />
+              <span className="max-sm:hidden">Hung things only</span>
+            </Button>
+          )
+        }
+      />
     </div>
   )
 }

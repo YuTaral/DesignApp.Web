@@ -21,7 +21,7 @@ import { ViewChoice } from "@/features/builder/view-choice"
 import { useBuilderShortcuts } from "@/features/builder/use-builder-shortcuts"
 import { WallView } from "@/features/builder/wall-view"
 import { useRoom } from "@/features/rooms/api"
-import { errorMessage } from "@/lib/api"
+import { errorMessage, isMissing } from "@/lib/api"
 import { AI_MODE, BUILDER, MESSAGES, QUERY_KEYS, ROOM_TYPE_NAMES, ROUTES, type PhotoStyle } from "@/lib/constants"
 
 /** The middle of the builder: the floor plan, one wall seen straight on, or the 3D view. */
@@ -72,7 +72,7 @@ function Builder({ plan }: { plan: Plan }) {
   const { replace } = useSearch({ from: ROUTES.plan })
   // The room the next photos replace, while it still exists (a run replaces it once).
   const replacing = useRoom(replace).data
-  const { saving, failed, flush } = useAutosave(plan)
+  const { saving, failed, gone, flush } = useAutosave(plan)
   const make = usePhotoMaker(plan, flush, replacing?.id)
   const makePanorama = usePanoramaMaker(plan, flush, replacing?.id)
   const navigate = useNavigate()
@@ -145,18 +145,18 @@ function Builder({ plan }: { plan: Plan }) {
           </h1>
           {/* A fixed width, so "Saving…", "Saved" and "Not saved" don't move the buttons beside it under the pointer. */}
           <span
-            className={cn("flex w-20 shrink-0 items-center gap-1 text-xs", failed ? "text-destructive" : "text-muted-foreground")}
+            className={cn("flex w-20 shrink-0 items-center gap-1 text-xs", failed || gone ? "text-destructive" : "text-muted-foreground")}
             aria-live="polite"
-            data-save-state={failed ? "failed" : saving ? "saving" : "saved"}
+            data-save-state={gone ? "gone" : failed ? "failed" : saving ? "saving" : "saved"}
           >
-            {failed ? (
+            {failed || gone ? (
               <AlertTriangleIcon className="size-3" aria-hidden />
             ) : saving ? (
               <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
             ) : (
               <CheckIcon className="size-3" aria-hidden />
             )}
-            {failed ? "Not saved" : saving ? "Saving…" : "Saved"}
+            {gone ? "Deleted" : failed ? "Not saved" : saving ? "Saving…" : "Saved"}
           </span>
         </div>
         {replacing && <ReplaceBanner planId={plan.id} room={replacing} />}
@@ -274,9 +274,11 @@ function Builder({ plan }: { plan: Plan }) {
 /**
  * Saves the plan shortly after each change. A failed save is tried again every few seconds until it gets through
  * (the error is shown once); leaving the builder saves what is left at once, and closing the tab first asks while
- * changes aren't saved.
+ * changes aren't saved. A room deleted meanwhile (in another tab, or on another device) can't be saved: that is said
+ * once, and its changes are let go, so nothing is tried again and leaving doesn't ask.
  * @param plan - The room as shown.
- * @returns Whether it is saving, whether the last save failed, and `flush`, which saves now (resolves once saved).
+ * @returns Whether it is saving, whether the last save failed, whether the room was deleted, and `flush`, which saves
+ *   now (resolves once saved, or at once for a deleted room).
  */
 function useAutosave(plan: Plan) {
   const queryClient = useQueryClient()
@@ -285,6 +287,7 @@ function useAutosave(plan: Plan) {
   const [failed, setFailed] = useState(false)
   // A new number after each failure, so the wait for the next try starts again.
   const [attempt, setAttempt] = useState(0)
+  const [gone, setGone] = useState(false)
   const latest = useRef(plan)
 
   /**
@@ -306,11 +309,39 @@ function useAutosave(plan: Plan) {
     saved(changes)
   }
 
+  /**
+   * Lets the changes go when the room was deleted meanwhile, saying so the first time.
+   * @param error - Why the save failed.
+   * @param changes - How many changes there are.
+   * @returns Whether it was deleted.
+   */
+  const deleted = (error: unknown, changes: number) => {
+    if (!isMissing(error)) {
+      return false
+    }
+
+    if (!gone) {
+      toast.error(MESSAGES.planGone, { duration: Infinity })
+    }
+
+    setGone(true)
+    setFailed(false)
+    saved(changes)
+
+    return true
+  }
+
   /** Saves the plan as shown now. */
   const flush = async () => {
     const changes = useBuilderStore.getState().unsaved
 
     if (changes === 0) {
+      return
+    }
+
+    if (gone) {
+      saved(changes)
+
       return
     }
 
@@ -320,6 +351,10 @@ function useAutosave(plan: Plan) {
       await send(changes)
       setFailed(false)
     } catch (error) {
+      if (deleted(error, changes)) {
+        return
+      }
+
       if (!failed) {
         showFailure(error)
       }
@@ -363,14 +398,19 @@ function useAutosave(plan: Plan) {
       window.removeEventListener("beforeunload", warn)
 
       if (changes > 0) {
-        send(changes).catch(showFailure)
+        send(changes).catch((error) => {
+          // A deleted room's changes have nowhere to go.
+          if (!isMissing(error)) {
+            showFailure(error)
+          }
+        })
       }
     }
     // Set up once: everything it reads is read when it runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { saving: saving || unsaved > 0, failed, flush }
+  return { saving: !gone && (saving || unsaved > 0), failed, gone, flush }
 }
 
 /**

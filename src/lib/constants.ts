@@ -101,10 +101,12 @@ export const QUERY_KEYS = {
   designs: ["designs"] as const,
   design: (id: string) => ["designs", id] as const,
   room: (id: string) => ["rooms", id] as const,
+  rooms: ["rooms"] as const,
   roomTakes: (id: string) => ["rooms", id, "takes"] as const,
   library: ["library"] as const,
   palettes: ["palettes"] as const,
   plan: (id: string) => ["plans", id] as const,
+  plans: ["plans"] as const,
   catalog: (roomType: string) => ["catalog", roomType] as const,
 } as const
 
@@ -147,7 +149,7 @@ export const LIMITS = {
   focusMargin: 1.3,
   /** A press that moves less than this (CSS px) is a tap, not a drag. */
   tapSlop: 5,
-  /** Failed room loads tried again (a 404 never is). */
+  /** Failed room and built-room loads tried again (a 404 never is). */
   roomRetries: 2,
 } as const
 
@@ -751,6 +753,8 @@ export const BUILDER = {
     "#A8B89A", "#9DB4C0", "#4A6274", "#2E4057", "#8A8580", "#5A5A5A", "#3A3A3A", "#1E1E1E",
   ],
   /** How many steps the room builder can undo. */
+  /** How many built rooms My designs lists before Show all. */
+  plansShown: 8,
   undoSteps: 100,
   /**
    * Changes closer together than this, in ms, are one step to undo: a drag, or typing a name, comes back whole. A pause
@@ -867,6 +871,7 @@ export const MESSAGES = {
   oneMainColor: (label: string) => `The ${label} has one main color, so there is nothing to split.`,
   planLoadFailed: "Couldn't open this room. It may have been deleted.",
   planSaveFailed: "Couldn't save the room. It is tried again every few seconds; leave the page open until it says Saved.",
+  planGone: "This room was deleted, in another tab or on another device, so changes to it can't be saved.",
   catalogLoadFailed: "Couldn't load the common objects. Reload the page.",
   /** A builder list the search leaves empty. */
   searchNoMatch: (noun: string, query: string) => `No ${noun} match “${query}”.`,
@@ -888,6 +893,12 @@ export const MESSAGES = {
   removeRoomText: "The room, its photo and its colors are deleted. The rest of the design stays.",
   deleteDesignTitle: (name: string) => `Delete “${name}”?`,
   deleteDesignText: (rooms: string) => `Its ${rooms}, their photos and colors are deleted for good.`,
+  deletePlanText: (photos: number) =>
+    photos === 0
+      ? "Its plan, walls and furniture are deleted for good."
+      : `Its plan, walls and furniture are deleted for good. Its ${photos === 1 ? "photo stays" : `${photos} photos stay`} in your designs, without the 3D view.`,
+  planDeleted: "Room deleted",
+  plansLoadFailed: "We couldn't load the rooms you're building",
   designSignIn: "Sign in to see this design",
   designsSignIn: "Sign in to see your designs",
   designsInAccount: "Designs are saved to your account.",

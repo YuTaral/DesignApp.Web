@@ -10,7 +10,9 @@ import { ResizeHandle } from "./resize-handle"
 import { fromWall, seenFrom, wallLength, wallName, wallOf } from "./room-outline"
 import { useViewZoom } from "./use-view-zoom"
 import { WallChoice } from "./wall-choice"
+import { Backsplash, TilePattern, WindowDressing } from "./wall-dressing"
 import { WALL_TILE_METRES, wallSurface, wallTileUrl } from "./wall-texture"
+import { behindUnit, splashHeight } from "./worktop"
 
 /** Room around the wall in the drawing, in centimetres (for the measurements and the handles). */
 const MARGIN = 60
@@ -78,7 +80,11 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
       const size = footprint(item)
       const [across, deep] = alongWall ? [size.width, size.depth] : [size.depth, size.width]
 
-      return { item, along: seen.along, across, gap: Math.max(0, seen.away - deep / 2) }
+      // A kitchen unit backed against this wall shows its backsplash on it.
+      const behind = item.worktop ? behindUnit(plan, item) : null
+      const splash = item.worktop && behind?.wall === wall ? splashHeight(item.worktop, item.height / 100, behind) * 100 : 0
+
+      return { item, along: seen.along, across, gap: Math.max(0, seen.away - deep / 2), splash }
     })
     .sort((a, b) => b.gap - a.gap)
   const onThisWall = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => item.wall === wall)
@@ -211,6 +217,24 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
             <WallZoneFace key={index} item={item} index={index} height={height} onStart={(event) => start(event, index, "move")} />
           ))}
 
+          {/* The kitchen units' backsplashes on this wall, behind the units. */}
+          <defs>
+            <TilePattern id={`splash-tiles-${wall}`} floor={height} />
+          </defs>
+          {standing
+            .filter(({ splash }) => splash > 0)
+            .map(({ item, along, across, splash }) => (
+              <Backsplash
+                key={`${item.x}-${item.y}`}
+                worktop={item.worktop!}
+                left={along - across / 2}
+                width={across}
+                top={height - item.height - splash}
+                bottom={height - item.height}
+                tiles={`splash-tiles-${wall}`}
+              />
+            ))}
+
           {/* Windows and doors first, so the room's objects stand in front of them. */}
           {openings.map(({ item, index }) => {
             const [left, top] = [item.x - item.width / 2, height - item.elevation - item.height]
@@ -218,7 +242,20 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
             return (
               <g key={index} data-item={index} data-opening={item.shape} data-clash={clashing.has(index) || undefined} className="cursor-move" onPointerDown={(event) => start(event, index, "move")}>
                 {item.shape === ITEM_SHAPE.Window ? (
-                  <rect x={left} y={top} width={item.width} height={item.height} fill={BUILDER.scene.glass} stroke={item.color} strokeWidth={7} />
+                  <>
+                    <rect x={left} y={top} width={item.width} height={item.height} fill={BUILDER.scene.glass} stroke={item.color} strokeWidth={7} />
+                    {item.covering && (
+                      <WindowDressing
+                        covering={item.covering}
+                        left={left}
+                        top={top}
+                        width={item.width}
+                        height={item.height}
+                        floor={height}
+                        room={{ left, right: length - left - item.width }}
+                      />
+                    )}
+                  </>
                 ) : (
                   <>
                     <rect x={left} y={top} width={item.width} height={item.height} fill={item.color} stroke="black" strokeOpacity="0.35" strokeWidth={1.5} />
@@ -246,6 +283,18 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
             return (
               <g key={n} className="pointer-events-none" opacity={gap <= NEAR ? 0.9 : Math.max(0.25, 0.7 - gap / 600)} data-wall-object>
                 <rect x={along - across / 2} y={height - Math.max(item.height, 2)} width={across} height={Math.max(item.height, 2)} rx={3} fill={item.color} stroke="black" strokeOpacity="0.3" />
+                {item.worktop && (
+                  <rect
+                    x={along - across / 2 - 1}
+                    y={height - item.height}
+                    width={across + 2}
+                    height={BUILDER.scene.worktop.thickness * 100}
+                    fill={item.worktop.color}
+                    stroke="black"
+                    strokeOpacity="0.3"
+                    data-wall-worktop
+                  />
+                )}
                 {label && !covered && (
                   <text x={along} y={middle + text / 3} textAnchor="middle" fontSize={text * 0.8} className="fill-foreground" style={{ paintOrder: "stroke", stroke: "var(--background)", strokeWidth: 3, strokeOpacity: 0.7 }}>
                     {label}

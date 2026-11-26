@@ -269,6 +269,42 @@ try {
 
   step('Deleting the design deletes its rooms', roomsGone.every((s) => s === 404), roomsGone.join(', '))
 
+  // 11b. Rooms built in 3D are listed under the designs, the last saved first, and deleted after asking.
+  const built = await page.evaluate(async () => {
+    const make = async (name) => {
+      const created = await fetch('/api/plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, roomType: 'Bedroom', width: 4, length: 4, height: 2.6, wallColor: '#E8E2D6', floorColor: '#B89B7A', furnish: true }),
+      })
+
+      return (await created.json()).id
+    }
+    const first = await make('Spare room')
+    const second = await make('Guest room')
+
+    return { first, second }
+  })
+
+  await page.goto(`${WEB}/designs`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-plan-row]')
+  const listed = await page.$$eval('[data-plan-row]', (rows) => rows.map((row) => row.dataset.planRow))
+
+  await page.click(`[data-plan-row="${built.first}"] [data-plan-delete]`)
+  await page.waitForSelector('[role=dialog]')
+  const asked = await page.$eval('[role=dialog]', (d) => d.innerText)
+
+  await clickText('[role=dialog] button', 'Delete room')
+  await noDialog()
+  await page.waitForFunction((id) => !document.querySelector(`[data-plan-row="${id}"]`), { timeout: 15000 }, built.first)
+  const gonePlan = await page.evaluate(async (id) => (await fetch(`/api/plans/${id}`)).status, built.first)
+  const left = await page.$$eval('[data-plan-row]', (rows) => rows.map((row) => row.dataset.planRow))
+
+  step('Rooms built in 3D are listed in My designs, the last saved first, and one is deleted after asking',
+    listed.slice(0, 2).join() === [built.second, built.first].join() && /Spare room/.test(asked) && gonePlan === 404
+      && !left.includes(built.first) && left.includes(built.second),
+    JSON.stringify({ listed, gonePlan, left }))
+
   // 12. Sign out.
   await page.click('[aria-label=Account]')
   await page.click('::-p-text(Sign out)')
@@ -280,6 +316,6 @@ try {
   await shot('designs-stopped').catch(() => {})
 } finally {
   console.log(results.join('\n'))
-  console.log('Browser console/network problems:', log.filter((l) => !/NS_BINDING_ABORTED|http 40[014]\] .*\/api\/(account|designs|rooms)|WebSocket failed|Failed to start the transport/.test(l)).join('\n') || 'none')
+  console.log('Browser console/network problems:', log.filter((l) => !/NS_BINDING_ABORTED|http 40[014]\] .*\/api\/(account|designs|rooms|plans)|WebSocket failed|Failed to start the transport/.test(l)).join('\n') || 'none')
   await browser.close()
 }
