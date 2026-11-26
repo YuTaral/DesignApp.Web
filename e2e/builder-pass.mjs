@@ -48,6 +48,9 @@ const shown = () => page.evaluate(() => [...document.querySelectorAll('[data-pla
 const addFromDialog = async (key) => {
   await page.click(`[data-catalog="${key}"]`)
   await page.waitForSelector('[data-add-object]')
+  // A tall dialog scrolls inside: once it has opened, its Add button is scrolled into view (Firefox's click doesn't).
+  await page.$eval('[data-add-object-dialog]', (dialog) => Promise.all(dialog.getAnimations({ subtree: true }).map((a) => a.finished)))
+  await page.$eval('[data-add-object]', (button) => button.scrollIntoView({ block: 'center' }))
   await page.click('[data-add-object]')
   await page.waitForSelector('[data-add-object-dialog]', { hidden: true })
 }
@@ -133,7 +136,7 @@ try {
   step('A new room starts furnished for its type and size', furnished.items.some((i) => i.shape === 'Door') && furnished.items.some((i) => i.wall === 0 && i.shape === 'Window')
     && furnished.items.some((i) => i.shape === 'Bed') && kinds.filter((k) => k === 'nightstand').length === 2, kinds.join(', '))
   step('It comes dressed: curtains, decorations, materials, art above the bed, and the wall behind the bed in its own color',
-    furnished.items.filter((i) => i.shape === 'Window').every((w) => w.decorations?.includes('sheer curtains')) && bed?.decorations?.includes('decorative pillows')
+    furnished.items.filter((i) => i.shape === 'Window').every((w) => w.covering?.kind === 'Sheers') && bed?.decorations?.includes('decorative pillows')
       && bed?.material === 'linen upholstered' && furnished.items.some((i) => i.label === 'set of three framed prints' && i.wall === 1)
       && furnished.finish.ownWalls.length === 1 && furnished.finish.ownWalls[0].wall === 1,
     `bed ${bed?.material} ${bed?.decorations}, own walls ${JSON.stringify(furnished.finish.ownWalls)}`)
@@ -871,6 +874,119 @@ try {
   await page.waitForSelector('[data-view-3d]')
   await sleep(800)
   await shot('builder-furnished-3d')
+
+  // 13. Zoom: the wheel zooms the plan around the pointer; an object dragged while zoomed moves by what the pointer
+  //     covers there, a drag on the floor pans, a tap on it lets the selection go, and Fit shows the room whole again.
+  //     The 3D view zooms too, and dragging it pans without turning the view.
+  const viewBoxNow = () => page.$eval('[data-plan-canvas]', (s) => s.getAttribute('viewBox'))
+  const zoomNow = () => page.$eval('main [data-zoom-buttons]', (b) => Number(b.dataset.zoom))
+  const middleOf = (selector) => page.$eval(selector, (el) => {
+    const r = el.getBoundingClientRect()
+
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  /** A point of the plan where the pointer lands on what `hit` says (another object can lie over part of one). */
+  const pointOn = (hit) => page.$eval('[data-plan-canvas]', (svg, hit) => {
+    const r = svg.getBoundingClientRect()
+
+    for (let fy = 0.1; fy < 1; fy += 0.05) {
+      for (let fx = 0.1; fx < 1; fx += 0.05) {
+        const [x, y] = [r.x + r.width * fx, r.y + r.height * fy]
+
+        if (document.elementFromPoint(x, y)?.matches(hit)) {
+          return { x, y }
+        }
+      }
+    }
+
+    return null
+  }, hit)
+
+  await page.click('[role=tab]::-p-text(Plan)')
+  await page.waitForSelector('[data-plan-canvas] [data-item]')
+  const wholeBox = await viewBoxNow()
+  const zoomed = (await stored()).items.findIndex((item) => item.wall === null && item.shape !== 'Rug')
+  const zoomPoint = await middleOf(`[data-plan-canvas] [data-item="${zoomed}"]`)
+
+  await page.mouse.move(zoomPoint.x, zoomPoint.y)
+
+  for (let i = 0; i < 2; i++) {
+    await page.mouse.wheel({ deltaY: -200 })
+    await sleep(60)
+  }
+
+  await sleep(300)
+  const zoomedIn = await zoomNow()
+  const zoomedBox = await viewBoxNow()
+  const beforeZoomDrag = (await stored()).items[zoomed]
+  const cmPerPx = await page.$eval('[data-plan-canvas]', (s) => 1 / s.getScreenCTM().a)
+  const grabZoomed = await page.$eval(`[data-plan-canvas] [data-item="${zoomed}"]`, (el) => {
+    const r = el.getBoundingClientRect()
+
+    for (const [fx, fy] of [[0.5, 0.5], [0.5, 0.8], [0.3, 0.6], [0.7, 0.6], [0.5, 0.25]]) {
+      const [x, y] = [r.x + r.width * fx, r.y + r.height * fy]
+
+      if (document.elementFromPoint(x, y)?.closest('[data-item]') === el) {
+        return { x, y }
+      }
+    }
+
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+
+  // Towards the room's middle, as it may stand against a wall.
+  await page.mouse.move(grabZoomed.x, grabZoomed.y)
+  await page.mouse.down()
+  await page.mouse.move(grabZoomed.x - 80, grabZoomed.y, { steps: 8 })
+  await page.mouse.up()
+  const afterZoomDrag = (await storedOnce((plan) => plan.items[zoomed].x !== beforeZoomDrag.x)).items[zoomed]
+  const floorEdge = await pointOn('[data-plan-floor], [data-plan-canvas] > polygon')
+
+  await page.mouse.move(floorEdge.x, floorEdge.y)
+  await page.mouse.down()
+  await page.mouse.move(floorEdge.x + 100, floorEdge.y - 60, { steps: 6 })
+  await page.mouse.up()
+  const pannedBox = await viewBoxNow()
+
+  await page.mouse.click(floorEdge.x, floorEdge.y)
+  await sleep(200)
+  const letGo = (await page.$('[data-plan-canvas] [data-resize]')) === null
+
+  await page.click('main [data-zoom-fit]')
+  await sleep(200)
+  const fitBox = await viewBoxNow()
+
+  step('The plan zooms around the pointer; dragging an object there moves it by what the pointer covers, a drag on the floor pans, a tap lets go, Fit shows it whole',
+    zoomedIn > 1.5 && zoomedBox !== wholeBox && Math.abs(beforeZoomDrag.x - afterZoomDrag.x - 80 * cmPerPx) <= 10 && pannedBox !== zoomedBox && letGo && fitBox === wholeBox,
+    JSON.stringify({ label: beforeZoomDrag.label, zoomedIn, wholeBox, zoomedBox, moved: beforeZoomDrag.x - afterZoomDrag.x, expected: Math.round(80 * cmPerPx), pannedBox, letGo, fitBox }))
+
+  await page.click('[role=tab]::-p-text(3D view)')
+  await page.waitForSelector('[data-view-3d]')
+  await sleep(600)
+  const view3d = await middleOf('[data-view-3d]')
+  const viewBefore = (await stored()).view
+
+  await page.mouse.move(view3d.x, view3d.y)
+
+  for (let i = 0; i < 4; i++) {
+    await page.mouse.wheel({ deltaY: -200 })
+    await sleep(60)
+  }
+
+  await sleep(300)
+  const zoomed3d = await zoomNow()
+
+  await page.mouse.down()
+  await page.mouse.move(view3d.x - 120, view3d.y, { steps: 6 })
+  await page.mouse.up()
+  await sleep(400)
+  const viewAfter = (await stored()).view
+
+  await shot('builder-3d-zoomed')
+  await page.click('main [data-zoom-fit]')
+  await sleep(200)
+  step('The 3D view zooms with the wheel, and dragging it pans without turning the view; Fit shows it whole',
+    zoomed3d > 3 && viewAfter === viewBefore && (await zoomNow()) === 1, JSON.stringify({ zoomed3d, viewBefore, viewAfter }))
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('builder-stopped').catch(() => {})

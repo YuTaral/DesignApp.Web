@@ -1,9 +1,8 @@
 import type { PointerEvent as ReactPointerEvent } from "react"
-import { LoaderCircleIcon, MaximizeIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react"
+import { LoaderCircleIcon } from "lucide-react"
 import { cn } from "cn"
 
-import { Button } from "@/components/ui/button"
-import { LIMITS, OUTLINE_BRUSH_MODE, STROKE_SHAPE, type OutlineBrushMode, type StrokeShape } from "@/lib/constants"
+import { OUTLINE_BRUSH_MODE, STROKE_SHAPE, type OutlineBrushMode, type StrokeShape } from "@/lib/constants"
 import type { DrawnArea } from "./use-brush-stroke"
 
 /**
@@ -130,27 +129,5 @@ export function BrushCursor({ x, y, size, erase }: { x: number; y: number; size:
       className={cn("pointer-events-none absolute rounded-full border-2 shadow-[0_0_0_1px_rgb(0_0_0/0.45)]", erase ? "border-dashed border-white" : "border-white")}
       style={{ left: x - size / 2, top: y - size / 2, width: size, height: size }}
     />
-  )
-}
-
-/**
- * The zoom out, zoom in and fit buttons.
- * @param props.zoom - The zoom now.
- * @param props.onStep - Zooms in (true) or out (false).
- * @param props.onFit - Fits the photo again.
- */
-export function ZoomButtons({ zoom, onStep, onFit }: { zoom: number; onStep: (zoomIn: boolean) => void; onFit: () => void }) {
-  return (
-    <div className="absolute right-3 bottom-3 flex gap-1 rounded-xl bg-background/85 p-1 shadow-soft backdrop-blur">
-      <Button variant="ghost" size="icon" aria-label="Zoom out" disabled={zoom <= LIMITS.zoom.min} onClick={() => onStep(false)}>
-        <ZoomOutIcon />
-      </Button>
-      <Button variant="ghost" size="icon" aria-label="Zoom in" disabled={zoom >= LIMITS.zoom.max} onClick={() => onStep(true)}>
-        <ZoomInIcon />
-      </Button>
-      <Button variant="ghost" size="icon" aria-label="Fit photo" disabled={zoom === 1} onClick={onFit}>
-        <MaximizeIcon />
-      </Button>
-    </div>
   )
 }

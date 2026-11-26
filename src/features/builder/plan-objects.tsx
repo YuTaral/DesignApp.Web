@@ -358,26 +358,36 @@ export function Opening({ plan, item, index, chosen, clashing, onSelect }: WallM
  * @param props.chosen - Whether it is selected.
  * @param props.clashing - Whether it covers another window, door or hung thing on its wall (then it is outlined in red).
  * @param props.onSelect - Selects it.
+ * @param props.part - What is drawn: the mark seen on top of everything ("look", which lets clicks through), or the
+ *   place that takes its clicks, under the objects standing on the floor ("hit"), so a base cabinet under an upper
+ *   cabinet is still picked where it is clicked, and the upper cabinet where nothing stands under it.
  */
-export function Hung({ plan, item, index, chosen, clashing, onSelect }: WallMarkProps) {
+export function Hung({ plan, item, index, chosen, clashing, onSelect, part }: WallMarkProps & { part: "look" | "hit" }) {
   const wall = wallOf(plan, item.wall)
   const [a, b] = [wallPoint(plan, item.wall, item.x - item.width / 2), wallPoint(plan, item.wall, item.x + item.width / 2)]
   // At least a few centimetres deep, so a flat picture can still be seen and clicked.
   const deep = Math.max(item.depth, 8)
   const corners = [a, b, { x: b.x + wall.nx * deep, y: b.y + wall.ny * deep }, { x: a.x + wall.nx * deep, y: a.y + wall.ny * deep }]
+  const points = corners.map((p) => `${p.x},${p.y}`).join(" ")
+
+  if (part === "hit") {
+    return (
+      <polygon points={points} fill="transparent" className="cursor-pointer" data-hung-hit={index} onPointerDown={onSelect}>
+        <title>{`${item.label}, ${Math.round(item.elevation)} cm above the floor`}</title>
+      </polygon>
+    )
+  }
 
   return (
-    <g data-item={index} data-hung={item.shape} data-clash={clashing || undefined} className="cursor-pointer" onPointerDown={onSelect}>
+    <g data-item={index} data-hung={item.shape} data-clash={clashing || undefined} className="pointer-events-none">
       <polygon
-        points={corners.map((p) => `${p.x},${p.y}`).join(" ")}
+        points={points}
         fill={item.color}
         fillOpacity={0.75}
         strokeDasharray="5 4"
         strokeWidth={chosen || clashing ? 4 : 2}
         className={clashing ? "stroke-destructive" : chosen ? "stroke-primary" : "stroke-black/40"}
-      >
-        <title>{`${item.label}, ${Math.round(item.elevation)} cm above the floor`}</title>
-      </polygon>
+      />
     </g>
   )
 }

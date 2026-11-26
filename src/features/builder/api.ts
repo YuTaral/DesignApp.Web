@@ -5,7 +5,10 @@ import { getJson, sendForm, sendJson } from "@/lib/api"
 import {
   API,
   QUERY_KEYS,
+  type Backsplash,
   type CeilingLight,
+  type CoveringKind,
+  type CurtainLength,
   type FloorType,
   type ItemForm,
   type ItemShape,
@@ -14,6 +17,7 @@ import {
   type TimeOfDay,
   type ViewCorner,
   type WallFinish,
+  type WorktopSpot,
 } from "@/lib/constants"
 
 /**
@@ -52,6 +56,29 @@ export type PlanItem = {
   decorations?: string[]
   /** What it is made of or covered in, such as "velvet"; missing or empty when only its color says. */
   material?: string
+  /** A window's curtains or blinds; missing or null for none, and for other objects. */
+  covering?: WindowCovering | null
+  /** A kitchen unit's worktop and backsplash; missing or null for none, and for other objects. */
+  worktop?: Worktop | null
+}
+
+/** A kitchen unit's worktop and the backsplash behind it (mirrors WorktopRequest). */
+export type Worktop = {
+  material: string
+  color: string
+  backsplash: Backsplash
+  /** The tiles' or glass's color (an upstand or the worktop up the wall is the worktop's). */
+  backsplashColor: string
+}
+
+/** What a window is dressed with (mirrors WindowCoveringRequest). */
+export type WindowCovering = {
+  kind: CoveringKind
+  color: string
+  /** What it is made of, such as "linen"; empty for none named. */
+  fabric: string
+  /** How far curtains hang (blinds cover the window). */
+  length: CurtainLength
 }
 
 /** A wall of a built room in its own finish and color, instead of the room's (mirrors WallLookRequest). */
@@ -187,6 +214,8 @@ export type CatalogObject = {
   materials: string[]
   /** The material it starts in; empty when it has none. */
   material: string
+  /** Where a kitchen unit's worktop is (along a wall or on an island); missing or null for other objects. */
+  worktop?: WorktopSpot | null
 }
 
 /** One variation of a catalog object, such as the L-shaped corner sofa, in the object's color (mirrors CatalogVariantResponse). */

@@ -1,12 +1,14 @@
 import { useMemo, useRef, type DragEvent, type PointerEvent as ReactPointerEvent } from "react"
 
 
+import { ZoomButtons } from "@/components/zoom-buttons"
 import { BUILDER, ITEM_SHAPE, WALL_FINISH, type WallFinish } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { clashingItems, footprint, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
 import { ResizeHandle } from "./resize-handle"
 import { fromWall, seenFrom, wallLength, wallName, wallOf } from "./room-outline"
+import { useViewZoom } from "./use-view-zoom"
 import { WallChoice } from "./wall-choice"
 import { WALL_TILE_METRES, wallSurface, wallTileUrl } from "./wall-texture"
 
@@ -54,10 +56,18 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
   const [surface, color] = wallSurface(plan, wall)
   // The wall's finish as a repeating pattern (painted once per finish and color); plain paint is its color alone.
   const tile = useMemo(() => (surface === WALL_FINISH.Paint ? null : wallTileUrl(surface, color)), [surface, color])
+  // Zoomed into this wall; another wall starts whole.
+  const zoom = useViewZoom(
+    { x: -MARGIN, y: -MARGIN, width: wallLength(plan, wall) + 2 * MARGIN, height: plan.height * 100 + 2 * MARGIN },
+    svgRef,
+    `${plan.id}-${wall}`
+  )
+  const { frame } = zoom
   const [length, height] = [wallLength(plan, wall), plan.height * 100]
   const tileCm = WALL_TILE_METRES * 100
   const skirting = BUILDER.scene.skirting.height * 100
-  const text = Math.max(10, Math.min(length, height) / 18)
+  // Labels and handles keep their size on the screen as the wall zooms.
+  const text = Math.max(10, Math.min(length, height) / 18) / zoom.scale
   const alongWall = wallOf(plan, wall).dx !== 0
 
   // Floor objects as the wall sees them, the farthest first so the nearest are drawn on top.
@@ -159,121 +169,125 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
           <WallChoice plan={plan} value={wall} label="Wall shown" onPick={onWall} />
         </div>
       </div>
-      <svg
-        ref={svgRef}
-        viewBox={`${-MARGIN} ${-MARGIN} ${length + 2 * MARGIN} ${height + 2 * MARGIN}`}
-        className="min-h-0 w-full flex-1 touch-none select-none"
-        role="application"
-        aria-label={`${wallName(plan, wall)}, ${Math.round(length)} by ${Math.round(height)} centimetres. Drag a window or door to move it; drag a corner handle to resize it from that corner.`}
-        onPointerDown={() => select(-1)}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
-        onDragOver={allowCatalogDrop}
-        onDrop={drop}
-      >
-        {tile && (
-          <defs>
-            <pattern id={`wall-finish-${wall}`} patternUnits="userSpaceOnUse" width={tileCm} height={tileCm} y={height}>
-              <image href={tile} width={tileCm} height={tileCm} preserveAspectRatio="none" />
-            </pattern>
-          </defs>
-        )}
-        <rect
-          x={0}
-          y={0}
-          width={length}
-          height={height}
-          fill={tile ? `url(#wall-finish-${wall})` : color}
-          stroke="currentColor"
-          strokeOpacity="0.35"
-          strokeWidth="2"
-          data-wall-finish-fill={surface}
-        />
-        {/* The skirting along the wall's foot, under the doors and windows drawn next. */}
-        <rect x={0} y={height - skirting} width={length} height={skirting} fill={plan.finish.trimColor} className="pointer-events-none" data-skirting />
-        <rect x={-12} y={height} width={length + 24} height={16} fill={plan.floorColor} stroke="currentColor" strokeOpacity="0.35" strokeWidth="1" />
+      <div className="relative min-h-0 w-full flex-1">
+        <svg
+          ref={svgRef}
+          viewBox={`${frame.x} ${frame.y} ${frame.width} ${frame.height}`}
+          className="size-full touch-none select-none"
+          style={{ cursor: zoom.scale > 1 ? "grab" : undefined }}
+          role="application"
+          aria-label={`${wallName(plan, wall)}, ${Math.round(length)} by ${Math.round(height)} centimetres. Drag a window or door to move it; drag a corner handle to resize it from that corner.`}
+          onPointerDown={zoom.down}
+          onPointerMove={(event) => zoom.moveOn(event, move)}
+          onPointerUp={(event) => zoom.endOn(event, end, () => select(-1))}
+          onPointerCancel={(event) => zoom.endOn(event, end)}
+          onDragOver={allowCatalogDrop}
+          onDrop={drop}
+        >
+          {tile && (
+            <defs>
+              <pattern id={`wall-finish-${wall}`} patternUnits="userSpaceOnUse" width={tileCm} height={tileCm} y={height}>
+                <image href={tile} width={tileCm} height={tileCm} preserveAspectRatio="none" />
+              </pattern>
+            </defs>
+          )}
+          <rect
+            x={0}
+            y={0}
+            width={length}
+            height={height}
+            fill={tile ? `url(#wall-finish-${wall})` : color}
+            stroke="currentColor"
+            strokeOpacity="0.35"
+            strokeWidth="2"
+            data-wall-finish-fill={surface}
+          />
+          {/* The skirting along the wall's foot, under the doors and windows drawn next. */}
+          <rect x={0} y={height - skirting} width={length} height={skirting} fill={plan.finish.trimColor} className="pointer-events-none" data-skirting />
+          <rect x={-12} y={height} width={length + 24} height={16} fill={plan.floorColor} stroke="currentColor" strokeOpacity="0.35" strokeWidth="1" />
 
-        {/* The wall's areas in their own finish, under everything else on it. */}
-        {zones.map(({ item, index }) => (
-          <WallZoneFace key={index} item={item} index={index} height={height} onStart={(event) => start(event, index, "move")} />
-        ))}
+          {/* The wall's areas in their own finish, under everything else on it. */}
+          {zones.map(({ item, index }) => (
+            <WallZoneFace key={index} item={item} index={index} height={height} onStart={(event) => start(event, index, "move")} />
+          ))}
 
-        {/* Windows and doors first, so the room's objects stand in front of them. */}
-        {openings.map(({ item, index }) => {
-          const [left, top] = [item.x - item.width / 2, height - item.elevation - item.height]
+          {/* Windows and doors first, so the room's objects stand in front of them. */}
+          {openings.map(({ item, index }) => {
+            const [left, top] = [item.x - item.width / 2, height - item.elevation - item.height]
 
-          return (
-            <g key={index} data-item={index} data-opening={item.shape} data-clash={clashing.has(index) || undefined} className="cursor-move" onPointerDown={(event) => start(event, index, "move")}>
-              {item.shape === ITEM_SHAPE.Window ? (
-                <rect x={left} y={top} width={item.width} height={item.height} fill={BUILDER.scene.glass} stroke={item.color} strokeWidth={7} />
-              ) : (
-                <>
-                  <rect x={left} y={top} width={item.width} height={item.height} fill={item.color} stroke="black" strokeOpacity="0.35" strokeWidth={1.5} />
-                  <circle cx={left + item.width - 14} cy={height - 100} r={4} fill={BUILDER.scene.metal} />
-                </>
-              )}
-              {clashing.has(index) && <rect x={left} y={top} width={item.width} height={item.height} fill="none" strokeWidth={4} className="pointer-events-none stroke-destructive" />}
-            </g>
-          )
-        })}
+            return (
+              <g key={index} data-item={index} data-opening={item.shape} data-clash={clashing.has(index) || undefined} className="cursor-move" onPointerDown={(event) => start(event, index, "move")}>
+                {item.shape === ITEM_SHAPE.Window ? (
+                  <rect x={left} y={top} width={item.width} height={item.height} fill={BUILDER.scene.glass} stroke={item.color} strokeWidth={7} />
+                ) : (
+                  <>
+                    <rect x={left} y={top} width={item.width} height={item.height} fill={item.color} stroke="black" strokeOpacity="0.35" strokeWidth={1.5} />
+                    <circle cx={left + item.width - 14} cy={height - 100} r={4} fill={BUILDER.scene.metal} />
+                  </>
+                )}
+                {clashing.has(index) && <rect x={left} y={top} width={item.width} height={item.height} fill="none" strokeWidth={4} className="pointer-events-none stroke-destructive" />}
+              </g>
+            )
+          })}
 
-        {/* The objects in front of the wall (clicks pass through them to the windows and doors behind). */}
-        {standing.map(({ item, along, across, gap }, n) => {
-          const label = item.height > text * 1.4 ? fitLabel(item.label, across, text * 0.8) : null
-          // A label a nearer object (drawn later, on top) would cover is left out rather than shown cut.
-          const middle = height - item.height / 2
-          const covered =
-            label !== null &&
-            standing.slice(n + 1).some((near) => {
-              const half = labelWidth(label, text * 0.8) / 2
+          {/* The objects in front of the wall (clicks pass through them to the windows and doors behind). */}
+          {standing.map(({ item, along, across, gap }, n) => {
+            const label = item.height > text * 1.4 ? fitLabel(item.label, across, text * 0.8) : null
+            // A label a nearer object (drawn later, on top) would cover is left out rather than shown cut.
+            const middle = height - item.height / 2
+            const covered =
+              label !== null &&
+              standing.slice(n + 1).some((near) => {
+                const half = labelWidth(label, text * 0.8) / 2
 
-              return near.along - near.across / 2 < along + half && near.along + near.across / 2 > along - half && height - near.item.height < middle + text / 2
-            })
+                return near.along - near.across / 2 < along + half && near.along + near.across / 2 > along - half && height - near.item.height < middle + text / 2
+              })
 
-          return (
-            <g key={n} className="pointer-events-none" opacity={gap <= NEAR ? 0.9 : Math.max(0.25, 0.7 - gap / 600)} data-wall-object>
-              <rect x={along - across / 2} y={height - Math.max(item.height, 2)} width={across} height={Math.max(item.height, 2)} rx={3} fill={item.color} stroke="black" strokeOpacity="0.3" />
-              {label && !covered && (
-                <text x={along} y={middle + text / 3} textAnchor="middle" fontSize={text * 0.8} className="fill-foreground" style={{ paintOrder: "stroke", stroke: "var(--background)", strokeWidth: 3, strokeOpacity: 0.7 }}>
-                  {label}
-                </text>
-              )}
-            </g>
-          )
-        })}
+            return (
+              <g key={n} className="pointer-events-none" opacity={gap <= NEAR ? 0.9 : Math.max(0.25, 0.7 - gap / 600)} data-wall-object>
+                <rect x={along - across / 2} y={height - Math.max(item.height, 2)} width={across} height={Math.max(item.height, 2)} rx={3} fill={item.color} stroke="black" strokeOpacity="0.3" />
+                {label && !covered && (
+                  <text x={along} y={middle + text / 3} textAnchor="middle" fontSize={text * 0.8} className="fill-foreground" style={{ paintOrder: "stroke", stroke: "var(--background)", strokeWidth: 3, strokeOpacity: 0.7 }}>
+                    {label}
+                  </text>
+                )}
+              </g>
+            )
+          })}
 
-        {/* What hangs on the wall, in front of the objects standing below it. */}
-        {hung.map(({ item, index }) => (
-          <HungFront key={index} item={item} index={index} height={height} text={text} clashing={clashing.has(index)} onStart={(event) => start(event, index, "move")} />
-        ))}
+          {/* What hangs on the wall, in front of the objects standing below it. */}
+          {hung.map(({ item, index }) => (
+            <HungFront key={index} item={item} index={index} height={height} text={text} clashing={clashing.has(index)} onStart={(event) => start(event, index, "move")} />
+          ))}
 
-        {/* The chosen window's, door's or hung object's outline and resize handle, above everything so they stay usable. */}
-        {chosen && (
-          <g data-item-chosen={selected}>
-            <rect
-              x={chosen.x - chosen.width / 2}
-              y={height - chosen.elevation - chosen.height}
-              width={chosen.width}
-              height={chosen.height}
-              fill="none"
-              strokeWidth={4}
-              className="pointer-events-none stroke-primary"
-            />
-            {CORNERS.filter((corner) => corner.y > 0 || chosen.shape !== ITEM_SHAPE.Door).map((corner) => (
-              <ResizeHandle
-                key={corner.name}
-                corner={corner}
-                x={chosen.x + (corner.x * chosen.width) / 2}
-                y={height - chosen.elevation - (corner.y > 0 ? chosen.height : 0)}
-                onStart={(event) => start(event, selected, "resize", corner)}
+          {/* The chosen window's, door's or hung object's outline and resize handle, above everything so they stay usable. */}
+          {chosen && (
+            <g data-item-chosen={selected}>
+              <rect
+                x={chosen.x - chosen.width / 2}
+                y={height - chosen.elevation - chosen.height}
+                width={chosen.width}
+                height={chosen.height}
+                fill="none"
+                strokeWidth={4}
+                className="pointer-events-none stroke-primary"
               />
-            ))}
-          </g>
-        )}
+              {CORNERS.filter((corner) => corner.y > 0 || chosen.shape !== ITEM_SHAPE.Door).map((corner) => (
+                <ResizeHandle
+                  key={corner.name}
+                  corner={corner}
+                  x={chosen.x + (corner.x * chosen.width) / 2}
+                  y={height - chosen.elevation - (corner.y > 0 ? chosen.height : 0)}
+                  onStart={(event) => start(event, selected, "resize", corner)}
+                />
+              ))}
+            </g>
+          )}
 
-        {chosen && <Measurements item={chosen} height={height} text={text} />}
-      </svg>
+          {chosen && <Measurements item={chosen} height={height} text={text} />}
+        </svg>
+        <ZoomButtons zoom={zoom.scale} onStep={zoom.step} onFit={zoom.fit} fitLabel="Show the whole wall" />
+      </div>
       {onThisWall.length === 0 && (
         <p className="text-xs text-muted-foreground">Nothing on this wall yet. Click a window, door or wall object in the list on the left, or drag it onto the wall.</p>
       )}

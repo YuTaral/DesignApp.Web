@@ -14,6 +14,7 @@ import { GenerateDialog } from "@/features/builder/generate-dialog"
 import { Inspector } from "@/features/builder/inspector"
 import { PlanCanvas } from "@/features/builder/plan-canvas"
 import { ReplaceBanner } from "@/features/builder/replace-banner"
+import { UndoButtons } from "@/features/builder/undo-buttons"
 import { objectBoxes, renderGuide, renderMaskPng, renderPanorama } from "@/features/builder/scene-3d"
 import { View3d } from "@/features/builder/view-3d"
 import { ViewChoice } from "@/features/builder/view-choice"
@@ -190,6 +191,7 @@ function Builder({ plan }: { plan: Plan }) {
             ))}
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <UndoButtons />
             {view === "plan" && (
               <Button
                 variant={shaping ? "default" : "outline"}

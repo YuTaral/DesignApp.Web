@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, ZONE } from "@/lib/constants"
+import { BACKSPLASH, BUILDER, ITEM_FORM, ITEM_SHAPE, WORKTOP, WORKTOP_SPOT, ZONE } from "@/lib/constants"
 import type { CatalogObject, CatalogVariant, ItemParts, Plan, PlanItem } from "./api"
 import { extent, fitInside, fromWall, isValidOutline, nearestWall, normalize, rectangle, stretch, wallLength, wallPoint, walls, type Reshaped } from "./room-outline"
 
@@ -16,11 +16,21 @@ type BuilderState = {
   unsaved: number
   /** The object copied with Ctrl+C, kept when another room is opened so it can be pasted there. */
   clipboard: PlanItem | null
+  /** The room as it was before each step that can be undone, the latest last. */
+  past: Plan[]
+  /** The room after each step undone, the next to redo last. */
+  future: Plan[]
+  /** When the room last changed (ms), so changes close together are one step. */
+  changedAt: number
 
   /** Starts editing a plan (keeps the one shown when it is the same plan). */
   load: (plan: Plan) => void
   /** Records that the plan was saved, as it was `version` changes ago. */
   saved: (changes: number) => void
+  /** Puts the room back as it was before the last step (a drag, a typed name or a single change). */
+  undo: () => void
+  /** Makes the last step undone again. */
+  redo: () => void
   /**
    * Changes the walls, colors, floor, view or name; objects are kept inside the new walls. A new width or length
    * stretches the outline (its right-hand or front walls move).
@@ -75,8 +85,29 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
     const { plan, unsaved } = get()
 
     if (plan) {
-      set({ plan: { ...plan, items }, unsaved: unsaved + 1 })
+      set({ ...step(), plan: { ...plan, items }, unsaved: unsaved + 1 })
     }
+  }
+  /**
+   * The history for a change about to be made: the room as it is now becomes a step to undo, unless the last change
+   * was a moment ago (the same drag or the same typing); nothing is left to redo.
+   */
+  const step = () => {
+    const { plan, past, changedAt } = get()
+    const now = Date.now()
+    const merged = now - changedAt < BUILDER.undoMergeMs
+
+    return { past: merged || !plan ? past : [...past, plan].slice(-BUILDER.undoSteps), future: [], changedAt: now }
+  }
+  /**
+   * Shows a room from the history: the selection is let go when its object is gone, and the next change starts a step.
+   * @param plan - The room to show.
+   * @param history - The steps to undo and redo after it.
+   */
+  const restore = (plan: Plan, history: { past: Plan[]; future: Plan[] }) => {
+    const { selected, unsaved } = get()
+
+    set({ ...history, plan, selected: selected < plan.items.length ? selected : -1, unsaved: unsaved + 1, changedAt: 0 })
   }
 
   return {
@@ -84,13 +115,32 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
     selected: -1,
     unsaved: 0,
     clipboard: null,
+    past: [],
+    future: [],
+    changedAt: 0,
 
     load: (plan) => {
       if (get().plan?.id !== plan.id) {
-        set({ plan, selected: -1, unsaved: 0 })
+        set({ plan, selected: -1, unsaved: 0, past: [], future: [], changedAt: 0 })
       }
     },
     saved: (changes) => set({ unsaved: Math.max(0, get().unsaved - changes) }),
+    undo: () => {
+      const { plan, past, future } = get()
+      const previous = past.at(-1)
+
+      if (plan && previous) {
+        restore(previous, { past: past.slice(0, -1), future: [...future, plan] })
+      }
+    },
+    redo: () => {
+      const { plan, past, future } = get()
+      const next = future.at(-1)
+
+      if (plan && next) {
+        restore(next, { past: [...past, plan], future: future.slice(0, -1) })
+      }
+    },
     setRoom: (room) => {
       const { plan, unsaved } = get()
 
@@ -101,7 +151,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
       const { width, length, ...rest } = room
       const next = { ...plan, ...rest }
 
-      set({ plan: { ...next, items: next.items.map((item) => inside(item, next)) }, unsaved: unsaved + 1 })
+      set({ ...step(), plan: { ...next, items: next.items.map((item) => inside(item, next)) }, unsaved: unsaved + 1 })
 
       if (width === undefined && length === undefined) {
         return
@@ -158,7 +208,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
         .map((own) => ({ ...own, wall: follow(own.wall, wallPoint(base, own.wall, wallLength(base, own.wall) / 2)).wall }))
 
       next.finish = { ...base.finish, ownWalls: moved.filter((own, i) => moved.findIndex((o) => o.wall === own.wall) === i).sort((a, b) => a.wall - b.wall) }
-      set({ plan: next, unsaved: get().unsaved + 1 })
+      set({ ...step(), plan: next, unsaved: get().unsaved + 1 })
 
       return shift
     },
@@ -179,6 +229,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
       const base = {
         label: object.label, shape: object.shape, width: object.width, depth: object.depth, height: object.height, color: object.color, rotation: 0,
         form: object.form ?? ITEM_FORM.Standard, decorations: decorations ?? [], material: object.material ?? "",
+        // A kitchen unit comes with its worktop, as in a new kitchen (an island has no backsplash).
+        worktop: object.worktop ? { ...WORKTOP.start, backsplash: object.worktop === WORKTOP_SPOT.Island ? BACKSPLASH.None : WORKTOP.start.backsplash } : null,
       }
       let item: PlanItem
 

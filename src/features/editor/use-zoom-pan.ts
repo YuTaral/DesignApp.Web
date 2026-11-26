@@ -96,7 +96,7 @@ export function useZoomPan(room: Room, focus: BoundingBox | undefined, container
       event.preventDefault()
       const bounds = canvas.getBoundingClientRect()
 
-      zoomAround(Math.exp(-event.deltaY * 0.0015), event.clientX - bounds.left, event.clientY - bounds.top)
+      zoomAround(Math.exp(-event.deltaY * LIMITS.zoom.wheel), event.clientX - bounds.left, event.clientY - bounds.top)
     }
 
     canvas.addEventListener("wheel", onWheel, { passive: false })

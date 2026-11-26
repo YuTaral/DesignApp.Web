@@ -1,5 +1,6 @@
-import type { DragEvent } from "react"
+import type { DragEvent, PointerEvent as ReactPointerEvent } from "react"
 
+import { ZoomButtons } from "@/components/zoom-buttons"
 import { ITEM_SHAPE } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
@@ -8,6 +9,7 @@ import { Hung, Opening, PlanObject, ZoneEdge } from "./plan-objects"
 import { Camera, PlanWalls, ShapeHandles } from "./plan-room"
 import { fromWall } from "./room-outline"
 import { PLAN_MARGIN, usePlanGestures } from "./use-plan-gestures"
+import { useViewZoom } from "./use-view-zoom"
 
 /**
  * The floor plan seen from above, to scale: the floor in its color inside the walls (the room's outline), a 50 cm grid, the objects as
@@ -26,7 +28,16 @@ import { PLAN_MARGIN, usePlanGestures } from "./use-plan-gestures"
 export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shaping?: boolean; onWall?: (wall: number) => void }) {
   const { selected, select, add, setRoom } = useBuilderStore()
   const { svgRef, toPlan, held, plus, setPlus, reshaping, start, startShape, startSection, move, end } = usePlanGestures(plan)
+  // Zoomed into the room, or into the frame held still while the shape is dragged.
+  const zoom = useViewZoom(
+    held
+      ? { x: held.x, y: held.y, width: held.width, height: held.length }
+      : { x: -PLAN_MARGIN, y: -PLAN_MARGIN, width: plan.width * 100 + 2 * PLAN_MARGIN, height: plan.length * 100 + 2 * PLAN_MARGIN },
+    svgRef,
+    plan.id
+  )
   const [roomWidth, roomLength] = [plan.width * 100, plan.length * 100]
+  const { frame } = zoom
   // Floor areas first, then rugs, so everything else is drawn on top of them; then the areas' edges, so an area under a
   // rug can still be grabbed, and a selected area whole, with its handles; then the rest. Windows and doors are drawn
   // with the walls (a wall's areas are only in the Wall tab).
@@ -40,9 +51,21 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
   const standing = order.filter(({ item, index }) => under(item.shape, index) < 2)
   const edges = flat.filter(({ item }) => item.shape === ITEM_SHAPE.FloorZone)
   const openings = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => isWallItem(item) && item.shape !== ITEM_SHAPE.WallZone)
+  const hung = openings.filter(({ item }) => isMountedShape(item.shape))
   const clashing = clashingItems(plan)
-  const text = Math.max(10, Math.min(roomWidth, roomLength) / 28)
+  // Labels and handles keep their size on the screen as the plan zooms.
+  const text = Math.max(10, Math.min(roomWidth, roomLength) / 28) / zoom.scale
   const floor = plan.outline.map((p) => `${p.x},${p.y}`).join(" ")
+  // A window or door on its wall; a hung object's mark seen on top, or the place under the standing objects that takes
+  // its clicks.
+  const mark = (item: PlanItem, index: number, part: "look" | "hit") => {
+    const props = {
+      plan, item: item as PlanItem & { wall: number }, index, chosen: index === selected, clashing: clashing.has(index),
+      onSelect: (event: ReactPointerEvent) => start(event, index, "move"),
+    }
+
+    return isMountedShape(item.shape) ? <Hung key={`${part}-${index}`} {...props} part={part} /> : part === "look" ? <Opening key={index} {...props} /> : null
+  }
   const drawn = ({ item, index }: { item: PlanItem; index: number }) => (
     <PlanObject
       key={index}
@@ -68,87 +91,78 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
   }
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox={held ? `${held.x} ${held.y} ${held.width} ${held.length}` : `${-PLAN_MARGIN} ${-PLAN_MARGIN} ${roomWidth + 2 * PLAN_MARGIN} ${roomLength + 2 * PLAN_MARGIN}`}
-      className="size-full touch-none select-none"
-      role="application"
-      aria-label={
-        shaping
-          ? `Room shape, ${plan.width} by ${plan.length} metres. Drag a wall to push or pull it, drag a corner to move it, or drag the plus on a wall to push out part of it.`
-          : `Floor plan, ${plan.width} by ${plan.length} metres. Drag objects to move them; drag a corner handle to resize from that corner. Click a wall to open it and look at it.`
-      }
-      data-shaping={shaping || undefined}
-      onPointerLeave={() => setPlus(null)}
-      data-plan-canvas
-      onPointerDown={() => select(-1)}
-      onPointerMove={move}
-      onPointerUp={end}
-      onPointerCancel={end}
-      onDragOver={allowCatalogDrop}
-      onDrop={drop}
-    >
-      <defs>
-        <pattern id="plan-grid" width="50" height="50" patternUnits="userSpaceOnUse">
-          <path d="M 50 0 L 0 0 0 50" fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" />
-        </pattern>
-      </defs>
-      <PlanWalls
-        plan={plan}
-        shaping={shaping}
-        onDown={(event, wall) => {
-          if (shaping) {
-            startShape(event, "wall", wall.index)
+    <div className="relative size-full">
+      <svg
+        ref={svgRef}
+        viewBox={`${frame.x} ${frame.y} ${frame.width} ${frame.height}`}
+        className="size-full touch-none select-none"
+        style={{ cursor: zoom.scale > 1 ? "grab" : undefined }}
+        role="application"
+        aria-label={
+          shaping
+            ? `Room shape, ${plan.width} by ${plan.length} metres. Drag a wall to push or pull it, drag a corner to move it, or drag the plus on a wall to push out part of it.`
+            : `Floor plan, ${plan.width} by ${plan.length} metres. Drag objects to move them; drag a corner handle to resize from that corner. Click a wall to open it and look at it.`
+        }
+        data-shaping={shaping || undefined}
+        onPointerLeave={() => setPlus(null)}
+        data-plan-canvas
+        onPointerDown={zoom.down}
+        onPointerMove={(event) => zoom.moveOn(event, move)}
+        onPointerUp={(event) => zoom.endOn(event, end, () => select(-1))}
+        onPointerCancel={(event) => zoom.endOn(event, end)}
+        onDragOver={allowCatalogDrop}
+        onDrop={drop}
+      >
+        <defs>
+          <pattern id="plan-grid" width="50" height="50" patternUnits="userSpaceOnUse">
+            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" />
+          </pattern>
+        </defs>
+        <PlanWalls
+          plan={plan}
+          shaping={shaping}
+          onDown={(event, wall) => {
+            if (shaping) {
+              startShape(event, "wall", wall.index)
 
-            return
-          }
+              return
+            }
 
-          event.stopPropagation()
+            event.stopPropagation()
 
-          if (wall.index !== plan.view) {
-            setRoom({ view: wall.index })
-          }
+            if (wall.index !== plan.view) {
+              setRoom({ view: wall.index })
+            }
 
-          onWall?.(wall.index)
-        }}
-        onHover={(event, wall) => {
-          if (!shaping || reshaping()) {
-            return
-          }
+            onWall?.(wall.index)
+          }}
+          onHover={(event, wall) => {
+            if (!shaping || reshaping()) {
+              return
+            }
 
-          const point = toPlan(event.clientX, event.clientY)
+            const point = toPlan(event.clientX, event.clientY)
 
-          setPlus({ wall: wall.index, along: Math.min(wall.length, Math.max(0, fromWall(plan, wall.index, point.x, point.y).along)) })
-        }}
-      />
-      <polygon points={floor} fill={plan.floorColor} data-plan-floor onPointerMove={() => shaping && !reshaping() && setPlus(null)} />
-      <polygon points={floor} fill="url(#plan-grid)" className="pointer-events-none text-foreground" />
+            setPlus({ wall: wall.index, along: Math.min(wall.length, Math.max(0, fromWall(plan, wall.index, point.x, point.y).along)) })
+          }}
+        />
+        <polygon points={floor} fill={plan.floorColor} data-plan-floor onPointerMove={() => shaping && !reshaping() && setPlus(null)} />
+        <polygon points={floor} fill="url(#plan-grid)" className="pointer-events-none text-foreground" />
 
-      <g className={shaping ? "pointer-events-none opacity-40" : undefined}>
-        {flat.map(drawn)}
-        {edges.map(({ item, index }) => (
-          <ZoneEdge key={index} item={item} index={index} text={text} onStart={(event) => start(event, index, "move")} />
-        ))}
-        {standing.map(drawn)}
-        {openings.map(({ item, index }) => {
-          const OnWall = isMountedShape(item.shape) ? Hung : Opening
+        <g className={shaping ? "pointer-events-none opacity-40" : undefined}>
+          {flat.map(drawn)}
+          {edges.map(({ item, index }) => (
+            <ZoneEdge key={index} item={item} index={index} text={text} onStart={(event) => start(event, index, "move")} />
+          ))}
+          {hung.map(({ item, index }) => mark(item, index, "hit"))}
+          {standing.map(drawn)}
+          {openings.map(({ item, index }) => mark(item, index, "look"))}
+        </g>
 
-          return (
-            <OnWall
-              key={index}
-              plan={plan}
-              item={item as PlanItem & { wall: number }}
-              index={index}
-              chosen={index === selected}
-              clashing={clashing.has(index)}
-              onSelect={(event) => start(event, index, "move")}
-            />
-          )
-        })}
-      </g>
-
-      <Camera plan={plan} text={text} />
-      {shaping && <ShapeHandles plan={plan} text={text} plus={plus} onCorner={(event, corner) => startShape(event, "corner", corner)} onPlus={startSection} />}
-    </svg>
+        <Camera plan={plan} text={text} />
+        {shaping && <ShapeHandles plan={plan} text={text} plus={plus} onCorner={(event, corner) => startShape(event, "corner", corner)} onPlus={startSection} />}
+      </svg>
+      <ZoomButtons zoom={zoom.scale} onStep={zoom.step} onFit={zoom.fit} fitLabel="Show the whole plan" />
+    </div>
   )
 }

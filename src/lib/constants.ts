@@ -141,7 +141,8 @@ export const LIMITS = {
   removal: { maxObjects: 20, restingGap: 3, restingShare: 0.5 },
   /** Brush diameters on screen, in CSS px: zooming in makes the same brush finer on the photo. */
   brushSizes: { min: 2, max: 120, default: 24 },
-  zoom: { min: 1, max: 8, step: 1.5 },
+  /** How far a view zooms: from the whole picture to 8 times, 1.5 times per button press, and per pixel of a wheel turn. */
+  zoom: { min: 1, max: 8, step: 1.5, wheel: 0.0015 },
   /** A view zoomed in on an object (the Parts dialog) shows its box this many times its size, for some margin. */
   focusMargin: 1.3,
   /** A press that moves less than this (CSS px) is a tap, not a drag. */
@@ -398,6 +399,76 @@ export const FLOOR_TYPE_NAMES: Record<FloorType, string> = {
   Wood: "Wooden planks", Parquet: "Parquet", Tiles: "Tiles", Stone: "Stone", Concrete: "Concrete", Carpet: "Carpet", Vinyl: "Vinyl",
 }
 
+/** What covers the wall behind a kitchen worktop (Domain Constants.BacksplashKind). */
+export const BACKSPLASH = { None: "None", Upstand: "Upstand", WorktopUp: "WorktopUp", Tiles: "Tiles", Glass: "Glass" } as const
+
+export type Backsplash = (typeof BACKSPLASH)[keyof typeof BACKSPLASH]
+
+/** The backsplashes' names as the user reads them. */
+export const BACKSPLASH_NAMES: Record<Backsplash, string> = {
+  None: "None", Upstand: "Upstand", WorktopUp: "Worktop up the wall", Tiles: "Tiles", Glass: "Glass",
+}
+
+/** Where a catalog object's worktop is (Domain Constants.WorktopSpot): along a wall, or on an island. */
+export const WORKTOP_SPOT = { Wall: "Wall", Island: "Island" } as const
+
+export type WorktopSpot = (typeof WORKTOP_SPOT)[keyof typeof WORKTOP_SPOT]
+
+/**
+ * A kitchen unit's worktop: what it is made of, the colors offered for it and for a tiled or glass backsplash, and what a
+ * new one starts as (the API's StarterLayout: white quartz with an upstand).
+ */
+export const WORKTOP = {
+  materials: ["quartz", "marble", "granite", "oak", "walnut", "laminate", "concrete", "stainless steel"],
+  colors: [
+    "#FFFFFF", "#F2F0EB", "#E8DCC8", "#D8C3A5", "#C8C8C8", "#8A8580", "#3A3A3A", "#1E1E1E",
+    "#B8864B", "#8B5A2B", "#5C3A21", "#A8A29A", "#9C9A96", "#B0B4B8", "#4A6274", "#2E4057",
+  ],
+  backsplashColors: [
+    "#FFFFFF", "#F4F1EA", "#E8DCC8", "#C8C8C8", "#8A8580", "#3A3A3A", "#A8B89A", "#4F6B3A",
+    "#9DB4C0", "#4A6274", "#2E4057", "#B5543C", "#C0603A", "#E3B23C", "#E9CFC7", "#1E1E1E",
+  ],
+  start: { material: "quartz", color: "#F2F0EB", backsplash: BACKSPLASH.Upstand, backsplashColor: "#F2F0EB" },
+  /** The color tiles or glass start in when they would match the worktop (and look like it). */
+  ownStart: "#C8C8C8",
+} as const
+
+/** What a window is dressed with (Domain Constants.CoveringKind). */
+export const COVERING_KIND = {
+  Sheers: "Sheers", Curtains: "Curtains", SheersAndCurtains: "SheersAndCurtains", RollerBlind: "RollerBlind", RomanBlind: "RomanBlind",
+  VenetianBlind: "VenetianBlind", VerticalBlinds: "VerticalBlinds",
+} as const
+
+export type CoveringKind = (typeof COVERING_KIND)[keyof typeof COVERING_KIND]
+
+/** The coverings' names as the user reads them. */
+export const COVERING_KIND_NAMES: Record<CoveringKind, string> = {
+  Sheers: "Sheers", Curtains: "Curtains", SheersAndCurtains: "Sheers + curtains", RollerBlind: "Roller blind", RomanBlind: "Roman blind",
+  VenetianBlind: "Venetian blind", VerticalBlinds: "Vertical blinds",
+}
+
+/** How far a window's curtains hang (Domain Constants.CurtainLength). */
+export const CURTAIN_LENGTH = { Sill: "Sill", Floor: "Floor" } as const
+
+export type CurtainLength = (typeof CURTAIN_LENGTH)[keyof typeof CURTAIN_LENGTH]
+
+/** The curtain lengths' names as the user reads them. */
+export const CURTAIN_LENGTH_NAMES: Record<CurtainLength, string> = { Sill: "To the sill", Floor: "To the floor" }
+
+/**
+ * A window's curtains and blinds: what each kind is made of (the first is a new one's), the colors offered, and what a
+ * new one starts as.
+ */
+export const COVERING = {
+  curtainFabrics: ["linen", "cotton", "velvet", "wool", "voile"],
+  blindFabrics: ["fabric", "linen", "wood", "bamboo", "aluminium"],
+  colors: [
+    "#FFFFFF", "#F4F1EA", "#E8DCC8", "#D8C3A5", "#C8C8C8", "#8A8580", "#3A3A3A", "#1E1E1E",
+    "#A8B89A", "#7D8B6A", "#9DB4C0", "#4A6274", "#2E4057", "#E9CFC7", "#B5543C", "#C9A44C",
+  ],
+  start: { color: "#F4F1EA", length: CURTAIN_LENGTH.Floor },
+} as const
+
 /** What a built room's walls are finished in (Domain Constants.WallFinish). */
 export const WALL_FINISH = {
   Paint: "Paint", Wallpaper: "Wallpaper", Plaster: "Plaster", Brick: "Brick", WoodPanelling: "WoodPanelling", Tiles: "Tiles", Concrete: "Concrete",
@@ -597,6 +668,21 @@ export const BUILDER = {
      * candle lights, a flush light's disc, spotlights set into the ceiling a spacing apart, or a rail of track lights.
      * `clear` is the room it needs around its middle, in cm.
      */
+    /**
+     * A window's curtains and blinds in 3D, in metres: curtains hang from a rod above the window (reaching past its
+     * sides, but no closer than `rodGap` to a corner) to the sill or the floor, each side's panel a share of the window's width with folds; sheers are seen
+     * through; blinds cover the window's top half, venetian and vertical ones in slats.
+     */
+    coverings: {
+      rodAbove: 0.12, rodPast: 0.22, rodGap: 0.02, rodRadius: 0.012, out: 0.1, panelShare: 0.3, minPanel: 0.3, folds: 7, foldDepth: 0.03,
+      belowSill: 0.1, sheer: "#F7F5F0", sheerOpacity: 0.55, blindShare: 0.5, slat: 0.05, verticalSlat: 0.09,
+    },
+    /**
+     * A kitchen worktop in 3D, in metres: its slab and its overhang at the front, how high an upstand and a full backsplash
+     * reach, the gap a backsplash keeps below a window's sill, how far behind a unit a window counts as over it, and how
+     * near a wall a unit's back must be to have a backsplash.
+     */
+    worktop: { thickness: 0.04, overhang: 0.02, upstand: 0.1, splash: 0.6, belowSill: 0.02, behind: 0.25, against: 0.1 },
     /** How far the Ceiling tab tilts the 3D view up from the photo's, in degrees, so the ceiling and its light show. */
     ceilingTilt: 32,
     lights: {
@@ -664,6 +750,13 @@ export const BUILDER = {
     "#FFFFFF", "#FAFAF7", "#F4F1EA", "#EFE6CF", "#E8DCC8", "#E8E2D6", "#D8C3A5", "#C8C8C8",
     "#A8B89A", "#9DB4C0", "#4A6274", "#2E4057", "#8A8580", "#5A5A5A", "#3A3A3A", "#1E1E1E",
   ],
+  /** How many steps the room builder can undo. */
+  undoSteps: 100,
+  /**
+   * Changes closer together than this, in ms, are one step to undo: a drag, or typing a name, comes back whole. A pause
+   * starts the next step.
+   */
+  undoMergeMs: 500,
   /** The one choice the "None" chip of a material stands for. */
   none: "none",
   /** The choice the "All" chip of the walls' finish stands for: a change for every wall. */

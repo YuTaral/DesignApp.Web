@@ -4,7 +4,8 @@ import { cn } from "cn"
 
 import type { BoundingBox, Room } from "@/features/rooms/types"
 import { LIMITS, MARK_PREVIEW, OUTLINE_BRUSH_MODE, STROKE_SHAPE, type StrokeShape } from "@/lib/constants"
-import { BrushBadge, BrushCursor, CompareHandle, DrawnAreaOutline, RemovingVeil, ZoomButtons } from "./canvas-overlays"
+import { ZoomButtons } from "@/components/zoom-buttons"
+import { BrushBadge, BrushCursor, CompareHandle, DrawnAreaOutline, RemovingVeil } from "./canvas-overlays"
 import { useEditorStore } from "./editor-store"
 import { labelAt, restingOn } from "./label-map"
 import { hexToOklab } from "./oklab"
@@ -326,7 +327,7 @@ export function RoomCanvas({
           {hoveredLabel}
         </div>
       )}
-      {map && <ZoomButtons zoom={view.zoom} onStep={zoomStep} onFit={fit} />}
+      {map && <ZoomButtons zoom={view.zoom} onStep={zoomStep} onFit={fit} fitLabel="Fit photo" />}
     </div>
   )
 }

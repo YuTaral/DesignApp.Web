@@ -1,13 +1,15 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BUILDER, CEILING_LIGHT, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
-import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot } from "./api"
+import { BACKSPLASH, BUILDER, CEILING_LIGHT, COVERING_KIND, CURTAIN_LENGTH, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
+import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot, WindowCovering, Worktop } from "./api"
+import { isCurtains } from "./covering"
 import { CUBE_FACES, type Vec3 } from "./panorama"
 import type { PanoramaJob } from "./panorama.worker"
 import { hasParts, isMountedShape, isWallItem, legSide, partsOf } from "./builder-store"
-import { cameraStand, contains, extent, fitInside, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
+import { cameraStand, contains, extent, fitInside, fromWall, wallLength, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
+import type { Frame } from "./use-view-zoom"
 import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
 
 /**
@@ -19,6 +21,8 @@ import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
 export class PlanScene {
   private readonly renderer: THREE.WebGLRenderer
   private camera: THREE.PerspectiveCamera | null = null
+  // The last room drawn, kept so a zoom only draws it again (building it is the slow part).
+  private last: { plan: Plan; scene: THREE.Scene; width: number; height: number; tilt: number } | null = null
 
   /**
    * @param canvas - The canvas to draw on.
@@ -38,16 +42,40 @@ export class PlanScene {
    * @param height - The height to draw, in CSS px.
    * @param ratio - Device pixels per CSS pixel.
    * @param tilt - How far to tilt the photo's camera up, in degrees (the Ceiling tab looks up at it); 0 for the photo's view.
+   * @param crop - The part of the picture shown, as shares of it (the 3D view zoomed in); the whole picture when missing.
    */
-  render(plan: Plan, width: number, height: number, ratio = window.devicePixelRatio || 1, tilt = 0) {
+  render(plan: Plan, width: number, height: number, ratio = window.devicePixelRatio || 1, tilt = 0, crop: Frame = WHOLE_PICTURE) {
     this.renderer.setPixelRatio(ratio)
     this.renderer.setSize(width, height, false)
+    this.forget()
     const scene = buildScene(plan, this.renderer.capabilities.getMaxAnisotropy())
 
-    this.camera = camera(plan, width, height)
+    this.last = { plan, scene, width, height, tilt }
+    this.reframe(crop)
+  }
+
+  /**
+   * Draws the last room again showing another part of the picture, without building it again (the 3D view's zoom).
+   * @param crop - The part of the picture shown, as shares of it.
+   */
+  reframe(crop: Frame) {
+    if (!this.last) {
+      return
+    }
+
+    const { plan, scene, width, height, tilt } = this.last
+
+    this.camera = camera(plan, width, height, crop)
     this.camera.rotateX(THREE.MathUtils.degToRad(tilt))
     this.renderer.render(scene, this.camera)
-    dispose(scene)
+  }
+
+  /** Frees the last room drawn. */
+  private forget() {
+    if (this.last) {
+      dispose(this.last.scene)
+      this.last = null
+    }
   }
 
   /**
@@ -125,6 +153,7 @@ export class PlanScene {
    *   canvas that is thrown away, as its context can't be used again.
    */
   dispose(release = false) {
+    this.forget()
     this.renderer.dispose()
 
     if (release) {
@@ -234,6 +263,9 @@ function eyeHeight(plan: Pick<Plan, "height">) {
   return Math.min(BUILDER.scene.eyeHeight, plan.height - 0.3)
 }
 
+/** The whole picture, as shares of it. */
+const WHOLE_PICTURE: Frame = { x: 0, y: 0, width: 1, height: 1 }
+
 /**
  * The camera: across the room from the middle of the wall in view, just inside the room (`cameraStand`), at a
  * photographer's height, held level and looking straight at the wall in view. Its lens shows the room's whole width from halfway to the far wall
@@ -244,8 +276,9 @@ function eyeHeight(plan: Pick<Plan, "height">) {
  * @param plan - The room.
  * @param width - The picture's width.
  * @param height - The picture's height.
+ * @param crop - The part of the picture shown, as shares of it (zoomed in); the whole picture when missing.
  */
-export function camera(plan: Plan, width: number, height: number) {
+export function camera(plan: Plan, width: number, height: number, crop: Frame = WHOLE_PICTURE) {
   const eye = eyeHeight(plan)
   const stand = cameraStand(plan)
   const [across, away] = [stand.across / 100, stand.stand / 100]
@@ -262,7 +295,8 @@ export function camera(plan: Plan, width: number, height: number) {
   const vertical = 2 * Math.atan(Math.tan(horizontal / 2) * (fullHeight / width))
   const view = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(vertical), width / fullHeight, 0.05, 100)
 
-  view.setViewOffset(width, fullHeight, 0, fullHeight - height, width, height)
+  // The picture is the bottom of the taller frame (the lens shifted down), and a zoom shows part of the picture.
+  view.setViewOffset(width, fullHeight, crop.x * width, fullHeight - height + crop.y * height, crop.width * width, crop.height * height)
   view.position.set(x, eye, z)
   view.lookAt(lookX, eye, lookZ)
 
@@ -287,14 +321,7 @@ function ceilingLight(plan: Plan) {
   const shadeMaterial = new THREE.MeshStandardMaterial({ color: L.shade, side: THREE.DoubleSide, roughness: 0.8 })
   const metal = material(L.metal)
   const glow = new THREE.MeshStandardMaterial({ color: L.glow, emissive: L.glow, emissiveIntensity: 0.9 })
-  const put = (geometry: THREE.BufferGeometry, look: THREE.Material, x: number, y: number, z: number) => {
-    const mesh = new THREE.Mesh(geometry, look)
-
-    mesh.position.set(x, y, z)
-    group.add(mesh)
-
-    return mesh
-  }
+  const put = placer(group)
 
   switch (plan.finish.ceilingLight) {
     case CEILING_LIGHT.Pendant: {
@@ -434,7 +461,7 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
       continue
     }
 
-    const drawn = !isWallItem(item) ? model(item) : item.wall !== behind ? (isMountedShape(item.shape) ? hung(plan, item) : opening(plan, item)) : null
+    const drawn = !isWallItem(item) ? model(item, item.worktop ? behindUnit(plan, item) : OPEN_BEHIND) : item.wall !== behind ? (isMountedShape(item.shape) ? hung(plan, item) : opening(plan, item)) : null
 
     if (!drawn) {
       continue
@@ -445,6 +472,56 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   }
 
   return scene
+}
+
+/** What is behind a kitchen unit, for its backsplash: whether a wall is, and how high a window there starts (metres). */
+type Behind = { backed: boolean; sill: number }
+
+/** Behind an object standing out in the room: no wall and no window. */
+const OPEN_BEHIND: Behind = { backed: false, sill: Infinity }
+
+/**
+ * What is behind a kitchen unit, for its backsplash: whether its back is against a wall (a unit standing out in the
+ * room has no backsplash), and how high the lowest window behind it starts, in metres, so the backsplash stops below
+ * its sill (Infinity when there is none). A window is behind the unit when a point of it lies within the unit's width,
+ * at its back.
+ * @param plan - The room.
+ * @param item - The unit.
+ */
+function behindUnit(plan: Plan, item: PlanItem): Behind {
+  const turn = THREE.MathUtils.degToRad(item.rotation)
+  const [halfWidth, halfDepth] = [item.width / 2, item.depth / 2]
+  const reach = BUILDER.scene.worktop.behind * 100
+  const against = BUILDER.scene.worktop.against * 100
+  // The middle of the unit's back on the plan, as its model is turned.
+  const back = { x: item.x + halfDepth * Math.sin(turn), y: item.y - halfDepth * Math.cos(turn) }
+  const backed = walls(plan).some((wall) => {
+    const { along, away } = fromWall(plan, wall.index, back.x, back.y)
+
+    return along >= 0 && along <= wall.length && Math.abs(away) <= against
+  })
+  let sill = Infinity
+
+  for (const other of plan.items) {
+    if (other.shape !== ITEM_SHAPE.Window || !isWallItem(other)) {
+      continue
+    }
+
+    // Its middle and points near its two ends.
+    for (const share of [-0.45, 0, 0.45]) {
+      const at = wallPoint(plan, other.wall, other.x + other.width * share)
+      const [dx, dy] = [at.x - item.x, at.y - item.y]
+      // The point in the unit's own frame, as its model is turned: across it, and from its middle towards its front.
+      const across = dx * Math.cos(turn) + dy * Math.sin(turn)
+      const out = -dx * Math.sin(turn) + dy * Math.cos(turn)
+
+      if (Math.abs(across) <= halfWidth && out <= 0 && out >= -halfDepth - reach) {
+        sill = Math.min(sill, other.elevation / 100)
+      }
+    }
+  }
+
+  return { backed, sill }
 }
 
 /**
@@ -799,6 +876,144 @@ function wallTurn(wall: OutlineWall) {
 }
 
 /**
+ * A function that adds a mesh to a group at a point and returns it, for models built of many parts.
+ * @param group - The group the meshes go in.
+ */
+function placer(group: THREE.Group) {
+  return (geometry: THREE.BufferGeometry, look: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geometry, look)
+
+    mesh.position.set(x, y, z)
+    group.add(mesh)
+
+    return mesh
+  }
+}
+
+/**
+ * A kitchen unit's worktop, around the unit's middle (z towards its front): a slab on top, standing a little out at the
+ * front, and the backsplash on the wall behind it: a low upstand or the worktop's material up to the wall cabinets, or
+ * tiles or glass in their own color.
+ * @param worktop - The worktop.
+ * @param w - The unit's width, in metres.
+ * @param d - Its depth.
+ * @param h - Its height.
+ * @param behind - Whether a wall is behind it (none behind a unit standing out, or the leg of an L), and how high a
+ *   window there starts: the backsplash stops below it.
+ */
+function worktopModel(worktop: Worktop, w: number, d: number, h: number, behind: Behind) {
+  const T = BUILDER.scene.worktop
+  const group = new THREE.Group()
+  const top = new THREE.MeshStandardMaterial({ color: worktop.color, roughness: 0.35 })
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(w, T.thickness, d + T.overhang), top)
+  const own = new THREE.MeshStandardMaterial({
+    color: worktop.backsplashColor,
+    roughness: worktop.backsplash === BACKSPLASH.Glass ? 0.08 : 0.5,
+    metalness: worktop.backsplash === BACKSPLASH.Glass ? 0.2 : 0,
+  })
+  const height = Math.min(worktop.backsplash === BACKSPLASH.Upstand ? T.upstand : T.splash, behind.sill - h - T.belowSill)
+
+  slab.position.set(0, h - T.thickness / 2, T.overhang / 2)
+  slab.castShadow = true
+  group.add(slab)
+
+  if (behind.backed && worktop.backsplash !== BACKSPLASH.None && height > 0) {
+    const ownColor = worktop.backsplash === BACKSPLASH.Tiles || worktop.backsplash === BACKSPLASH.Glass
+    const splash = new THREE.Mesh(new THREE.BoxGeometry(w, height, 0.012), ownColor ? own : top)
+
+    splash.position.set(0, h + height / 2, -d / 2 + 0.006)
+    group.add(splash)
+  }
+
+  return group
+}
+
+/**
+ * A window's curtains or blinds, in the window's own place (x along the wall from its middle, y up from the floor, z out
+ * into the room): curtains hang from a rod above it, wider than it, to the sill or the floor, a folded panel at each
+ * side (sheers across the glass, seen through); a roller or Roman blind covers the glass's top half; venetian blinds
+ * are horizontal slats, tilted open, and vertical blinds slats turned open.
+ * @param covering - The covering.
+ * @param w - The window's width, in metres.
+ * @param h - Its height.
+ * @param bottom - Its bottom's height above the floor.
+ */
+function windowCovering(covering: WindowCovering, w: number, h: number, bottom: number, room: { left: number; right: number }) {
+  const C = BUILDER.scene.coverings
+  const group = new THREE.Group()
+  const fabric = new THREE.MeshStandardMaterial({ color: covering.color, roughness: 0.95, side: THREE.DoubleSide })
+  const sheerColor = covering.kind === COVERING_KIND.Sheers ? covering.color : C.sheer
+  const sheer = new THREE.MeshStandardMaterial({ color: sheerColor, roughness: 1, side: THREE.DoubleSide, transparent: true, opacity: C.sheerOpacity })
+  const top = bottom + h
+  // A blind sits inside the frame and comes down part of the way.
+  const inner = w - 0.04
+  const drop = h * C.blindShare
+  const put = placer(group)
+  // A curtain panel with soft folds across it.
+  const panel = (width: number, height: number) => {
+    const geometry = new THREE.PlaneGeometry(width, height, C.folds * 4, 1)
+    const at = geometry.attributes.position
+
+    for (let i = 0; i < at.count; i++) {
+      at.setZ(i, Math.sin((at.getX(i) / width + 0.5) * C.folds * Math.PI * 2) * C.foldDepth)
+    }
+
+    geometry.computeVertexNormals()
+
+    return geometry
+  }
+
+  if (isCurtains(covering.kind)) {
+    const rod = top + C.rodAbove
+    const end = covering.length === CURTAIN_LENGTH.Floor ? 0.02 : Math.max(0.02, bottom - C.belowSill)
+    const [left, right] = [-w / 2 - Math.min(C.rodPast, Math.max(0, room.left - C.rodGap)), w / 2 + Math.min(C.rodPast, Math.max(0, room.right - C.rodGap))]
+    const [span, middle] = [right - left, (left + right) / 2]
+    const side = Math.max(C.minPanel, w * C.panelShare)
+
+    put(new THREE.CylinderGeometry(C.rodRadius, C.rodRadius, span), material(BUILDER.scene.metal), middle, rod, C.out).rotation.z = Math.PI / 2
+
+    if (covering.kind !== COVERING_KIND.Curtains) {
+      put(panel(span, rod - end), sheer, middle, (rod + end) / 2, C.out - 0.03)
+    }
+
+    if (covering.kind !== COVERING_KIND.Sheers) {
+      put(panel(side, rod - end), fabric, left + side / 2, (rod + end) / 2, C.out)
+      put(panel(side, rod - end), fabric, right - side / 2, (rod + end) / 2, C.out)
+    }
+
+    return group
+  }
+
+  switch (covering.kind) {
+    case COVERING_KIND.RollerBlind:
+      put(new THREE.BoxGeometry(inner, drop, 0.008), fabric, 0, top - drop / 2, C.out * 0.6)
+      put(new THREE.CylinderGeometry(0.03, 0.03, inner), fabric, 0, top, C.out * 0.6).rotation.z = Math.PI / 2
+      break
+    case COVERING_KIND.RomanBlind:
+      // Three soft folds stacked at the top, each standing a little further out.
+      for (let fold = 0; fold < 3; fold++) {
+        put(new THREE.BoxGeometry(inner, drop / 3, 0.02), fabric, 0, top - (drop / 3) * (fold + 0.5), C.out * 0.6 + fold * 0.012)
+      }
+
+      break
+    case COVERING_KIND.VenetianBlind:
+      for (let y = bottom + C.slat / 2; y < top; y += C.slat) {
+        put(new THREE.BoxGeometry(inner, 0.004, 0.045), fabric, 0, y, C.out * 0.6).rotation.x = 0.5
+      }
+
+      break
+    default:
+      for (let x = -inner / 2 + C.verticalSlat / 2; x < inner / 2; x += C.verticalSlat) {
+        put(new THREE.BoxGeometry(C.verticalSlat * 0.95, h, 0.004), fabric, x, bottom + h / 2, C.out * 0.6).rotation.y = 1.2
+      }
+
+      break
+  }
+
+  return group
+}
+
+/**
  * A window or door in its wall: a framed pane of glass at its height above the floor, or a door leaf with its frame
  * and handle (two leaves for a wide door).
  * @param plan - The room.
@@ -850,6 +1065,13 @@ function opening(plan: Plan, item: PlanItem & { wall: number }) {
 
     if (bottom > 0.05) {
       block(w + 0.08, 0.03, 0.14, 0, bottom - 0.015, 0.07)
+    }
+
+    if (item.covering) {
+      // The rod reaches past the window only as far as the wall goes on each side.
+      const room = { left: item.x / 100 - w / 2, right: wallLength(plan, item.wall) / 100 - item.x / 100 - w / 2 }
+
+      group.add(windowCovering(item.covering, w, h, bottom, room))
     }
   } else {
     const trim = material(shade(item.color, 1.06))
@@ -955,14 +1177,14 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
  * adds a wider chaise at the leg's front end.
  * @param item - The object.
  */
-function model(item: PlanItem) {
+function model(item: PlanItem, behind: Behind) {
   let group: THREE.Group
 
   if (hasParts(item)) {
     // Each part as its own piece, sized from the object's parts: the back run, the leg below it and a P's chaise.
     const { runDepth, legWidth, chaiseWidth, chaiseDepth } = partsOf(item)!
     const front = item.form === ITEM_FORM.PShaped ? chaiseDepth : 0
-    const run = piece({ ...item, depth: runDepth }, { openRight: true })
+    const run = piece({ ...item, depth: runDepth }, { openRight: true, behind })
     const legLength = item.depth - runDepth - front
 
     group = new THREE.Group()
@@ -986,7 +1208,7 @@ function model(item: PlanItem) {
     // A leg on the left: the whole model mirrored across its middle (three.js turns the faces round for it).
     group.scale.x = legSide(item)
   } else {
-    group = piece(item, {})
+    group = piece(item, { behind })
   }
 
   group.position.set(item.x / 100, 0, item.y / 100)
@@ -1001,11 +1223,20 @@ function model(item: PlanItem) {
  * @param item - The object, or one piece of an L-shaped one.
  * @param options - For pieces of an L: `openRight` leaves out a sofa's right arm, `chaise` makes it a seat with one arm and no back.
  */
-function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "height" | "color" | "form">, options: { openRight?: boolean; chaise?: boolean }) {
+function piece(
+  item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "height" | "color" | "form" | "worktop">,
+  options: { openRight?: boolean; chaise?: boolean; behind?: Behind }
+) {
   const [w, d, h] = [item.width / 100, item.depth / 100, Math.max(item.height, 1) / 100]
   const paint = material(item.color)
   const darker = material(shade(item.color, 0.78))
   const group = new THREE.Group()
+
+  // A kitchen unit's worktop lies on it; a leg of an L has no wall behind it, so only the run has a backsplash.
+  if (item.worktop) {
+    group.add(worktopModel(item.worktop, w, d, h, options.behind ?? OPEN_BEHIND))
+  }
+
   /** Adds a block of the object, by its size and the position of its middle. */
   const block = blockAdder(group, paint)
   /** Adds a soft block, with rounded edges. */
@@ -1235,8 +1466,12 @@ function piece(item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "hei
       round(w, shadeHeight, d, h - shadeHeight / 2, 0.35, 0.5)
       break
     }
-    default:
-      block(w, h, d, 0, h / 2, 0)
+    default: {
+      // Under a worktop the unit stops at its underside, so the two never share a face (they would flicker).
+      const body = item.worktop ? h - BUILDER.scene.worktop.thickness : h
+
+      block(w, body, d, 0, body / 2, 0)
+    }
   }
 
   return group

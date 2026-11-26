@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label"
 import { BUILDER, ITEM_FORM, ITEM_SHAPE, LEG_SIDE, ROOM_TYPE_NAMES, SWATCHES, type FloorType, type LegSide, type WallFinish } from "@/lib/constants"
 import { useCatalog, type Plan } from "./api"
 import { ChoiceChips, type Chip } from "./choice-chips"
+import { CoveringFields } from "./covering-fields"
+import { WorktopFields } from "./worktop-fields"
 import { DecorationChoice } from "./decoration-choice"
 import { ColorChoice, NumberField } from "./fields"
 import { FINISH_CHIPS } from "./finish-chips"
@@ -94,6 +96,7 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
   return (
     <div className="space-y-5" data-inspector-item={index} data-inspector-opening>
       <ItemBasics plan={plan} index={index} />
+      {isWindow && <CoveringFields covering={item.covering ?? null} onChange={(covering) => update(index, { covering })} />}
       <div className="space-y-2">
         <p className="text-sm font-medium">On the wall</p>
         <WallChoice plan={plan} value={wall} label="Wall" onPick={(next) => update(index, { wall: next, x: Math.min(item.x, wallLength(plan, next) - item.width / 2) })} />
@@ -229,6 +232,7 @@ function ItemInspector({ plan, index }: { plan: Plan; index: number }) {
       </fieldset>
       {hasParts(item) && <PartFields plan={plan} index={index} />}
       {!zone && <ColorChoice label="Color" value={item.color} colors={SWATCHES} onPick={(color) => update(index, { color })} />}
+      <WorktopFields plan={plan} index={index} />
       <div className="grid grid-cols-2 gap-2">
         <Button variant="outline" onClick={() => rotate(index)}>
           <RotateCwIcon data-icon="inline-start" />

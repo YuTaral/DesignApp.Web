@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 
+import { ZoomButtons } from "@/components/zoom-buttons"
 import { BUILDER, MESSAGES } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { useBuilderStore } from "./builder-store"
@@ -7,13 +8,15 @@ import { PhotoReference } from "./photo-reference"
 import { wallName } from "./room-outline"
 import { blockingItem } from "./scene-3d"
 import { usePlanScene } from "./use-plan-scene"
+import { useViewZoom } from "./use-view-zoom"
 import { ViewChoice } from "./view-choice"
 
 /**
  * The room in 3D, from where the photo will be taken: the middle of the wall opposite the one in view, at a
  * photographer's height. Clicking a wall turns the view to look at it (the camera moves to the opposite wall); the
  * buttons below do the same. It is redrawn as the plan changes, and it is exactly the picture Generate sends to the
- * image model (but in the Ceiling tab, which tilts it up to show the ceiling and its light).
+ * image model (but in the Ceiling tab, which tilts it up to show the ceiling and its light). It zooms (the wheel, a
+ * pinch or the buttons) and pans by dragging once zoomed, which doesn't change the photo.
  * @param props.plan - The room.
  * @param props.tilt - How far to tilt the view up, in degrees; 0 (the photo's view) when missing.
  */
@@ -24,6 +27,26 @@ export function View3d({ plan, tilt = 0 }: { plan: Plan; tilt?: number }) {
   const { canvasRef, sceneRef, failed } = usePlanScene()
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hover, setHover] = useState(false)
+  const pictureRef = useRef<HTMLCanvasElement | null>(null)
+  // Another view, corner or tab starts whole.
+  const zoom = useViewZoom({ x: 0, y: 0, width: size.width, height: size.height }, pictureRef, `${plan.id}-${plan.view}-${plan.corner}-${tilt}`)
+  // Whether the last pointer on the picture dragged it (then its click doesn't turn the view).
+  const dragged = useRef(false)
+  // The scene's renderer and this component both need the canvas.
+  const attach = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      pictureRef.current = canvas
+      canvasRef(canvas)
+    },
+    [canvasRef]
+  )
+  const { frame } = zoom
+  const crop = useMemo(
+    () => (size.width > 0 ? { x: frame.x / size.width, y: frame.y / size.height, width: frame.width / size.width, height: frame.height / size.height } : undefined),
+    [frame.x, frame.y, frame.width, frame.height, size]
+  )
+  // What was last built, so a zoom alone only frames the picture again.
+  const drawn = useRef<{ plan: Plan; size: typeof size; tilt: number } | null>(null)
 
   // Measured before the first paint, so the room shows at once rather than a frame later, then again on every resize.
   useLayoutEffect(() => {
@@ -56,10 +79,22 @@ export function View3d({ plan, tilt = 0 }: { plan: Plan; tilt?: number }) {
   }, [])
 
   useLayoutEffect(() => {
-    if (sceneRef.current && size.width > 0) {
-      sceneRef.current.render(plan, size.width, size.height, undefined, tilt)
+    const scene = sceneRef.current
+    const last = drawn.current
+
+    if (!scene || !crop) {
+      return
     }
-  }, [plan, size, sceneRef, tilt])
+
+    if (last && last.plan === plan && last.size === size && last.tilt === tilt) {
+      scene.reframe(crop)
+
+      return
+    }
+
+    scene.render(plan, size.width, size.height, undefined, tilt, crop)
+    drawn.current = { plan, size, tilt }
+  }, [plan, size, sceneRef, tilt, crop])
 
   // Whether something blocks the view (a cabinet in the corner the photo is taken from), checked once the room stops
   // changing, as each check draws the room again.
@@ -97,29 +132,38 @@ export function View3d({ plan, tilt = 0 }: { plan: Plan; tilt?: number }) {
       {failed ? (
         <p className="text-sm text-muted-foreground">{MESSAGES.guideFailed}</p>
       ) : (
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={`The room in 3D, looking at the ${wallName(plan, plan.view).toLowerCase()}, as the photo will see it. Click a wall to look at it.`}
-          data-view-3d
-          data-view={plan.view}
-          data-corner={plan.corner}
-          className="rounded-xl"
-          style={{ width: size.width, height: size.height, cursor: hover ? "pointer" : "default" }}
-          onMouseMove={(event) => {
-            const wall = wallUnder(event)
+        <div className="relative">
+          <canvas
+            ref={attach}
+            role="img"
+            aria-label={`The room in 3D, looking at the ${wallName(plan, plan.view).toLowerCase()}, as the photo will see it. Click a wall to look at it.`}
+            data-view-3d
+            data-view={plan.view}
+            data-corner={plan.corner}
+            className="touch-none rounded-xl"
+            style={{ width: size.width, height: size.height, cursor: hover ? "pointer" : zoom.scale > 1 ? "grab" : "default" }}
+            onPointerDown={zoom.down}
+            onPointerMove={zoom.move}
+            onPointerUp={(event) => {
+              dragged.current = zoom.up(event) === "drag"
+            }}
+            onPointerCancel={zoom.up}
+            onMouseMove={(event) => {
+              const wall = wallUnder(event)
 
-            setHover(wall !== null && wall !== plan.view)
-          }}
-          onMouseLeave={() => setHover(false)}
-          onClick={(event) => {
-            const wall = wallUnder(event)
+              setHover(wall !== null && wall !== plan.view)
+            }}
+            onMouseLeave={() => setHover(false)}
+            onClick={(event) => {
+              const wall = wallUnder(event)
 
-            if (wall !== null && wall !== plan.view) {
-              setRoom({ view: wall })
-            }
-          }}
-        />
+              if (!dragged.current && wall !== null && wall !== plan.view) {
+                setRoom({ view: wall })
+              }
+            }}
+          />
+          <ZoomButtons zoom={zoom.scale} onStep={zoom.step} onFit={zoom.fit} fitLabel="Show the whole view" />
+        </div>
       )}
       {/* The choices and the blocked-view note, measured together to size the picture above them. */}
       <div ref={controlsRef} className="flex flex-col items-center gap-3">
