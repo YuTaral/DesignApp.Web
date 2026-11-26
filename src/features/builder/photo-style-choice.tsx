@@ -2,6 +2,7 @@ import { useState } from "react"
 import { cn } from "cn"
 
 import { PHOTO_STYLE, PHOTO_STYLE_NAMES, type PhotoStyle } from "@/lib/constants"
+import { Collapse } from "./collapse"
 import { FoldToggle } from "./fold-toggle"
 
 /**
@@ -14,15 +15,15 @@ export function PhotoStyleChoice({ value, onPick }: { value: PhotoStyle; onPick:
   const [open, setOpen] = useState(false)
 
   return (
-    <section className="space-y-2" aria-label="Style">
+    <section aria-label="Style">
       <FoldToggle open={open} controls="photo-styles" onToggle={() => setOpen(!open)} className="text-sm" data-style-toggle>
         <span>
           <span className="font-medium">Style</span>
           <span className="text-muted-foreground">: {PHOTO_STYLE_NAMES[value].name}</span>
         </span>
       </FoldToggle>
-      {open && (
-        <div id="photo-styles" role="radiogroup" aria-label="Style" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <Collapse open={open} id="photo-styles">
+        <div role="radiogroup" aria-label="Style" className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-3">
           {Object.values(PHOTO_STYLE).map((style) => (
             <button
               key={style}
@@ -41,7 +42,7 @@ export function PhotoStyleChoice({ value, onPick }: { value: PhotoStyle; onPick:
             </button>
           ))}
         </div>
-      )}
+      </Collapse>
     </section>
   )
 }

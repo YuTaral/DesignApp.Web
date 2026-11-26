@@ -272,14 +272,26 @@ export const ROOM_TYPE_NAMES: Record<RoomType, string> = {
 /**
  * How a built room's object is drawn in 3D (Domain Constants.ItemShape). Windows and doors are in a wall; a Picture
  * (paintings, mirrors, a wall TV) and a WallBox (upper cabinets, shelves, a hood) hang on one. A FloorZone and a
- * WallZone are areas of the floor or a wall in their own material and color: surfaces, not furniture.
+ * WallZone are areas of the floor or a wall in their own material and color: surfaces, not furniture. The ceiling
+ * lights (a pendant, spotlights, a chandelier, a flush ceiling lamp, a track) hang from the ceiling over the plan, their
+ * height being how far down they reach.
  */
 export const ITEM_SHAPE = {
   Box: "Box", Rounded: "Rounded", Cylinder: "Cylinder", Sofa: "Sofa", Bed: "Bed",
   Table: "Table", Chair: "Chair", Rug: "Rug", Plant: "Plant", Lamp: "Lamp",
   Window: "Window", Door: "Door", Picture: "Picture", WallBox: "WallBox",
   FloorZone: "FloorZone", WallZone: "WallZone",
+  PendantLight: "PendantLight", Spotlight: "Spotlight", Chandelier: "Chandelier", CeilingLamp: "CeilingLamp", TrackLight: "TrackLight",
 } as const
+
+/** The ceiling lights the Ceiling tab adds, each its catalog object and its name there, in that order. */
+export const CEILING_LIGHTS = [
+  { shape: ITEM_SHAPE.PendantLight, key: "pendant-light", name: "Pendant" },
+  { shape: ITEM_SHAPE.Spotlight, key: "spotlights", name: "Spotlights" },
+  { shape: ITEM_SHAPE.Chandelier, key: "chandelier", name: "Chandelier" },
+  { shape: ITEM_SHAPE.CeilingLamp, key: "ceiling-lamp", name: "Flush lamp" },
+  { shape: ITEM_SHAPE.TrackLight, key: "track-light", name: "Track" },
+] as const
 
 /**
  * Areas of the floor or a wall in their own material and color. A new one starts in a material other than the room's,
@@ -483,17 +495,20 @@ export const WALL_FINISH_NAMES: Record<WallFinish, string> = {
   Paint: "Paint", Wallpaper: "Wallpaper", Plaster: "Limewash", Brick: "Brick", WoodPanelling: "Wood panels", Tiles: "Tiles", Concrete: "Concrete",
 }
 
-/** The light on a built room's ceiling (Domain Constants.CeilingLight). */
-export const CEILING_LIGHT = {
-  None: "None", Pendant: "Pendant", Spotlights: "Spotlights", Chandelier: "Chandelier", FlushLight: "FlushLight", TrackLights: "TrackLights",
-} as const
+/** The color of a built room's lamps' and ceiling lights' light (Domain Constants.LightTone). */
+export const LIGHT_TONE = { Warm: "Warm", Neutral: "Neutral", Cool: "Cool" } as const
 
-export type CeilingLight = (typeof CEILING_LIGHT)[keyof typeof CEILING_LIGHT]
+export type LightTone = (typeof LIGHT_TONE)[keyof typeof LIGHT_TONE]
 
-/** The ceiling lights' names as the user reads them. */
-export const CEILING_LIGHT_NAMES: Record<CeilingLight, string> = {
-  None: "None", Pendant: "Pendant", Spotlights: "Spotlights", Chandelier: "Chandelier", FlushLight: "Flush light", TrackLights: "Track lights",
+/** The light colors' names and what each looks like, as the user reads them. */
+export const LIGHT_TONE_NAMES: Record<LightTone, { name: string; looks: string }> = {
+  Warm: { name: "Warm", looks: "Warm white, cosy (2700 K)" },
+  Neutral: { name: "Neutral", looks: "Neutral white (4000 K)" },
+  Cool: { name: "Cool", looks: "Cool, daylight white (5500 K)" },
 }
+
+/** The sides of the plan, as where north is: the plan's top, right, bottom or left (the Domain's PlanWall). */
+export const NORTH_NAMES: Record<PlanSide, string> = { Back: "Top", Right: "Right", Front: "Bottom", Left: "Left" }
 
 /** When a built room's photo is taken, which sets its light and mood (Domain Constants.TimeOfDay). */
 export const TIME_OF_DAY = { Morning: "Morning", Midday: "Midday", GoldenHour: "GoldenHour", Evening: "Evening" } as const
@@ -505,7 +520,7 @@ export const TIME_OF_DAY_NAMES: Record<TimeOfDay, { name: string; looks: string 
   Morning: { name: "Morning", looks: "Soft, cool daylight" },
   Midday: { name: "Midday", looks: "Bright, even daylight" },
   GoldenHour: { name: "Golden hour", looks: "Warm, low sun and long shadows" },
-  Evening: { name: "Evening", looks: "Dark outside, the lamps on" },
+  Evening: { name: "Evening", looks: "Dark outside: the lights that are on light the room" },
 }
 
 /**
@@ -609,6 +624,8 @@ export const BUILDER = {
   /** The smallest part of an L- or P-shaped object (its run, leg or chaise), in cm (Domain Constants.Plans.MinPartCentimetres). */
   minPart: 20,
   autosaveMs: 800,
+  /** How long a section takes to open or close (its height and fade), in ms; the Collapse classes' duration-200 matches it. */
+  foldMs: 200,
   /** How long a failed save waits before it is tried again, in ms. */
   saveRetryMs: 4000,
   guide: { width: 1024, height: 768 },
@@ -658,7 +675,7 @@ export const BUILDER = {
       Morning: { sun: "#EAF2FF", sunPower: 1.2, sky: 1.8, ambient: 0.5 },
       Midday: { sun: "#FFFFFF", sunPower: 1.3, sky: 1.9, ambient: 0.5 },
       GoldenHour: { sun: "#FFC48A", sunPower: 1.6, sky: 1.5, ambient: 0.45 },
-      Evening: { sun: "#FFB877", sunPower: 0.4, sky: 0.9, ambient: 0.35 },
+      Evening: { sun: "#9DB4D6", sunPower: 0.15, sky: 0.45, ambient: 0.22 },
     } satisfies Record<TimeOfDay, { sun: string; sunPower: number; sky: number; ambient: number }>,
     /**
      * A painting's stand-in face: one plain mid tone, so the painting stands out from the wall without giving the image
@@ -687,14 +704,37 @@ export const BUILDER = {
     worktop: { thickness: 0.04, overhang: 0.02, upstand: 0.1, splash: 0.6, belowSill: 0.02, behind: 0.25, against: 0.1 },
     /** How far the Ceiling tab tilts the 3D view up from the photo's, in degrees, so the ceiling and its light show. */
     ceilingTilt: 32,
+    /**
+     * Lights in 3D, in metres. A ceiling light's model is sized by the object: a pendant's shade is its width across and
+     * at most `shadeShare` of its drop; a chandelier's ring a share of its width; a track's rail and heads, and a recessed
+     * spotlight's disc, are fixed. A light that is on glows in the room's light color (`tones`) and lights the room: one
+     * point light each, up to `cap` (more only glow), as strong as `ceiling`, `lamp` or `strip` (cabinets lit beneath)
+     * and reaching as far; one with many spotlights or heads is stronger, at most `most` times. Off, its bulb or shade
+     * glows just `off`.
+     * `clear` keeps a light added in a room's middle that far (cm) inside its walls.
+     */
     lights: {
-      shade: "#F4F1EA", metal: "#3A3A3A", glow: "#FFF1CC", clear: 60,
-      pendant: { drop: 0.55, cord: 0.006, radius: 0.2, height: 0.22 },
-      chandelier: { drop: 0.6, ring: 0.32, arms: 6, candle: 0.04 },
-      flush: { radius: 0.22, depth: 0.06 },
-      spots: { radius: 0.045, spacing: 1.2, margin: 0.5 },
-      track: { length: 1.6, rail: 0.03, spots: 4, can: 0.05 },
+      shade: "#F4F1EA", metal: "#3A3A3A", clear: 60,
+      /** How far apart, in cm, the Ceiling tab puts a new light from the room's others (the nearest free spot to the middle). */
+      apart: 60,
+      pendant: { cord: 0.006, shadeShare: 0.45 },
+      chandelier: { ringShare: 0.4, arms: 6, candle: 0.04 },
+      spot: { radius: 0.045 },
+      track: { rail: 0.03, can: 0.05 },
+      tones: { Warm: "#FFD6A8", Neutral: "#FFF0DE", Cool: "#EDF3FF" },
+      cap: 12,
+      glow: 0.9, off: 0.12,
+      ceiling: { intensity: 1.6, distance: 7, most: 2.5 },
+      lamp: { intensity: 1.2, distance: 5 },
+      strip: { intensity: 0.6, distance: 2 },
+      /** How far above a piece of furniture its table lamp's glow sits, how big it is, and its light against a floor lamp's. */
+      tableLamp: { above: 0.3, radius: 0.06, share: 0.45 },
     },
+    /**
+     * The sun: how far out it stands beyond the room (shares of the room's size) and how high, low in the morning and at
+     * golden hour, high at midday; in the evening only a faint, cool light from outside.
+     */
+    sun: { out: 2.5, low: 0.9, high: 3.2, night: "#9DB4D6" },
     eyeHeight: 1.45, inset: 0.05, minFov: 80, maxFov: 100, fitDepthShare: 0.5, lensShift: 0.28,
     /**
      * A corner camera's fixed horizontal view and how far it is turned from looking straight at the wall in view, in
@@ -752,6 +792,15 @@ export const BUILDER = {
     "#FFFFFF", "#FAFAF7", "#F4F1EA", "#EFE6CF", "#E8DCC8", "#E8E2D6", "#D8C3A5", "#C8C8C8",
     "#A8B89A", "#9DB4C0", "#4A6274", "#2E4057", "#8A8580", "#5A5A5A", "#3A3A3A", "#1E1E1E",
   ],
+  /**
+   * Lights (Domain Constants.Plans): what names something that gives light (a wall sconce, a table lamp, under-cabinet
+   * lights), and how far apart spotlights in a row or grid and a track's spot heads are, in cm.
+   */
+  lightWords: /\b(lamps?|lights?|sconces?|chandeliers?|lanterns?)\b/i,
+  spotSpacing: 120,
+  trackHeadSpacing: 50,
+  /** A ceiling light's mark on the plan, in cm: its bulbs' and spots' size, and its colors (a warm yellow). */
+  lightMark: { bulb: 7, spot: 5, dot: 1.6, fill: "#FFE6A3", stroke: "#B7791F" },
   /** How many steps the room builder can undo. */
   /** How many built rooms My designs lists before Show all. */
   plansShown: 8,

@@ -2,6 +2,7 @@ import { create } from "zustand"
 
 import { BACKSPLASH, BUILDER, ITEM_FORM, ITEM_SHAPE, WORKTOP, WORKTOP_SPOT, ZONE } from "@/lib/constants"
 import type { CatalogObject, CatalogVariant, ItemParts, Plan, PlanItem } from "./api"
+import { isCeilingLight } from "./lights"
 import { extent, fitInside, fromWall, isValidOutline, nearestWall, normalize, rectangle, stretch, wallLength, wallPoint, walls, type Reshaped } from "./room-outline"
 
 /** What the room settings change: its name, walls, colors, floor and view. */
@@ -528,7 +529,8 @@ export function overlaps(a: PlanItem, b: PlanItem) {
       && a.elevation < b.elevation + b.height - 1 && b.elevation < a.elevation + a.height - 1
   }
 
-  if (a.shape === ITEM_SHAPE.Rug || b.shape === ITEM_SHAPE.Rug || isWallItem(a) || isWallItem(b)) {
+  // A rug lies under things, and a ceiling light hangs over them.
+  if (a.shape === ITEM_SHAPE.Rug || b.shape === ITEM_SHAPE.Rug || isCeilingLight(a.shape) || isCeilingLight(b.shape) || isWallItem(a) || isWallItem(b)) {
     return false
   }
 

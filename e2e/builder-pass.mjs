@@ -115,12 +115,13 @@ try {
   await page.click('[data-list-empty=objects] [data-clear-search]')
   const afterClear = await listed()
 
-  step('The plan opens with the living room\u2019s objects only (no windows or things to hang), ten at a time, and a search',
-    planSections === 'objects' && firstPage.length === 10 && firstPage.includes('sofa') && !firstPage.includes('window')
-      && secondPage.length === 18 && moreLeft === null && lamps.join() === 'floor-lamp' && outline[1] === '200px' && floorType === 'Tiles',
+  // The room's objects ten at a time, then the five ceiling lights.
+  step('The plan opens with the living room\u2019s objects (no windows or things to hang), ten at a time, then the ceiling lights, and a search',
+    planSections === 'objects,ceiling' && firstPage.length === 15 && firstPage.includes('sofa') && !firstPage.includes('window') && firstPage.includes('pendant-light')
+      && secondPage.length === 23 && moreLeft === null && lamps.join() === 'floor-lamp,ceiling-lamp' && outline[1] === '200px' && floorType === 'Tiles',
     `${planSections}: ${firstPage.length} then ${secondPage.length}, lamps ${lamps}, outline ${outline}, floor ${floorType}`)
   step('A search that empties a list says so and clears with one click (or the box’s ×)',
-    cleared === '' && emptyText.startsWith('No objects match “zzz”') && afterClear.length === 10, `${emptyText} | ${afterClear.length} after clearing`)
+    cleared === '' && emptyText.startsWith('No objects match “zzz”') && afterClear.length === 15, `${emptyText} | ${afterClear.length} after clearing`)
 
   // 1b. A furnished room (the default): a 4 × 4 m bedroom gets a door, windows on the back wall and a bed with two
   //     nightstands, all inside the walls.
@@ -268,7 +269,8 @@ try {
   //     run by its handle on the plan, the chaise in the inspector. Choosing its first type in the inspector makes it a
   //     three-seat sofa where it stands. Then it is deleted, so the room is as before.
   await page.click('[data-catalog-section=objects] [data-section-toggle]')
-  const collapsed = await page.evaluate(() => !document.querySelector('[data-catalog="sofa"]'))
+  // It slides shut, then its objects leave the page.
+  const collapsed = await page.waitForFunction(() => !document.querySelector('[data-catalog="sofa"]'), { timeout: 3000 }).then(() => true, () => false)
 
   await page.click('[data-catalog-section=objects] [data-section-toggle]')
   await page.waitForSelector('[data-catalog="sofa"]')
@@ -354,8 +356,7 @@ try {
   await frame()
   await saved()
 
-  // 7c. On the plan, windows, doors and hung things aren't listed (they go on a wall seen straight on): a hint says how
-  //     to open a wall. Clicking the back wall on the plan opens it in the Wall tab, which lists them (and not the room's
+  // 7c. On the plan, windows, doors and hung things aren't listed (they go on a wall seen straight on). Clicking the back wall on the plan opens it in the Wall tab, which lists them (and not the room's
   //     objects), and they work.
   await page.click('[role=tab]::-p-text(Plan)')
   await page.waitForSelector('[data-plan-canvas]')
@@ -363,7 +364,6 @@ try {
     window: document.querySelector('[data-catalog="window"]')?.disabled,
     painting: document.querySelector('[data-catalog="painting"]')?.disabled,
     sofa: document.querySelector('[data-catalog="sofa"]')?.disabled,
-    hints: document.querySelectorAll('[data-open-wall-hint]').length,
   }))
 
   await page.click('[data-plan-wall="0"]')
@@ -371,13 +371,12 @@ try {
   const onInWall = await page.evaluate(() => ({
     window: document.querySelector('[data-catalog="window"]')?.disabled,
     sofa: document.querySelector('[data-catalog="sofa"]')?.disabled,
-    hints: document.querySelectorAll('[data-open-wall-hint]').length,
     hangable: [...document.querySelectorAll('[data-catalog-section=mounted] [data-catalog]')].map((b) => b.dataset.catalog),
   }))
 
-  step('On the plan, windows, doors and hung things aren\u2019t listed but a hint is; clicking a wall opens it in the Wall tab, which lists them only',
-    offOnPlan.window === undefined && offOnPlan.painting === undefined && offOnPlan.sofa === false && offOnPlan.hints === 1
-      && onInWall.window === false && onInWall.sofa === undefined && onInWall.hints === 0
+  step('On the plan, windows, doors and hung things aren\u2019t listed; clicking a wall opens it in the Wall tab, which lists them only',
+    offOnPlan.window === undefined && offOnPlan.painting === undefined && offOnPlan.sofa === false
+      && onInWall.window === false && onInWall.sofa === undefined
       && onInWall.hangable.slice(0, 3).join() === 'painting,mirror,wall-shelf' && onInWall.hangable.includes('radiator') && (await stored()).view === 0,
     JSON.stringify({ offOnPlan, onInWall }))
 
@@ -646,7 +645,7 @@ try {
 
   await shot('builder-finish')
   step('Brick on all walls, plaster on one of its own and the evening each redraw the 3D view, and are saved',
-    startsOn === 'all' && closedHeading === 'Light & mood: Midday' && new Set([backPicture, brickPicture, accentPicture, eveningPicture]).size === 4
+    startsOn === 'all' && closedHeading === 'Light & mood: Midday, warm light' && new Set([backPicture, brickPicture, accentPicture, eveningPicture]).size === 4
       && finish.walls === 'Brick' && finish.ownWalls.length === 1 && finish.ownWalls[0].wall === 3 && finish.ownWalls[0].finish === 'Plaster'
       && finish.timeOfDay === 'Evening',
     `starts on ${startsOn}, ${closedHeading} | ${JSON.stringify(finish)}`)
@@ -804,6 +803,7 @@ try {
   await page.click('[data-view-pick="0:Left"]')
   await page.click('[data-style-toggle]')
   await page.waitForSelector('[data-photo-style=Boho]')
+  await sleep(300) // the list slides open (its cards move until then)
   await page.click('[data-photo-style=Boho]')
   const noDecorateChoice = await page.evaluate(() => !document.querySelector('[data-generate-dialog] [data-decorate]'))
 
@@ -1032,6 +1032,110 @@ try {
     drawn.coverings.length === backWindows && drawn.coverings.every((kind) => kind === 'RollerBlind') && drawn.worktops > 0 && drawn.backsplashes.includes('Upstand')
       && beforeKitchen !== String(upper) && withToggle === String(upper),
     JSON.stringify({ drawn, backWindows, upper, beforeKitchen, withToggle }))
+
+  // 15. Lighting: the kitchen starts with spotlights and two pendants over its island, marked on the plan. The Ceiling
+  //     tab adds a light (its panel: its drop and an On switch, kept when switched); in the evening the lights that are
+  //     on light the 3D view, which is darker with them off.
+  const ceilingShapes = ['PendantLight', 'Spotlight', 'Chandelier', 'CeilingLamp', 'TrackLight']
+  const startingLights = kitchenPlan.items.filter((item) => ceilingShapes.includes(item.shape)).map((item) => item.shape)
+
+  await page.click('[role=tab]::-p-text(Plan)')
+  await page.waitForSelector('[data-light-mark]')
+  const lightMarks = await page.$$eval('[data-light-mark]', (marks) => marks.length)
+
+  await page.click('[role=tab]::-p-text(Ceiling)')
+  await page.waitForSelector('[data-ceiling-lights]')
+  await page.click('[data-add-ceiling-light="Chandelier"]')
+  await page.waitForSelector('[data-light-switch]')
+  const lightPanel = await page.evaluate(() => ({
+    drop: !!document.querySelector('input[aria-label="Drop"]'),
+    switch: document.querySelector('[data-light-switch]')?.dataset.lightSwitch,
+    decorations: !!document.querySelector('[data-inspector-item] [data-decoration]'),
+  }))
+
+  await page.click('[data-light="on"]')
+  const switchedOn = await storedOnce((plan) => plan.items.some((item) => item.shape === 'Chandelier' && item.lit === true))
+  const brightness = () => page.$eval('[data-view-3d]', (canvas) => {
+    const copy = document.createElement('canvas')
+
+    copy.width = canvas.width
+    copy.height = canvas.height
+    const g = copy.getContext('2d')
+
+    g.drawImage(canvas, 0, 0)
+    const { data } = g.getImageData(0, 0, copy.width, copy.height)
+    let sum = 0
+
+    for (let i = 0; i < data.length; i += 4 * 61) {
+      sum += data[i] + data[i + 1] + data[i + 2]
+    }
+
+    return sum / (data.length / (4 * 61)) / 3
+  })
+  const evening = async (lit) => {
+    const plan = await stored()
+
+    await page.evaluate(async (plan) => {
+      await fetch(`/api/plans/${plan.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan) })
+    }, { ...plan, finish: { ...plan.finish, timeOfDay: 'Evening' }, items: plan.items.map((item) => (ceilingShapes.includes(item.shape) ? { ...item, lit } : item)) })
+    await page.goto(`${WEB}/build/${kitchenId}`, { waitUntil: 'networkidle0' })
+    await page.click('[role=tab]::-p-text(3D view)')
+    await page.waitForSelector('[data-view-3d]')
+    await sleep(900)
+
+    return brightness()
+  }
+  const lightsOn = await evening(true)
+
+  await shot('builder-evening-lights')
+  const lightsOff = await evening(false)
+
+  step('A new kitchen starts with spotlights and pendants over its island; the Ceiling tab adds a light with a drop and an On switch; lit, the lights brighten the evening',
+    startingLights.includes('Spotlight') && startingLights.filter((shape) => shape === 'PendantLight').length === 2 && lightMarks === startingLights.length
+      && lightPanel.drop && lightPanel.switch === 'off' && !lightPanel.decorations && switchedOn.items.some((item) => item.shape === 'Chandelier') && lightsOn > lightsOff + 15,
+    JSON.stringify({ startingLights, lightMarks, lightPanel, lightsOn: Math.round(lightsOn), lightsOff: Math.round(lightsOff) }))
+
+  // 16. A first visit: every section on the left and right starts closed. The blue "i" by the tabs says how the view
+  //     shown works, on hover and on a tap.
+  const seeded = await page.evaluate(() => {
+    const value = localStorage.getItem('designapp.builder.collapsed')
+
+    // Nothing opened or closed yet (an empty record, which the launcher's seeding leaves alone).
+    localStorage.setItem('designapp.builder.collapsed', '{}')
+
+    return value
+  })
+  const hintText = async () => {
+    await page.waitForSelector('[data-view-hint-text]', { timeout: 5000 })
+
+    return page.$eval('[data-view-hint-text]', (el) => el.textContent.trim())
+  }
+
+  await page.goto(`${WEB}/build/${kitchenId}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-plan-canvas]')
+  const toggles = await page.$$eval('[data-section-toggle]', (all) => all.map((el) => el.getAttribute('aria-expanded')))
+  const roomHintGone = await page.evaluate(() => !document.querySelector('[data-inspector-room]')?.textContent.includes('Drag objects from the left'))
+
+  await page.click('[role=tab]::-p-text(Wall)')
+  await page.waitForSelector('[data-view-hint=wall]')
+  await page.hover('[data-view-hint]')
+  const wallHint = await hintText()
+  const hintColor = await page.$eval('[data-view-hint]', (el) => getComputedStyle(el).color)
+
+  await shot('builder-view-hint')
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !document.querySelector('[data-view-hint-text]'), { timeout: 5000 })
+  await page.click('[role=tab]::-p-text(3D view)')
+  await page.click('[data-view-hint]')
+  const tappedHint = await hintText()
+
+  await page.evaluate((value) => {
+    localStorage.setItem('designapp.builder.collapsed', value)
+  }, seeded)
+  step('On a first visit every section starts closed; the blue "i" by the tabs tells how the view shown works, on hover and on a tap',
+    toggles.length > 3 && toggles.every((open) => open === 'false') && roomHintGone && wallHint.startsWith('Click a window, door or hung thing')
+      && /oklch\([\d.]+ [\d.]+ 2[56]\d/.test(hintColor) && tappedHint.startsWith('The room as the photo sees it'),
+    JSON.stringify({ toggles: toggles.length, closed: toggles.every((open) => open === 'false'), roomHintGone, wallHint: wallHint.slice(0, 30), hintColor, tappedHint: tappedHint.slice(0, 30) }))
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('builder-stopped').catch(() => {})

@@ -1,21 +1,25 @@
-import { MousePointerClickIcon, PlusIcon, RotateCwIcon, SquareIcon, Trash2Icon } from "lucide-react"
+import { PlusIcon, RotateCwIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BUILDER, ITEM_FORM, ITEM_SHAPE, LEG_SIDE, ROOM_TYPE_NAMES, SWATCHES, type FloorType, type LegSide, type WallFinish } from "@/lib/constants"
+import { BUILDER, COVERING_KIND_NAMES, FLOOR_TYPE_NAMES, ITEM_FORM, ITEM_SHAPE, LEG_SIDE, ROOM_TYPE_NAMES, SWATCHES, type FloorType, type LegSide, type WallFinish } from "@/lib/constants"
 import { useCatalog, type Plan } from "./api"
 import { ChoiceChips, type Chip } from "./choice-chips"
 import { CoveringFields } from "./covering-fields"
+import { CeilingLightList } from "./ceiling-lights"
+import { isCeilingLight } from "./lights"
+import { LightSwitch } from "./light-switch"
 import { WorktopFields } from "./worktop-fields"
 import { DecorationChoice } from "./decoration-choice"
 import { ColorChoice, NumberField } from "./fields"
 import { FINISH_CHIPS } from "./finish-chips"
 import { FinishFields } from "./finish-fields"
 import { MaterialChips } from "./material-chips"
+import { PanelSection } from "./panel-section"
 import { hasParts, isMountedShape, isWallItem, isZoneShape, partsOf, toVariation, useBuilderStore, variationOf } from "./builder-store"
-import { wallLength } from "./room-outline"
+import { wallLength, wallName } from "./room-outline"
 import { FloorChoice, FloorColorChoice } from "./floor-choice"
 import { WallChoice } from "./wall-choice"
 
@@ -32,17 +36,8 @@ const ROOM_SECTIONS: Record<InspectorFocus, { name: boolean; walls: boolean; cei
   plan: { name: true, walls: false, ceiling: false, floor: true, light: true },
   shape: { name: false, walls: false, ceiling: false, floor: false, light: false },
   wall: { name: false, walls: true, ceiling: false, floor: false, light: false },
-  ceiling: { name: false, walls: false, ceiling: true, floor: false, light: false },
+  ceiling: { name: false, walls: false, ceiling: true, floor: false, light: true },
   "3d": { name: true, walls: true, ceiling: false, floor: true, light: true },
-}
-
-/** The hint above the room's settings, for each view. */
-const ROOM_HINTS: Record<InspectorFocus, string> = {
-  plan: "Click an object on the plan to change it. Drag objects from the left to add them. Click a wall to open it, add windows, doors and things to hang, and look at it in the photo. Ctrl+C and Ctrl+V copy an object, Delete removes it.",
-  shape: "Drag a wall to push or pull it, or a corner to move the two walls that meet there. Done shaping goes back to the objects.",
-  wall: "Click a window, door or hung thing to change it. Drag them from the left onto the wall. Each wall can have its own finish and color, and areas in another. Ctrl+C and Ctrl+V copy one, Delete removes it.",
-  ceiling: "The ceiling's color and its light. The 3D view shows them as the photo will.",
-  "3d": "The room as the photo sees it. Pick the wall and the camera's place under the view; the room's walls, floor and light are here.",
 }
 
 /**
@@ -78,9 +73,10 @@ export function Inspector({
 }
 
 /**
- * The selected window's, door's or hung object's settings: its wall, its exact place (from the wall's left corner, and
- * a window's or hung object's height above the floor), its size (and how far a hung object sticks out) and color; and
- * adding a wall area on its wall, as the room's settings offer with nothing selected.
+ * The selected window's, door's or hung object's settings, in sections that open and close: its type; its look (its
+ * material and color, or an area's finish); its decorations; a window's curtains or blinds; a light's switch; its wall
+ * and exact place (from the wall's left corner, and a window's or hung object's height above the floor); its size (and
+ * how far a hung object sticks out). Below them, adding a wall area on its wall, and deleting it.
  * @param props.plan - The room.
  * @param props.index - Its position in the plan's objects.
  */
@@ -95,14 +91,27 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
 
   return (
     <div className="space-y-5" data-inspector-item={index} data-inspector-opening>
-      <ItemBasics plan={plan} index={index} />
-      {isWindow && <CoveringFields covering={item.covering ?? null} onChange={(covering) => update(index, { covering })} />}
-      <div className="space-y-2">
-        <p className="text-sm font-medium">On the wall</p>
+      <ItemType plan={plan} index={index} />
+      <PanelSection name="settings-look" title="Look">
+        {zone ? <ZoneLook plan={plan} index={index} /> : <MaterialChoice plan={plan} index={index} />}
+        {!zone && (
+          <ColorChoice
+            label={hung ? "Color" : isWindow ? "Frame" : "Door"}
+            value={item.color}
+            colors={hung ? SWATCHES : BUILDER.frameColors}
+            onPick={(color) => update(index, { color })}
+          />
+        )}
+      </PanelSection>
+      {!zone && <ItemDecorations plan={plan} index={index} />}
+      {isWindow && (
+        <PanelSection name="settings-covering" title="Curtains & blinds" summary={item.covering ? COVERING_KIND_NAMES[item.covering.kind] : "none"}>
+          <CoveringFields covering={item.covering ?? null} onChange={(covering) => update(index, { covering })} />
+        </PanelSection>
+      )}
+      <LightSwitch plan={plan} index={index} />
+      <PanelSection name="settings-place" title="Place" summary={wallName(plan, wall)}>
         <WallChoice plan={plan} value={wall} label="Wall" onPick={(next) => update(index, { wall: next, x: Math.min(item.x, wallLength(plan, next) - item.width / 2) })} />
-      </div>
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Place (cm)</legend>
         <div className="grid grid-cols-2 gap-2">
           <NumberField
             label="From left corner"
@@ -121,23 +130,15 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
             />
           )}
         </div>
-      </fieldset>
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Size (cm)</legend>
+        <p className="text-xs text-muted-foreground">In cm, from the wall's left corner{isWindow || hung || zone ? " and up from the floor" : ""}.</p>
+      </PanelSection>
+      <PanelSection name="settings-size" title="Size" summary={`${Math.round(item.width)} × ${Math.round(item.height)} cm`}>
         <div className={cn("grid gap-2", hung ? "grid-cols-3" : "grid-cols-2")}>
           <NumberField label="Width" value={item.width} min={BUILDER.item.min} max={Math.round(length)} onCommit={(width) => update(index, { width })} />
           <NumberField label="Height" value={item.height} min={BUILDER.item.min} max={Math.round(ceiling)} onCommit={(height) => update(index, { height })} />
           {hung && <NumberField label="Sticks out" value={item.depth} min={BUILDER.item.min} max={BUILDER.maxMountedDepth} onCommit={(depth) => update(index, { depth })} />}
         </div>
-      </fieldset>
-      {!zone && (
-        <ColorChoice
-          label={hung ? "Color" : isWindow ? "Frame" : "Door"}
-          value={item.color}
-          colors={hung ? SWATCHES : BUILDER.frameColors}
-          onPick={(color) => update(index, { color })}
-        />
-      )}
+      </PanelSection>
       <div className="grid grid-cols-2 gap-2">
         <Button variant="outline" onClick={() => addZone("wall", wall)} data-add-wall-zone>
           <PlusIcon data-icon="inline-start" />
@@ -153,30 +154,22 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
 }
 
 /**
- * What every object's settings start with: its name, its variation, its material and its decorations.
+ * What every object's settings start with, in the "Type" section: its name and its variation (an area has none).
  * @param props.plan - The room.
  * @param props.index - The object's position in the plan's objects.
  */
-function ItemBasics({ plan, index }: { plan: Plan; index: number }) {
+function ItemType({ plan, index }: { plan: Plan; index: number }) {
   const update = useBuilderStore((state) => state.update)
   const item = plan.items[index]
 
   return (
-    <>
+    <PanelSection name="settings-type" title="Type">
       <div className="space-y-1.5">
         <Label htmlFor="item-label">Name</Label>
         <Input id="item-label" value={item.label} maxLength={BUILDER.labelLength} onChange={(event) => update(index, { label: event.target.value })} />
       </div>
-      {isZoneShape(item.shape) ? (
-        <ZoneLook plan={plan} index={index} />
-      ) : (
-        <>
-          <VariationChoice plan={plan} index={index} />
-          <MaterialChoice plan={plan} index={index} />
-          <ItemDecorations plan={plan} index={index} />
-        </>
-      )}
-    </>
+      {!isZoneShape(item.shape) && <VariationChoice plan={plan} index={index} />}
+    </PanelSection>
   )
 }
 
@@ -209,7 +202,9 @@ function ZoneLook({ plan, index }: { plan: Plan; index: number }) {
 }
 
 /**
- * The selected object's settings.
+ * The selected object's settings, in sections that open and close: a ceiling light's others in the room; its type; its
+ * look (its material and color, or an area's floor); its decorations; its size (and an L's or P's parts); a light's
+ * switch; a kitchen unit's worktop. Below them, turning and deleting it.
  * @param props.plan - The room.
  * @param props.index - The object's position in the plan's objects.
  */
@@ -218,20 +213,35 @@ function ItemInspector({ plan, index }: { plan: Plan; index: number }) {
   const item = plan.items[index]
   // A floor area is flat: its size is its width and depth, and its color comes with its material.
   const zone = item.shape === ITEM_SHAPE.FloorZone
+  // A ceiling light's height is how far down it reaches.
+  const hanging = isCeilingLight(item.shape)
 
   return (
     <div className="space-y-5" data-inspector-item={index}>
-      <ItemBasics plan={plan} index={index} />
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Size (cm)</legend>
+      {/* A ceiling light's panel lists the room's others too, to pick another or add one. */}
+      {hanging && (
+        <PanelSection name="settings-ceiling-lights" title="Ceiling lights">
+          <CeilingLightList plan={plan} heading={false} />
+        </PanelSection>
+      )}
+      <ItemType plan={plan} index={index} />
+      <PanelSection name="settings-look" title="Look">
+        {zone ? <ZoneLook plan={plan} index={index} /> : <MaterialChoice plan={plan} index={index} />}
+        {!zone && <ColorChoice label="Color" value={item.color} colors={SWATCHES} onPick={(color) => update(index, { color })} />}
+      </PanelSection>
+      {/* An area or a ceiling light has nothing on it. */}
+      {!zone && !hanging && <ItemDecorations plan={plan} index={index} />}
+      <PanelSection name="settings-size" title="Size" summary={zone ? `${Math.round(item.width)} × ${Math.round(item.depth)} cm` : `${Math.round(item.width)} × ${Math.round(item.depth)} × ${Math.round(item.height)} cm`}>
         <div className={cn("grid gap-2", zone ? "grid-cols-2" : "grid-cols-3")}>
           <NumberField label="Width" value={item.width} min={BUILDER.item.min} max={BUILDER.item.max} onCommit={(width) => update(index, { width })} />
           <NumberField label="Depth" value={item.depth} min={BUILDER.item.min} max={BUILDER.item.max} onCommit={(depth) => update(index, { depth })} />
-          {!zone && <NumberField label="Height" value={item.height} min={BUILDER.item.min} max={BUILDER.item.max} onCommit={(height) => update(index, { height })} />}
+          {!zone && (
+            <NumberField label={hanging ? "Drop" : "Height"} value={item.height} min={BUILDER.item.min} max={BUILDER.item.max} onCommit={(height) => update(index, { height })} />
+          )}
         </div>
-      </fieldset>
-      {hasParts(item) && <PartFields plan={plan} index={index} />}
-      {!zone && <ColorChoice label="Color" value={item.color} colors={SWATCHES} onPick={(color) => update(index, { color })} />}
+        {hasParts(item) && <PartFields plan={plan} index={index} />}
+      </PanelSection>
+      <LightSwitch plan={plan} index={index} />
       <WorktopFields plan={plan} index={index} />
       <div className="grid grid-cols-2 gap-2">
         <Button variant="outline" onClick={() => rotate(index)}>
@@ -349,7 +359,13 @@ function ItemDecorations({ plan, index }: { plan: Plan; index: number }) {
   const item = plan.items[index]
   const suggestions = variationOf(catalog, item)?.object.decorations ?? []
 
-  return <DecorationChoice suggestions={suggestions} value={item.decorations ?? []} onChange={(decorations) => update(index, { decorations })} />
+  const count = (item.decorations ?? []).length
+
+  return (
+    <PanelSection name="settings-decorations" title="Decorations" summary={count === 0 ? "none" : String(count)}>
+      <DecorationChoice suggestions={suggestions} value={item.decorations ?? []} onChange={(decorations) => update(index, { decorations })} titled={false} />
+    </PanelSection>
+  )
 }
 
 /**
@@ -380,39 +396,34 @@ function RoomInspector({
 
   return (
     <div className="space-y-5" data-inspector-room={focus}>
-      <p className="flex gap-2 rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
-        <MousePointerClickIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-        {ROOM_HINTS[focus]}
-      </p>
-      {shows.name && (
-        <div className="space-y-1.5">
-          <Label htmlFor="room-name">{ROOM_TYPE_NAMES[plan.roomType]} name</Label>
-          <Input id="room-name" value={plan.name} placeholder="Such as: our living room" onChange={(event) => setRoom({ name: event.target.value })} />
-        </div>
-      )}
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Walls (m)</legend>
-        <div className="grid grid-cols-3 gap-2">
-          <NumberField label="Width" step={0.1} value={plan.width} min={BUILDER.wall.min} max={BUILDER.wall.max} onCommit={(width) => setRoom({ width })} />
-          <NumberField label="Length" step={0.1} value={plan.length} min={BUILDER.wall.min} max={BUILDER.wall.max} onCommit={(length) => setRoom({ length })} />
-          <NumberField label="Height" step={0.1} value={plan.height} min={BUILDER.ceiling.min} max={BUILDER.ceiling.max} onCommit={(height) => setRoom({ height })} />
-        </div>
-        {plan.outline.length > 4 && (
-          <>
-            <p className="text-xs text-muted-foreground">The room's overall size; its walls bend ({plan.outline.length} corners). Change them with Room shape above the plan.</p>
-            <Button variant="outline" size="sm" className="w-full" onClick={resetShape} data-reset-shape>
-              <SquareIcon data-icon="inline-start" />
-              Reset to rectangle
-            </Button>
-          </>
-        )}
-      </fieldset>
-      {shows.floor && (
-        <>
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Floor</p>
-            <FloorChoice value={plan.floorType} color={plan.floorColor} onPick={(floorType) => setRoom({ floorType })} />
+      <PanelSection name="settings-room" title="Room" summary={`${plan.width} × ${plan.length} m, ${plan.height} m high`}>
+        {shows.name && (
+          <div className="space-y-1.5">
+            <Label htmlFor="room-name">{ROOM_TYPE_NAMES[plan.roomType]} name</Label>
+            <Input id="room-name" value={plan.name} placeholder="Such as: our living room" onChange={(event) => setRoom({ name: event.target.value })} />
           </div>
+        )}
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Walls (m)</legend>
+          <div className="grid grid-cols-3 gap-2">
+            <NumberField label="Width" step={0.1} value={plan.width} min={BUILDER.wall.min} max={BUILDER.wall.max} onCommit={(width) => setRoom({ width })} />
+            <NumberField label="Length" step={0.1} value={plan.length} min={BUILDER.wall.min} max={BUILDER.wall.max} onCommit={(length) => setRoom({ length })} />
+            <NumberField label="Height" step={0.1} value={plan.height} min={BUILDER.ceiling.min} max={BUILDER.ceiling.max} onCommit={(height) => setRoom({ height })} />
+          </div>
+          {plan.outline.length > 4 && (
+            <>
+              <p className="text-xs text-muted-foreground">The room's overall size; its walls bend ({plan.outline.length} corners). Change them with Room shape above the plan.</p>
+              <Button variant="outline" size="sm" className="w-full" onClick={resetShape} data-reset-shape>
+                <SquareIcon data-icon="inline-start" />
+                Reset to rectangle
+              </Button>
+            </>
+          )}
+        </fieldset>
+      </PanelSection>
+      {shows.floor && (
+        <PanelSection name="settings-floor" title="Floor" summary={FLOOR_TYPE_NAMES[plan.floorType]}>
+          <FloorChoice value={plan.floorType} color={plan.floorColor} onPick={(floorType) => setRoom({ floorType })} />
           <FloorColorChoice type={plan.floorType} value={plan.floorColor} onPick={(floorColor) => setRoom({ floorColor })} />
           <div className="space-y-1">
             <Button
@@ -433,7 +444,7 @@ function RoomInspector({
             </Button>
             <p className="text-xs text-muted-foreground">Part of the floor in another material and color, such as tiles by the kitchen units. Walls get theirs in the Wall tab.</p>
           </div>
-        </>
+        </PanelSection>
       )}
       {(shows.walls || shows.ceiling || shows.light) && (
         <FinishFields plan={plan} walls={shows.walls} ceiling={shows.ceiling} light={shows.light} shownWall={shownWall} onShowWall={onShowWall} />

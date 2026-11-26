@@ -12,8 +12,19 @@ import { BUILDER } from "@/lib/constants"
  * @param props.suggestions - The object's most popular decorations, from the catalog (may be empty).
  * @param props.value - The decorations chosen.
  * @param props.onChange - Sets the decorations chosen.
+ * @param props.titled - Whether it shows its "Decorations" title (not under a heading of that name; screen readers still hear it).
  */
-export function DecorationChoice({ suggestions, value, onChange }: { suggestions: string[]; value: string[]; onChange: (next: string[]) => void }) {
+export function DecorationChoice({
+  suggestions,
+  value,
+  onChange,
+  titled = true,
+}: {
+  suggestions: string[]
+  value: string[]
+  onChange: (next: string[]) => void
+  titled?: boolean
+}) {
   const [other, setOther] = useState("")
   const chosen = new Set(value.map((name) => name.toLowerCase()))
   const typed = value.filter((name) => !suggestions.some((s) => s.toLowerCase() === name.toLowerCase()))
@@ -44,7 +55,7 @@ export function DecorationChoice({ suggestions, value, onChange }: { suggestions
 
   return (
     <fieldset className="space-y-2" data-decorations>
-      <legend className="text-sm font-medium">Decorations</legend>
+      <legend className={titled ? "text-sm font-medium" : "sr-only"}>Decorations</legend>
       <p className="text-xs text-muted-foreground">Small things the photo shows on it. Nothing else is added to the room.</p>
       <div className="flex flex-wrap gap-1.5">
         {[...suggestions, ...typed].map((name) => {

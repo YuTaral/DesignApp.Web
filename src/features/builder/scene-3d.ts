@@ -1,13 +1,14 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BACKSPLASH, BUILDER, CEILING_LIGHT, COVERING_KIND, CURTAIN_LENGTH, ITEM_FORM, ITEM_SHAPE, PANORAMA, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
+import { BACKSPLASH, BUILDER, COVERING_KIND, CURTAIN_LENGTH, ITEM_FORM, ITEM_SHAPE, PANORAMA, PLAN_SIDE, TIME_OF_DAY, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
 import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot, WindowCovering, Worktop } from "./api"
 import { isCurtains } from "./covering"
+import { isCeilingLight, isLightOn, spotGrid, trackHeads } from "./lights"
 import { CUBE_FACES, type Vec3 } from "./panorama"
 import type { PanoramaJob } from "./panorama.worker"
 import { hasParts, isMountedShape, isWallItem, legSide, partsOf } from "./builder-store"
-import { cameraStand, contains, extent, fitInside, wallLength, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
+import { cameraStand, wallLength, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
 import type { Frame } from "./use-view-zoom"
 import { behindUnit, OPEN_BEHIND, ownSplashColor, splashHeight, type Behind } from "./worktop"
@@ -305,94 +306,95 @@ export function camera(plan: Plan, width: number, height: number, crop: Frame = 
 }
 
 /**
- * The room's ceiling light as a simple stand-in, so the 3D view and the photo's guide show which it is: a pendant's
- * cord and shade or a chandelier's ring of candle lights hung at the room's middle, a flush light's glowing disc there,
- * spotlights set into the ceiling across the room, or a rail of track lights; nothing for none.
- * @param plan - The room.
- * @returns The light, in metres from the plan's top-left corner.
+ * A light on the ceiling as a simple model, at its place on the plan and turned as there: a pendant's cord and shade, a
+ * chandelier's ring of candle lights, a flush lamp (round, or square when its name says so), recessed spotlights over
+ * its size (a row or grid, see `spotGrid`), or a rail with spot heads along it (`trackHeads`). Its bulbs or shade glow
+ * in the room's light color when it is on (see `switchOn` for the light it gives), and only a little when it is off.
+ * @param plan - The room, for its ceiling's height and light color.
+ * @param item - The ceiling light: its width and depth across, its height how far down it reaches.
+ * @param on - Whether it is switched on.
+ * @returns Its model, in metres, its middle at the light's place on the plan.
  */
-function ceilingLight(plan: Plan) {
+function ceilingFixture(plan: Plan, item: PlanItem, on: boolean) {
   const L = BUILDER.scene.lights
   const group = new THREE.Group()
   const top = plan.height
-  const size = extent(plan)
-  const middle = fitInside(plan, size.width / 2, size.length / 2, L.clear, L.clear)
-  const [cx, cz] = [middle.x / 100, middle.y / 100]
+  const [w, d, drop] = [item.width / 100, item.depth / 100, Math.min(item.height / 100, plan.height - 0.1)]
+  const tone = L.tones[plan.finish.tone]
   // A shade is open below: seen from under it, its inside shows.
-  const shadeMaterial = new THREE.MeshStandardMaterial({ color: L.shade, side: THREE.DoubleSide, roughness: 0.8 })
+  const shadeMaterial = new THREE.MeshStandardMaterial({ color: item.color, side: THREE.DoubleSide, roughness: 0.8 })
   const metal = material(L.metal)
-  const glow = new THREE.MeshStandardMaterial({ color: L.glow, emissive: L.glow, emissiveIntensity: 0.9 })
+  const glow = new THREE.MeshStandardMaterial({ color: on ? tone : item.color, emissive: tone, emissiveIntensity: on ? L.glow : L.off })
   const put = placer(group)
 
-  switch (plan.finish.ceilingLight) {
-    case CEILING_LIGHT.Pendant: {
-      const { drop, cord, radius, height } = L.pendant
+  switch (item.shape) {
+    case ITEM_SHAPE.PendantLight: {
+      const radius = Math.max(w, d) / 2
+      const height = Math.min(drop * L.pendant.shadeShare, radius * 1.2)
 
-      put(new THREE.CylinderGeometry(cord, cord, drop - height), metal, cx, top - (drop - height) / 2, cz)
-      put(new THREE.CylinderGeometry(radius * 0.25, radius, height, 32, 1, true), shadeMaterial, cx, top - drop + height / 2, cz)
-      put(new THREE.SphereGeometry(radius * 0.3, 16, 12), glow, cx, top - drop + radius * 0.25, cz)
+      put(new THREE.CylinderGeometry(L.pendant.cord, L.pendant.cord, Math.max(0.01, drop - height)), metal, 0, top - (drop - height) / 2, 0)
+      put(new THREE.CylinderGeometry(radius * 0.25, radius, height, 32, 1, true), shadeMaterial, 0, top - drop + height / 2, 0)
+      put(new THREE.SphereGeometry(radius * 0.3, 16, 12), glow, 0, top - drop + radius * 0.25, 0)
       break
     }
 
-    case CEILING_LIGHT.Chandelier: {
-      const { drop, ring, arms, candle } = L.chandelier
+    case ITEM_SHAPE.Chandelier: {
+      const ring = (Math.max(w, d) / 2) * (1 - L.chandelier.ringShare / 2)
+      const { arms, candle } = L.chandelier
 
-      put(new THREE.CylinderGeometry(0.008, 0.008, drop), metal, cx, top - drop / 2, cz)
-      put(new THREE.TorusGeometry(ring, 0.012, 8, 48), metal, cx, top - drop, cz).rotation.x = Math.PI / 2
+      put(new THREE.CylinderGeometry(0.008, 0.008, drop), metal, 0, top - drop / 2, 0)
+      put(new THREE.TorusGeometry(ring, 0.012, 8, 48), metal, 0, top - drop, 0).rotation.x = Math.PI / 2
 
       for (let arm = 0; arm < arms; arm++) {
         const turn = (arm / arms) * Math.PI * 2
 
-        put(new THREE.SphereGeometry(candle, 12, 10), glow, cx + Math.cos(turn) * ring, top - drop + candle, cz + Math.sin(turn) * ring)
+        put(new THREE.SphereGeometry(candle, 12, 10), glow, Math.cos(turn) * ring, top - drop + candle, Math.sin(turn) * ring)
       }
 
       break
     }
 
-    case CEILING_LIGHT.FlushLight: {
-      const { radius, depth } = L.flush
+    case ITEM_SHAPE.CeilingLamp: {
+      const geometry = /square/i.test(item.label) ? new THREE.BoxGeometry(w, drop, d) : new THREE.CylinderGeometry(w / 2, (w / 2) * 0.9, drop, 40)
 
-      put(new THREE.CylinderGeometry(radius, radius * 0.9, depth, 40), glow, cx, top - depth / 2, cz)
+      put(geometry, glow, 0, top - drop / 2, 0)
       break
     }
 
-    case CEILING_LIGHT.Spotlights: {
-      const { radius, spacing, margin } = L.spots
-      const [across, along] = [size.width / 100, size.length / 100]
-      const [columns, rows] = [Math.max(1, Math.round((across - 2 * margin) / spacing) + 1), Math.max(1, Math.round((along - 2 * margin) / spacing) + 1)]
+    case ITEM_SHAPE.Spotlight: {
+      const { across, deep } = spotGrid(item)
 
-      for (let c = 0; c < columns; c++) {
-        for (let r = 0; r < rows; r++) {
-          const x = columns === 1 ? across / 2 : margin + (c * (across - 2 * margin)) / (columns - 1)
-          const z = rows === 1 ? along / 2 : margin + (r * (along - 2 * margin)) / (rows - 1)
+      for (let c = 0; c < across; c++) {
+        for (let r = 0; r < deep; r++) {
+          const x = across === 1 ? 0 : -w / 2 + (c * w) / (across - 1)
+          const z = deep === 1 ? 0 : -d / 2 + (r * d) / (deep - 1)
 
-          // Only over the room (an L-shaped room has none over its missing corner).
-          if (contains(plan, x * 100, z * 100)) {
-            put(new THREE.CylinderGeometry(radius, radius, 0.01, 24), glow, x, top - 0.005, z)
-          }
+          put(new THREE.CylinderGeometry(L.spot.radius, L.spot.radius, 0.01, 24), glow, x, top - 0.005, z)
         }
       }
 
       break
     }
 
-    case CEILING_LIGHT.TrackLights: {
-      const { length, rail, spots, can } = L.track
+    default: {
+      const { rail, can } = L.track
+      const heads = trackHeads(item)
 
-      put(new THREE.BoxGeometry(length, rail, rail), metal, cx, top - rail / 2, cz)
+      put(new THREE.BoxGeometry(w, rail, rail), metal, 0, top - rail / 2, 0)
 
-      for (let s = 0; s < spots; s++) {
-        const x = cx - length / 2 + (length * (s + 0.5)) / spots
+      for (let s = 0; s < heads; s++) {
+        const x = -w / 2 + (w * (s + 0.5)) / heads
 
-        put(new THREE.CylinderGeometry(can, can * 0.8, can * 2.4, 16), metal, x, top - rail - can * 1.2, cz).rotation.z = (s % 2 === 0 ? 1 : -1) * 0.35
+        put(new THREE.CylinderGeometry(can, can * 0.8, can * 2.4, 16), metal, x, top - rail - can * 1.2, 0).rotation.z = (s % 2 === 0 ? 1 : -1) * 0.35
+        put(new THREE.CircleGeometry(can * 0.75, 16), glow, x, top - rail - can * 2.45, 0).rotation.x = Math.PI / 2
       }
 
       break
     }
-
-    default:
-      break
   }
+
+  group.position.set(item.x / 100, 0, item.y / 100)
+  group.rotation.y = -THREE.MathUtils.degToRad(item.rotation)
 
   return group
 }
@@ -409,6 +411,8 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   const mood = BUILDER.scene.moods[finish.timeOfDay]
   const scene = new THREE.Scene()
   const sun = new THREE.DirectionalLight(mood.sun, mood.sunPower)
+  // How many lights already light the room (see `switchOn`).
+  let lit = 0
   const reach = Math.max(width, length) * 1.2
   // The floor and ceiling are the outline's shape; turned flat, the shape's y runs along the room (the floor's is
   // flipped, as it turns the other way).
@@ -424,7 +428,7 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
 
   scene.background = new THREE.Color(BUILDER.scene.background)
   scene.add(new THREE.HemisphereLight(BUILDER.scene.sky, BUILDER.scene.ground, mood.sky), new THREE.AmbientLight(BUILDER.scene.sky, mood.ambient))
-  sun.position.set(width * 0.3, height * 2.2, length * 0.8)
+  sun.position.copy(sunAt(plan))
   sun.target.position.set(width / 2, 0, length / 2)
   sun.castShadow = true
   sun.shadow.mapSize.set(2048, 2048)
@@ -437,7 +441,7 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   ceiling.rotation.x = Math.PI / 2
   ceiling.position.set(0, height, 0)
   ceiling.userData.surface = MASK_ID.ceiling
-  scene.add(floor, ceiling, ceilingLight(plan))
+  scene.add(floor, ceiling)
 
   for (const wall of walls(plan).filter((w) => w.index !== behind)) {
     const mesh = wallMesh(plan, wall, wallPaint(plan, wall, anisotropy))
@@ -462,10 +466,24 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
       continue
     }
 
-    const drawn = !isWallItem(item) ? model(item, item.worktop ? behindUnit(plan, item) : OPEN_BEHIND) : item.wall !== behind ? (isMountedShape(item.shape) ? hung(plan, item) : opening(plan, item)) : null
+    const on = isLightOn(item, finish.timeOfDay)
+    const drawn = isCeilingLight(item.shape)
+      ? ceilingFixture(plan, item, on)
+      : !isWallItem(item)
+        ? model(item, item.worktop ? behindUnit(plan, item) : OPEN_BEHIND)
+        : item.wall !== behind
+          ? isMountedShape(item.shape)
+            ? hung(plan, item)
+            : opening(plan, item)
+          : null
 
     if (!drawn) {
       continue
+    }
+
+    // A light that is on glows, and lights the room while there are lights left to spend.
+    if (on) {
+      lit = switchOn(plan, item, drawn, lit < BUILDER.scene.lights.cap) ? lit + 1 : lit
     }
 
     drawn.userData.item = index
@@ -473,6 +491,98 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   }
 
   return scene
+}
+
+/**
+ * Where the sun stands, from the time of day and where north is on the plan (as in the northern half of the world): out
+ * past the room's east side in the morning, its south side at midday and its west side at golden hour, low then and high
+ * at midday; in the evening in front of the room, for the faint light from outside.
+ * @param plan - The room.
+ */
+function sunAt(plan: Plan) {
+  const { width, length, height, finish } = plan
+  const S = BUILDER.scene.sun
+  // The compass runs clockwise from north as the plan's sides do from its back: east is one side on from north.
+  const compass = { [TIME_OF_DAY.Morning]: 1, [TIME_OF_DAY.Midday]: 2, [TIME_OF_DAY.GoldenHour]: 3 } as Record<string, number | undefined>
+  const point = compass[finish.timeOfDay]
+  const side = point === undefined ? 2 : (point + Object.values(PLAN_SIDE).indexOf(finish.north)) % 4
+  // Out from the room's middle past its back, right, front or left side.
+  const [dx, dz] = [[0, -1], [1, 0], [0, 1], [-1, 0]][side]
+  const out = Math.max(width, length) * S.out
+  const up = finish.timeOfDay === TIME_OF_DAY.Midday ? S.high : S.low
+
+  return new THREE.Vector3(width / 2 + dx * out, height * up, length / 2 + dz * out)
+}
+
+/**
+ * Lights an object that is on: its shade or bulb glows in the room's light color, cabinets get a glowing strip beneath,
+ * a piece with a lamp on it (a table lamp is a decoration, not drawn) a glowing stand-in on top; and, when `shines`, a
+ * point light there lights the room. Everything is added to the object's own model, so it moves and turns with it.
+ * @param plan - The room.
+ * @param item - The object, which gives light and is on.
+ * @param drawn - Its model.
+ * @param shines - Whether it may light the room (there are lights left to spend).
+ * @returns Whether it lights the room.
+ */
+function switchOn(plan: Plan, item: PlanItem, drawn: THREE.Object3D, shines: boolean) {
+  const L = BUILDER.scene.lights
+  const tone = L.tones[plan.finish.tone]
+  const glow = new THREE.MeshStandardMaterial({ color: tone, emissive: tone, emissiveIntensity: L.glow })
+  const [w, h, d, bottom] = [item.width / 100, item.height / 100, Math.max(item.depth, 1) / 100, item.elevation / 100]
+  const label = item.label.toLowerCase()
+  const decorated = (item.decorations ?? []).find((decoration) => BUILDER.lightWords.test(decoration))?.toLowerCase() ?? ""
+  // Where the light comes from, in the model's own place: under a ceiling light, in a lamp's shade, out from a hung light, under lit cabinets, or over a piece with a lamp on it.
+  let at: THREE.Vector3
+  let power: { intensity: number; distance: number } = L.lamp
+
+  if (isCeilingLight(item.shape)) {
+    const { across, deep } = spotGrid(item)
+    const many = item.shape === ITEM_SHAPE.Spotlight ? across * deep : item.shape === ITEM_SHAPE.TrackLight ? trackHeads(item) : 1
+
+    at = new THREE.Vector3(0, plan.height - h - 0.05, 0)
+    power = { intensity: L.ceiling.intensity * Math.min(Math.sqrt(many), L.ceiling.most), distance: L.ceiling.distance }
+  } else if (item.shape === ITEM_SHAPE.Lamp) {
+    // The shade (the model's last part) glows.
+    const shadeMesh = drawn.children.at(-1)
+
+    if (shadeMesh instanceof THREE.Mesh) {
+      shadeMesh.material = glow
+    }
+
+    at = new THREE.Vector3(0, h * 0.85, 0)
+  } else if (isWallItem(item) && /under/.test(decorated)) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 0.01, 0.03), glow)
+
+    strip.position.set(0, bottom - 0.006, d * 0.7)
+    drawn.add(strip)
+    at = new THREE.Vector3(0, bottom - 0.1, d * 0.7)
+    power = L.strip
+  } else if (isWallItem(item) && BUILDER.lightWords.test(label)) {
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(Math.min(w, h, 0.12) / 2, 16, 12), glow)
+
+    bulb.position.set(0, bottom + h / 2, d + 0.02)
+    drawn.add(bulb)
+    at = new THREE.Vector3(0, bottom + h / 2, d + 0.15)
+  } else {
+    // A lamp standing on the piece: a glowing stand-in where its shade would be.
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(L.tableLamp.radius, 16, 12), glow)
+
+    bulb.position.set(0, h + L.tableLamp.above, 0)
+    drawn.add(bulb)
+    at = new THREE.Vector3(0, h + L.tableLamp.above, 0)
+    power = { intensity: L.lamp.intensity * L.tableLamp.share, distance: L.lamp.distance }
+  }
+
+  if (!shines) {
+    return false
+  }
+
+  const light = new THREE.PointLight(tone, power.intensity, power.distance, 2)
+
+  light.position.copy(at)
+  drawn.add(light)
+
+  return true
 }
 
 /**

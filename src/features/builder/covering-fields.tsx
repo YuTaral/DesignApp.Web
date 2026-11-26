@@ -40,7 +40,7 @@ export function CoveringFields({ covering, onChange }: { covering: WindowCoverin
 
   return (
     <div className="space-y-3" data-covering-fields>
-      <ChoiceChips label="Curtains & blinds" chips={KIND_CHIPS} value={covering?.kind ?? BUILDER.none} onPick={pickKind} attribute="covering" />
+      <ChoiceChips label="Kind" chips={KIND_CHIPS} value={covering?.kind ?? BUILDER.none} onPick={pickKind} attribute="covering" />
       {covering && (
         <>
           <ChoiceChips label="Made of" chips={fabricChips} value={covering.fabric} onPick={(fabric) => onChange({ ...covering, fabric })} attribute="covering-fabric" />

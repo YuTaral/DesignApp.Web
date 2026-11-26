@@ -3,13 +3,17 @@ import type { PointerEvent as ReactPointerEvent, SVGProps } from "react"
 import { BUILDER, FLOOR_TILE_CM, ITEM_FORM, ITEM_SHAPE, type FloorType } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { cornerOutline, footprint, hasParts, legSide, partsOf } from "./builder-store"
+import { isCeilingLight, spotGrid, trackHeads } from "./lights"
 import { floorTileUrl } from "./floor-texture"
 import { ResizeHandle } from "./resize-handle"
 import { wallOf, wallPoint } from "./room-outline"
 import type { Part } from "./use-plan-gestures"
 
 /** Round or flat shapes that look the same from every side, so they get no front and back marks. */
-const SIDELESS = new Set<string>([ITEM_SHAPE.Rug, ITEM_SHAPE.Plant, ITEM_SHAPE.Cylinder, ITEM_SHAPE.Lamp, ITEM_SHAPE.FloorZone])
+const SIDELESS = new Set<string>([
+  ITEM_SHAPE.Rug, ITEM_SHAPE.Plant, ITEM_SHAPE.Cylinder, ITEM_SHAPE.Lamp, ITEM_SHAPE.FloorZone,
+  ITEM_SHAPE.PendantLight, ITEM_SHAPE.Spotlight, ITEM_SHAPE.Chandelier, ITEM_SHAPE.CeilingLamp, ITEM_SHAPE.TrackLight,
+])
 
 /** How wide a floor area's edge is to grab, in centimetres: wider than it is drawn, so it is easy to pick. */
 const ZONE_EDGE_GRAB = 14
@@ -61,6 +65,8 @@ export function PlanObject({
   // A floor area shows its material's pattern, at its real size, with a dashed edge.
   const zone = item.shape === ITEM_SHAPE.FloorZone
   const pattern = `zone-${index}`
+  // A ceiling light hangs over the floor: see-through and dashed, its name only while selected.
+  const light = isCeilingLight(item.shape)
 
   return (
     <g transform={`translate(${item.x} ${item.y})`} data-item={index} data-zone={zone || undefined} className="cursor-move" onPointerDown={(event) => onStart(event, "move")}>
@@ -77,15 +83,16 @@ export function PlanObject({
         depth={depth}
         look={{
           fill: zone ? `url(#${pattern})` : item.color,
-          fillOpacity: item.shape === ITEM_SHAPE.Rug ? 0.75 : 0.95,
-          strokeDasharray: zone ? "10 6" : undefined,
+          fillOpacity: light ? 0.3 : item.shape === ITEM_SHAPE.Rug ? 0.75 : 0.95,
+          strokeDasharray: zone ? "10 6" : light ? "6 4" : undefined,
           strokeWidth: clashing || chosen ? 4 : 1.5,
           className: clashing ? "stroke-destructive" : chosen ? "stroke-primary" : "stroke-black/30",
           "data-clash": clashing || undefined,
           "data-form": item.form,
         }}
       />
-      {(!zone || chosen) && <Label item={item} width={width} depth={depth} text={text} />}
+      {light && <LightGlyph item={item} />}
+      {((!zone && !light) || chosen) && <Label item={item} width={width} depth={depth} text={text} />}
       {!SIDELESS.has(item.shape) && item.form !== ITEM_FORM.Round && <FacingMarks item={item} width={width} depth={depth} text={text} />}
       {chosen &&
         CORNERS.map((corner) => (
@@ -100,6 +107,84 @@ export function PlanObject({
       {chosen && hasParts(item) && <PartHandles item={item} onStart={(event, part) => onStart(event, part)} />}
     </g>
   )
+}
+
+/**
+ * A ceiling light's mark over everything on the plan (the furniture under it hides its object, which takes its clicks):
+ * its dashed outline and its bulbs, spots or track heads. Clicks pass through it.
+ * @param props.item - The ceiling light.
+ * @param props.index - Its position in the plan's objects.
+ * @param props.chosen - Whether it is selected.
+ */
+export function CeilingLightMark({ item, index, chosen }: { item: PlanItem; index: number; chosen: boolean }) {
+  const { width, depth } = footprint(item)
+
+  return (
+    <g transform={`translate(${item.x} ${item.y})`} className="pointer-events-none" data-light-mark={index}>
+      <Outline
+        item={item}
+        width={width}
+        depth={depth}
+        look={{ fill: "none", strokeDasharray: "6 4", strokeWidth: chosen ? 3 : 1.5, className: chosen ? "stroke-primary" : "stroke-black/40" }}
+      />
+      <LightGlyph item={item} />
+    </g>
+  )
+}
+
+/**
+ * What a ceiling light looks like from below, in its middle and turned as it is: a bulb for a pendant or flush lamp, a
+ * ring of candles for a chandelier, each recessed spotlight of a row or grid, or a track's rail and heads.
+ * @param props.item - The ceiling light.
+ */
+function LightGlyph({ item }: { item: PlanItem }) {
+  const M = BUILDER.lightMark
+  const [w, d] = [item.width, item.depth]
+  const paint = { fill: M.fill, stroke: M.stroke, strokeWidth: 1.5 }
+  // A spotlight or spot head: a small ring with a dot, unlike a resize handle.
+  const spot = (key: number, x: number, y: number) => (
+    <g key={key}>
+      <circle cx={x} cy={y} r={M.spot} fill="none" stroke={M.stroke} strokeWidth={1.5} />
+      <circle cx={x} cy={y} r={M.dot} fill={M.stroke} />
+    </g>
+  )
+  let marks: React.ReactNode
+
+  if (item.shape === ITEM_SHAPE.Spotlight) {
+    const { across, deep } = spotGrid(item)
+
+    marks = Array.from({ length: across * deep }, (_, n) => {
+      const [c, r] = [n % across, Math.floor(n / across)]
+
+      return spot(n, across === 1 ? 0 : -w / 2 + (c * w) / (across - 1), deep === 1 ? 0 : -d / 2 + (r * d) / (deep - 1))
+    })
+  } else if (item.shape === ITEM_SHAPE.TrackLight) {
+    const heads = trackHeads(item)
+
+    marks = (
+      <>
+        <line x1={-w / 2} y1={0} x2={w / 2} y2={0} stroke={M.stroke} strokeWidth={3} />
+        {Array.from({ length: heads }, (_, n) => spot(n, -w / 2 + (w * (n + 0.5)) / heads, 0))}
+      </>
+    )
+  } else if (item.shape === ITEM_SHAPE.Chandelier) {
+    const ring = Math.min(w, d) * 0.35
+
+    marks = (
+      <>
+        <circle r={ring} fill="none" stroke={M.stroke} strokeWidth={1.5} />
+        {Array.from({ length: BUILDER.scene.lights.chandelier.arms }, (_, n) => {
+          const turn = (n / BUILDER.scene.lights.chandelier.arms) * Math.PI * 2
+
+          return spot(n, Math.cos(turn) * ring, Math.sin(turn) * ring)
+        })}
+      </>
+    )
+  } else {
+    marks = <circle r={Math.max(M.bulb, Math.min(w, d) * 0.22)} {...paint} />
+  }
+
+  return <g transform={`rotate(${item.rotation})`}>{marks}</g>
 }
 
 /**

@@ -2,29 +2,36 @@ import { useState } from "react"
 import { PlusIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { BUILDER, CEILING_LIGHT, CEILING_LIGHT_NAMES, TIME_OF_DAY, TIME_OF_DAY_NAMES, type WallFinish } from "@/lib/constants"
+import { BUILDER, LIGHT_TONE, LIGHT_TONE_NAMES, NORTH_NAMES, PLAN_SIDE, TIME_OF_DAY, TIME_OF_DAY_NAMES, WALL_FINISH_NAMES, type WallFinish } from "@/lib/constants"
 import type { Plan, RoomFinish } from "./api"
 import { useBuilderStore } from "./builder-store"
+import { CeilingLightList } from "./ceiling-lights"
+import { isCeilingLight } from "./lights"
 import { ChoiceChips } from "./choice-chips"
 import { ColorChoice } from "./fields"
 import { FINISH_CHIPS } from "./finish-chips"
-import { FoldToggle } from "./fold-toggle"
+import { PanelSection } from "./panel-section"
 import { wallName, walls } from "./room-outline"
 import { wallSurface } from "./wall-texture"
 
-/** The ceiling lights as chips. */
-const LIGHT_CHIPS = Object.values(CEILING_LIGHT).map((light) => ({ value: light, name: CEILING_LIGHT_NAMES[light] }))
+/** The light colors as chips, with what each looks like on hover. */
+const TONE_CHIPS = Object.values(LIGHT_TONE).map((tone) => ({ value: tone, name: LIGHT_TONE_NAMES[tone].name, title: LIGHT_TONE_NAMES[tone].looks }))
+
+/** The sides of the plan as chips, for where north is. */
+const NORTH_CHIPS = Object.values(PLAN_SIDE).map((side) => ({ value: side, name: NORTH_NAMES[side] }))
 
 /** The times of day as chips, with what each looks like on hover. */
 const TIME_CHIPS = Object.values(TIME_OF_DAY).map((time) => ({ value: time, name: TIME_OF_DAY_NAMES[time].name, title: TIME_OF_DAY_NAMES[time].looks }))
 
 /**
- * The room's finish, in up to three sections:
+ * The room's finish, in up to three sections that open and close (`PanelSection`, closed at first), each heading saying
+ * what is chosen:
  * - "Walls": which wall to change (All, or one wall: at first the one shown, in the Wall tab), its finish and color,
  *   and the skirting's color. A wall changed on its own keeps its own look; a change for All goes to every wall. In the
  *   Wall tab, "Add a wall area" ends the list.
- * - "Ceiling": its color and its light.
- * - "Light & mood" (opens and closes, its heading saying what is chosen): the time of day the photo is taken at.
+ * - "Ceiling": its color, and its lights (see `CeilingLightList`).
+ * - "Light & mood": the time of day the photo is taken at, the
+ *   lights' color, and where north is on the plan (which decides where the sun comes in from).
  * @param props.plan - The room.
  * @param props.walls - Whether to show "Walls".
  * @param props.ceiling - Whether to show "Ceiling".
@@ -48,7 +55,6 @@ export function FinishFields({
   onShowWall?: (wall: number) => void
 }) {
   const { setRoom, addZone } = useBuilderStore()
-  const [open, setOpen] = useState(false)
   const startOn = shownWall === null ? BUILDER.allWalls : String(shownWall)
   const [picked, setPicked] = useState<string>(startOn)
   const [pickedFor, setPickedFor] = useState(shownWall)
@@ -58,6 +64,8 @@ export function FinishFields({
   const wall = target === BUILDER.allWalls ? null : Number(target)
   const own = wall === null ? undefined : finish.ownWalls.find((w) => w.wall === wall)
   const [look, color] = wall === null ? [finish.walls, plan.wallColor] : wallSurface(plan, wall)
+  const lights = plan.items.filter((item) => isCeilingLight(item.shape)).length
+  const lightCount = lights === 0 ? "no lights" : `${lights} light${lights === 1 ? "" : "s"}`
   const wallChips = [
     { value: BUILDER.allWalls, name: "All" },
     ...walls(plan).map(({ index }) => ({ value: String(index), name: wallName(plan, index).replace(" wall", "") })),
@@ -102,7 +110,7 @@ export function FinishFields({
   return (
     <>
       {showWalls && (
-        <section className="space-y-4" aria-label="Walls" data-finish-section="walls">
+        <PanelSection name="settings-walls" title="Walls" summary={WALL_FINISH_NAMES[finish.walls]} attributes={{ "data-finish-section": "walls" }}>
           <ChoiceChips
             label="Wall"
             chips={wallChips}
@@ -131,28 +139,27 @@ export function FinishFields({
             </Button>
           )}
           <ColorChoice label="Skirting" value={finish.trimColor} colors={BUILDER.frameColors} onPick={(trimColor) => set({ trimColor })} />
-        </section>
+        </PanelSection>
       )}
       {showCeiling && (
-        <section className="space-y-4" aria-label="Ceiling" data-finish-section="ceiling">
+        <PanelSection name="settings-ceiling" title="Ceiling" summary={lightCount} attributes={{ "data-finish-section": "ceiling" }}>
           <ColorChoice label="Ceiling" value={finish.ceilingColor} colors={BUILDER.ceilingColors} onPick={(ceilingColor) => set({ ceilingColor })} />
-          <ChoiceChips label="Ceiling light" chips={LIGHT_CHIPS} value={finish.ceilingLight} onPick={(ceilingLight) => set({ ceilingLight })} attribute="ceiling-light" />
-        </section>
+          <CeilingLightList plan={plan} />
+        </PanelSection>
       )}
       {showLight && (
-        <section className="space-y-3" aria-label="Light and mood" data-finish-section="light">
-          <FoldToggle open={open} controls="finish-light" onToggle={() => setOpen(!open)} className="text-sm" data-finish-toggle="light">
-            <span className="min-w-0">
-              <span className="font-medium">Light &amp; mood</span>
-              <span className="text-muted-foreground">: {TIME_OF_DAY_NAMES[finish.timeOfDay].name}</span>
-            </span>
-          </FoldToggle>
-          {open && (
-            <div id="finish-light" className="space-y-4">
-              <ChoiceChips label="Time of day" chips={TIME_CHIPS} value={finish.timeOfDay} onPick={(timeOfDay) => set({ timeOfDay })} attribute="time-of-day" />
-            </div>
-          )}
-        </section>
+        <PanelSection
+          name="settings-light"
+          title="Light & mood"
+          summary={`${TIME_OF_DAY_NAMES[finish.timeOfDay].name}, ${LIGHT_TONE_NAMES[finish.tone].name.toLowerCase()} light`}
+          attributes={{ "data-finish-section": "light" }}
+          toggleAttributes={{ "data-finish-toggle": "light" }}
+        >
+          <ChoiceChips label="Time of day" chips={TIME_CHIPS} value={finish.timeOfDay} onPick={(timeOfDay) => set({ timeOfDay })} attribute="time-of-day" />
+          <ChoiceChips label="Light color" chips={TONE_CHIPS} value={finish.tone} onPick={(tone) => set({ tone })} attribute="light-tone" />
+          <ChoiceChips label="North is at the plan's" chips={NORTH_CHIPS} value={finish.north} onPick={(north) => set({ north })} attribute="north" />
+          <p className="text-xs text-muted-foreground">North decides where the sun comes in from: the east in the morning, the south at midday, the west at golden hour.</p>
+        </PanelSection>
       )}
     </>
   )

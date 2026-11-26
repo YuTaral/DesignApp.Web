@@ -12,6 +12,7 @@ import { isWallShape } from "./builder-store"
 import { matchesSearch } from "./catalog-search"
 import { DescribeObject } from "./describe-object"
 import { SearchField } from "./fields"
+import { Collapse } from "./collapse"
 import { FoldToggle } from "./fold-toggle"
 import { ObjectList } from "./object-list"
 
@@ -106,7 +107,7 @@ export function OtherObjects({ plan, full, wall }: { plan: Plan; full: boolean; 
                   const id = `other-${group.name}`
 
                   return (
-                    <div key={group.name} className="space-y-1" data-other-group={group.name}>
+                    <div key={group.name} data-other-group={group.name}>
                       <FoldToggle
                         open={unfolded}
                         controls={id}
@@ -118,16 +119,14 @@ export function OtherObjects({ plan, full, wall }: { plan: Plan; full: boolean; 
                           {title} <span className="font-normal text-muted-foreground tabular-nums">({group.objects.length})</span>
                         </span>
                       </FoldToggle>
-                      {unfolded && (
-                        <div id={id}>
+                      <Collapse open={unfolded} id={id} className="pt-1">
                           {wall === null && group.objects.some((o) => isWallShape(o.shape)) && (
                             <p className="px-2 text-xs text-muted-foreground">
                               Windows, doors and things to hang go on a wall: open one in the Wall tab first.
                             </p>
                           )}
                           <ObjectList objects={group.objects} disabled={(o) => isWallShape(o.shape) && wall === null} onChoose={setChosen} draggable={false} />
-                        </div>
-                      )}
+                      </Collapse>
                     </div>
                   )
                 })}

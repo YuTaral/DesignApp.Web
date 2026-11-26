@@ -12,6 +12,7 @@ import { useViewZoom } from "./use-view-zoom"
 import { WallChoice } from "./wall-choice"
 import { Backsplash, TilePattern, WindowDressing } from "./wall-dressing"
 import { WALL_TILE_METRES, wallSurface, wallTileUrl } from "./wall-texture"
+import { isCeilingLight } from "./lights"
 import { behindUnit, splashHeight } from "./worktop"
 
 /** Room around the wall in the drawing, in centimetres (for the measurements and the handles). */
@@ -267,9 +268,10 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
             )
           })}
 
-          {/* The objects in front of the wall (clicks pass through them to the windows and doors behind). */}
+          {/* The objects in front of the wall (clicks pass through them to the windows and doors behind); a ceiling light hangs from the ceiling. */}
           {standing.map(({ item, along, across, gap }, n) => {
-            const label = item.height > text * 1.4 ? fitLabel(item.label, across, text * 0.8) : null
+            const hangs = isCeilingLight(item.shape)
+            const label = !hangs && item.height > text * 1.4 ? fitLabel(item.label, across, text * 0.8) : null
             // A label a nearer object (drawn later, on top) would cover is left out rather than shown cut.
             const middle = height - item.height / 2
             const covered =
@@ -281,8 +283,17 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
               })
 
             return (
-              <g key={n} className="pointer-events-none" opacity={gap <= NEAR ? 0.9 : Math.max(0.25, 0.7 - gap / 600)} data-wall-object>
-                <rect x={along - across / 2} y={height - Math.max(item.height, 2)} width={across} height={Math.max(item.height, 2)} rx={3} fill={item.color} stroke="black" strokeOpacity="0.3" />
+              <g key={n} className="pointer-events-none" opacity={gap <= NEAR ? 0.9 : Math.max(0.25, 0.7 - gap / 600)} data-wall-object data-wall-light={hangs || undefined}>
+                <rect
+                  x={along - across / 2}
+                  y={hangs ? 0 : height - Math.max(item.height, 2)}
+                  width={across}
+                  height={Math.max(item.height, 2)}
+                  rx={3}
+                  fill={item.color}
+                  stroke="black"
+                  strokeOpacity="0.3"
+                />
                 {item.worktop && (
                   <rect
                     x={along - across / 2 - 1}

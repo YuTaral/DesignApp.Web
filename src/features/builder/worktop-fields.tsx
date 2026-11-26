@@ -3,6 +3,7 @@ import { useCatalog, type Plan } from "./api"
 import { useBuilderStore, variationOf } from "./builder-store"
 import { ChoiceChips } from "./choice-chips"
 import { ColorChoice } from "./fields"
+import { PanelSection } from "./panel-section"
 
 /** The backsplashes as chips. */
 const BACKSPLASH_CHIPS = Object.values(BACKSPLASH).map((kind) => ({ value: kind, name: BACKSPLASH_NAMES[kind] }))
@@ -50,30 +51,32 @@ export function WorktopFields({ plan, index }: { plan: Plan; index: number }) {
   }
 
   return (
-    <div className="space-y-3" data-worktop-fields>
-      <ChoiceChips label="Worktop" chips={chips} value={worktop?.material ?? BUILDER.none} onPick={pickMaterial} attribute="worktop" />
-      {worktop && (
-        <>
-          <ColorChoice label="Worktop color" value={worktop.color} colors={WORKTOP.colors} onPick={(color) => update(index, { worktop: { ...worktop, color } })} />
-          {spot === WORKTOP_SPOT.Wall && (
-            <ChoiceChips
-              label="Backsplash"
-              chips={BACKSPLASH_CHIPS}
-              value={worktop.backsplash}
-              onPick={pickBacksplash}
-              attribute="backsplash"
-            />
-          )}
-          {ownColor && (
-            <ColorChoice
-              label="Backsplash color"
-              value={worktop.backsplashColor}
-              colors={WORKTOP.backsplashColors}
-              onPick={(backsplashColor) => update(index, { worktop: { ...worktop, backsplashColor } })}
-            />
-          )}
-        </>
-      )}
-    </div>
+    <PanelSection name="settings-worktop" title="Worktop" summary={worktop?.material ?? "none"}>
+      <div className="space-y-3" data-worktop-fields>
+        <ChoiceChips label="Material" chips={chips} value={worktop?.material ?? BUILDER.none} onPick={pickMaterial} attribute="worktop" />
+        {worktop && (
+          <>
+            <ColorChoice label="Color" value={worktop.color} colors={WORKTOP.colors} onPick={(color) => update(index, { worktop: { ...worktop, color } })} />
+            {spot === WORKTOP_SPOT.Wall && (
+              <ChoiceChips
+                label="Backsplash"
+                chips={BACKSPLASH_CHIPS}
+                value={worktop.backsplash}
+                onPick={pickBacksplash}
+                attribute="backsplash"
+              />
+            )}
+            {ownColor && (
+              <ColorChoice
+                label="Backsplash color"
+                value={worktop.backsplashColor}
+                colors={WORKTOP.backsplashColors}
+                onPick={(backsplashColor) => update(index, { worktop: { ...worktop, backsplashColor } })}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </PanelSection>
   )
 }

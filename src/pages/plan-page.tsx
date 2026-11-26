@@ -15,6 +15,7 @@ import { Inspector } from "@/features/builder/inspector"
 import { PlanCanvas } from "@/features/builder/plan-canvas"
 import { ReplaceBanner } from "@/features/builder/replace-banner"
 import { UndoButtons } from "@/features/builder/undo-buttons"
+import { ViewHint } from "@/features/builder/view-hint"
 import { objectBoxes, renderGuide, renderMaskPng, renderPanorama } from "@/features/builder/scene-3d"
 import { View3d } from "@/features/builder/view-3d"
 import { ViewChoice } from "@/features/builder/view-choice"
@@ -129,7 +130,7 @@ function Builder({ plan }: { plan: Plan }) {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 sm:px-6 lg:h-[calc(100dvh-3.5rem-1px)] lg:flex-none lg:flex-row lg:overflow-hidden">
       <aside aria-label="Objects" className="order-2 rounded-2xl border bg-card p-4 shadow-soft lg:order-none lg:w-64 lg:shrink-0 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
-        <CatalogPanel plan={plan} wall={view === "wall" ? wall : null} onOpenWall={() => setView("wall")} />
+        <CatalogPanel plan={plan} wall={view === "wall" ? wall : null} />
       </aside>
 
       <section className="flex min-h-0 flex-1 flex-col gap-3">
@@ -161,10 +162,33 @@ function Builder({ plan }: { plan: Plan }) {
         </div>
         {replacing && <ReplaceBanner planId={plan.id} room={replacing} />}
         {/*
-          The tabs come first on a row of their own, so they stay put whichever tab is open; Room shape (on the plan
-          only) and Generate photo follow them.
+          Centred rows: the view's hint, undo and redo, Room shape (on the plan only) and Generate photo, then the tabs
+          under them, right over the view. On a phone Room shape shows only its icon, so the row stays one line and the
+          tabs don't move when it comes and goes.
         */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <ViewHint focus={view === "plan" && shaping ? "shape" : view} />
+            <UndoButtons />
+            {view === "plan" && (
+              <Button
+                variant={shaping ? "default" : "outline"}
+                aria-pressed={shaping}
+                data-shape-toggle
+                onClick={() => {
+                  select(-1)
+                  setShaping(!shaping)
+                }}
+              >
+                <RulerIcon data-icon="inline-start" />
+                <span className="max-sm:sr-only">{shaping ? "Done shaping" : "Room shape"}</span>
+              </Button>
+            )}
+            <Button disabled={plan.items.length === 0} onClick={() => setAsking(true)}>
+              <ImageIcon data-icon="inline-start" />
+              Generate photo
+            </Button>
+          </div>
           <div role="tablist" aria-label="View" className="flex w-full gap-1 rounded-xl border bg-muted/40 p-1 text-sm sm:w-auto">
             {(
               [
@@ -189,27 +213,6 @@ function Builder({ plan }: { plan: Plan }) {
                 {label}
               </button>
             ))}
-          </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            <UndoButtons />
-            {view === "plan" && (
-              <Button
-                variant={shaping ? "default" : "outline"}
-                aria-pressed={shaping}
-                data-shape-toggle
-                onClick={() => {
-                  select(-1)
-                  setShaping(!shaping)
-                }}
-              >
-                <RulerIcon data-icon="inline-start" />
-                {shaping ? "Done shaping" : "Room shape"}
-              </Button>
-            )}
-            <Button disabled={plan.items.length === 0} onClick={() => setAsking(true)}>
-              <ImageIcon data-icon="inline-start" />
-              Generate photo
-            </Button>
           </div>
         </div>
         {/* The 3D view needs room for its 4:3 picture and the choices under it, which wrap on a phone. */}

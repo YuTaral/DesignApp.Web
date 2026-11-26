@@ -7,7 +7,8 @@ import { ITEM_SHAPE } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { clashingItems, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
-import { Hung, Opening, PlanObject, ZoneEdge } from "./plan-objects"
+import { isCeilingLight } from "./lights"
+import { CeilingLightMark, Hung, Opening, PlanObject, ZoneEdge } from "./plan-objects"
 import { Camera, PlanWalls, ShapeHandles } from "./plan-room"
 import { fromWall } from "./room-outline"
 import { PLAN_MARGIN, usePlanGestures } from "./use-plan-gestures"
@@ -19,8 +20,9 @@ import { useViewZoom } from "./use-view-zoom"
  * an object moves it on the 10 cm grid, a corner handle resizes it from that corner, and objects dropped from the catalog land where
  * they are let go (windows, doors and hung things are placed in the Wall tab instead). Clicking a wall opens it in the Wall tab (`onWall`), and the
  * 3D view and the photo turn to look at it; the camera marker shows where the photo is taken from. Hung things (upper
- * cabinets, shelves) are drawn on top but picked only where no floor object is under them; "Hung things only" fades the
- * floor objects so the hung ones can be picked anywhere.
+ * cabinets, shelves) and ceiling lights are drawn on top but picked only where no floor object is under them; "Move
+ * lights" (under the zoom buttons) fades the floor objects so they can be picked anywhere (a ceiling light is dragged on
+ * the plan like any object).
  *
  * In room shape mode (`shaping`) the objects fade and the walls are edited instead, on the 10 cm grid: dragging a wall
  * pushes or pulls it, dragging a corner moves it, and the "+" that follows the pointer along a wall pushes out (or in)
@@ -54,7 +56,9 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
     .filter(({ item }) => !isWallItem(item))
     .sort((a, b) => under(b.item.shape, b.index) - under(a.item.shape, a.index))
   const flat = order.filter(({ item, index }) => under(item.shape, index) >= 2)
-  const standing = order.filter(({ item, index }) => under(item.shape, index) < 2)
+  // Ceiling lights hang over the floor: like hung things, they take clicks only where nothing stands, and their marks show on top.
+  const lights = order.filter(({ item }) => isCeilingLight(item.shape))
+  const standing = order.filter(({ item, index }) => under(item.shape, index) < 2 && !isCeilingLight(item.shape))
   const edges = flat.filter(({ item }) => item.shape === ITEM_SHAPE.FloorZone)
   const openings = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => isWallItem(item) && item.shape !== ITEM_SHAPE.WallZone)
   const hung = openings.filter(({ item }) => isMountedShape(item.shape))
@@ -164,10 +168,14 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
             ))}
           </g>
           {hung.map(({ item, index }) => mark(item, index, "hit"))}
+          {lights.map(drawn)}
           <g className={faded} data-floor-objects>
             {standing.map(drawn)}
           </g>
           {openings.map(({ item, index }) => mark(item, index, "look"))}
+          {lights.map(({ item, index }) => (
+            <CeilingLightMark key={`mark-${index}`} item={item} index={index} chosen={index === selected} />
+          ))}
         </g>
 
         <Camera plan={plan} text={text} />
@@ -178,24 +186,23 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
         onStep={zoom.step}
         onFit={zoom.fit}
         fitLabel="Show the whole plan"
-        before={
-          hung.length > 0 &&
+        below={
+          (hung.length > 0 || lights.length > 0) &&
           !shaping && (
             <Button
               variant={hungOnly ? "default" : "ghost"}
               size="sm"
-              className="max-sm:size-7 max-sm:px-0"
+              className="max-sm:h-7"
               aria-pressed={hungOnly}
-              aria-label="Hung things only"
-              title="Fade the floor objects, to pick what hangs on the walls over them"
+              title="Fade the floor objects, to pick and move the ceiling lights and hung things over them"
               onClick={() => {
                 setHungOnly(!hungOnly)
                 select(-1)
               }}
               data-plan-hung-only
             >
-              <LayersIcon />
-              <span className="max-sm:hidden">Hung things only</span>
+              <LayersIcon data-icon="inline-start" />
+              Move lights
             </Button>
           )
         }

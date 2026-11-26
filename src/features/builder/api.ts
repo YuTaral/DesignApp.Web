@@ -6,13 +6,14 @@ import {
   API,
   QUERY_KEYS,
   type Backsplash,
-  type CeilingLight,
   type CoveringKind,
   type CurtainLength,
   type FloorType,
   type ItemForm,
   type ItemShape,
+  type LightTone,
   type PhotoStyle,
+  type PlanSide,
   type RoomType,
   type TimeOfDay,
   type ViewCorner,
@@ -60,6 +61,8 @@ export type PlanItem = {
   covering?: WindowCovering | null
   /** A kitchen unit's worktop and backsplash; missing or null for none, and for other objects. */
   worktop?: Worktop | null
+  /** Whether a lamp or light is switched on; missing or null to follow the time of day (on in the evening). */
+  lit?: boolean | null
 }
 
 /** A kitchen unit's worktop and the backsplash behind it (mirrors WorktopRequest). */
@@ -101,8 +104,11 @@ export type RoomFinish = {
   ceilingColor: string
   /** The skirting boards' color (windows and doors keep their own colors). */
   trimColor: string
-  ceilingLight: CeilingLight
   timeOfDay: TimeOfDay
+  /** The color of the lamps' and ceiling lights' light. */
+  tone: LightTone
+  /** The side of the plan that faces north, which decides where the sun comes in from. */
+  north: PlanSide
 }
 
 /**

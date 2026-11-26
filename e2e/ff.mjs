@@ -15,7 +15,17 @@ export const ARGS = args.filter((a) => !/^https?:\/\//.test(a) && !a.startsWith(
 /** The five sample photos: DESIGNAPP_ROOMS, else the usual folder. */
 export const ROOMS = process.env.DESIGNAPP_ROOMS ?? 'C:\\Users\\yutar\\Desktop\\DesignApp\\rooms'
 
-export async function launch({ headless = !process.argv.includes('--show') } = {}) {
+/** The editor's panel sections the passes find open: the app starts them closed. "Light & mood" stays closed. */
+export const OPEN_SECTIONS = ['objects', 'ceiling', 'openings', 'mounted', 'settings-room', 'settings-floor', 'settings-walls',
+  'settings-ceiling', 'settings-ceiling-lights', 'settings-type', 'settings-look', 'settings-decorations', 'settings-size',
+  'settings-place', 'settings-covering', 'settings-light-switch', 'settings-worktop']
+
+/**
+ * Starts Firefox with one page.
+ * @param options.openSections - Whether the editor's sections start open (OPEN_SECTIONS, unless the page has already
+ * opened or closed them), as the passes expect; false leaves the app's own default, all closed.
+ */
+export async function launch({ headless = !process.argv.includes('--show'), openSections = true } = {}) {
   fs.mkdirSync(SHOTS, { recursive: true })
   const browser = await puppeteer.launch({
     browser: 'firefox',
@@ -26,6 +36,18 @@ export async function launch({ headless = !process.argv.includes('--show') } = {
   })
   const page = await browser.newPage()
   const log = []
+
+  if (openSections) {
+    await page.evaluateOnNewDocument((names) => {
+      try {
+        if (localStorage.getItem('designapp.builder.collapsed') === null) {
+          localStorage.setItem('designapp.builder.collapsed', JSON.stringify(Object.fromEntries(names.map((name) => [name, true]))))
+        }
+      } catch {
+        // No storage (about:blank): nothing to seed.
+      }
+    }, OPEN_SECTIONS)
+  }
 
   // Only warnings and errors: React and Vite log plenty of harmless dev chatter.
   page.on('console', (m) => {
