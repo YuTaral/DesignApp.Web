@@ -1,7 +1,25 @@
 import * as THREE from "three"
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js"
 
-import { BACKSPLASH, BUILDER, COVERING_KIND, CURTAIN_LENGTH, ITEM_FORM, ITEM_SHAPE, PANORAMA, PLAN_SIDE, TIME_OF_DAY, WALL_FINISH, ZONE, type FloorType, type WallFinish } from "@/lib/constants"
+import {
+  BACKSPLASH,
+  BUILDER,
+  CASING,
+  CEILING_STYLE,
+  COVERING_KIND,
+  CURTAIN_LENGTH,
+  ITEM_FORM,
+  ITEM_SHAPE,
+  MOULDING,
+  PANORAMA,
+  PLAN_SIDE,
+  TIME_OF_DAY,
+  WAINSCOT,
+  WALL_FINISH,
+  ZONE,
+  type FloorType,
+  type WallFinish,
+} from "@/lib/constants"
 import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot, WindowCovering, Worktop } from "./api"
 import { isCurtains } from "./covering"
 import { isCeilingLight, isLightOn, spotGrid, trackHeads } from "./lights"
@@ -11,6 +29,7 @@ import { hasParts, isMountedShape, isWallItem, legSide, partsOf } from "./builde
 import { cameraStand, wallLength, wallOf, wallPoint, walls, type OutlineWall } from "./room-outline"
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
 import type { Frame } from "./use-view-zoom"
+import { archRadius, casingFor, trimBands, trimRuns } from "./trim"
 import { behindUnit, OPEN_BEHIND, ownSplashColor, splashHeight, type Behind } from "./worktop"
 import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
 
@@ -441,14 +460,14 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   ceiling.rotation.x = Math.PI / 2
   ceiling.position.set(0, height, 0)
   ceiling.userData.surface = MASK_ID.ceiling
-  scene.add(floor, ceiling)
+  scene.add(floor, ceiling, ceilingDetails(plan))
 
   for (const wall of walls(plan).filter((w) => w.index !== behind)) {
     const mesh = wallMesh(plan, wall, wallPaint(plan, wall, anisotropy))
 
     mesh.userData.surface = MASK_ID.wall
     mesh.receiveShadow = true
-    scene.add(mesh, skirting(plan, wall))
+    scene.add(mesh, trim(plan, wall))
   }
 
   for (const [index, item] of plan.items.entries()) {
@@ -897,27 +916,36 @@ function wallPaint(plan: Plan, wall: OutlineWall, anisotropy: number) {
 }
 
 /**
- * The skirting boards along a wall's foot, in the room's trim color, stopping at its doors (and at windows down to the
- * floor). They count as the wall in the object masks.
+ * The trim along a wall, in the room's trim color, stopping at its doors, archways and windows (and their casings): the
+ * skirting at its foot, the wainscoting with its cap, the dado and picture rails, and the crown (with a step under it,
+ * so it reads as a profile). It counts as the wall in the masks.
  * @param plan - The room.
  * @param wall - The wall.
  */
-function skirting(plan: Plan, wall: OutlineWall) {
-  const { height, depth } = BUILDER.scene.skirting
+function trim(plan: Plan, wall: OutlineWall) {
+  const base = BUILDER.scene.skirting
   const group = new THREE.Group()
-  const block = blockAdder(group, material(plan.finish.trimColor))
-  const gaps = plan.items
-    .filter((i) => i.wall === wall.index && (i.shape === ITEM_SHAPE.Door || (i.shape === ITEM_SHAPE.Window && i.elevation < height * 100)))
-    .map((i) => [i.x - i.width / 2, i.x + i.width / 2] as const)
-    .sort((a, b) => a[0] - b[0])
-  let from = 0
-
-  for (const [start, end] of [...gaps, [wall.length, wall.length] as const]) {
-    if (start - from > 1) {
-      block((start - from) / 100, height, depth, ((from + start) / 2 - wall.length / 2) / 100, height / 2, depth / 2)
+  const paint = material(plan.finish.trimColor)
+  const block = blockAdder(group, paint)
+  // Trim between two heights (in cm), along the wall's stretches clear of openings.
+  const run = (bottom: number, height: number, depth: number) => {
+    for (const [from, to] of trimRuns(plan, wall.index, bottom, bottom + height)) {
+      block((to - from) / 100, height / 100, depth / 100, ((from + to) / 2 - wall.length / 2) / 100, (bottom + height / 2) / 100, depth / 200)
     }
+  }
 
-    from = Math.max(from, end)
+  run(0, base.height * 100, base.depth * 100)
+
+  for (const band of trimBands(plan)) {
+    run(band.bottom, band.height, band.depth)
+
+    if (band.kind === MOULDING.Crown) {
+      run(band.bottom - band.height * 0.35, band.height * 0.35, band.depth * 0.5)
+    }
+  }
+
+  if (plan.finish.details.wainscot !== WAINSCOT.None) {
+    wainscot(plan, wall, block, paint)
   }
 
   group.position.set((wall.start.x + wall.end.x) / 200, 0, (wall.start.y + wall.end.y) / 200)
@@ -925,6 +953,208 @@ function skirting(plan: Plan, wall: OutlineWall) {
   group.userData.surface = MASK_ID.wall
 
   return group
+}
+
+/**
+ * A wall's wainscoting, from the skirting up to the dado height, along its stretches clear of openings: a board in the
+ * trim color, and on it beadboard's grooves, or shaker panels' frames (raised panels add a raised middle to each).
+ * @param plan - The room.
+ * @param wall - The wall.
+ * @param block - Adds a box to the wall's trim.
+ * @param paint - The trim's look.
+ */
+function wainscot(plan: Plan, wall: OutlineWall, block: ReturnType<typeof blockAdder>, paint: THREE.Material) {
+  const { panel, rail } = BUILDER.scene.trim
+  const bottom = BUILDER.scene.skirting.height
+  const top = BUILDER.wainscotHeight / 100 - rail.height / 2
+  const tall = top - bottom
+  const middle = bottom + tall / 2
+  const seam = material(shade(plan.finish.trimColor, 0.8))
+
+  for (const [from, to] of trimRuns(plan, wall.index, 0, BUILDER.wainscotHeight)) {
+    const [left, width] = [(from - wall.length / 2) / 100, (to - from) / 100]
+
+    block(width, tall, 0.006, left + width / 2, middle, 0.003, paint)
+
+    if (plan.finish.details.wainscot === WAINSCOT.Beadboard) {
+      for (let x = left + panel.board; x < left + width - 0.01; x += panel.board) {
+        block(0.004, tall, 0.002, x, middle, 0.007, seam)
+      }
+
+      continue
+    }
+
+    // Frames: a rail along the top and bottom, and a stile between panels about 60 cm wide.
+    const panels = Math.max(1, Math.round(width / 0.6))
+    const each = (width - (panels + 1) * panel.frame) / panels
+
+    block(width, panel.frame, panel.depth, left + width / 2, top - panel.frame / 2, panel.depth / 2)
+    block(width, panel.frame, panel.depth, left + width / 2, bottom + panel.frame / 2, panel.depth / 2)
+
+    for (let n = 0; n <= panels; n++) {
+      block(panel.frame, tall, panel.depth, left + panel.frame / 2 + n * (each + panel.frame), middle, panel.depth / 2)
+    }
+
+    if (plan.finish.details.wainscot === WAINSCOT.RaisedPanels && each > 0.1) {
+      for (let n = 0; n < panels; n++) {
+        const x = left + panel.frame + each / 2 + n * (each + panel.frame)
+
+        block(each - 2 * panel.inset - 0.04, tall - 2 * panel.frame - 0.06, panel.depth * 0.8, x, middle, panel.depth * 0.4)
+      }
+    }
+  }
+}
+
+/**
+ * The ceiling's shape under its paint: exposed beams across the room's shorter span (in the beams' color), a grid of
+ * coffer ribs, or a tray's lower border along every wall (both in the ceiling's color); nothing for a flat ceiling.
+ * Beams and ribs stop where the room's outline does. They count as the ceiling in the masks.
+ * @param plan - The room.
+ */
+function ceilingDetails(plan: Plan) {
+  const details = plan.finish.details
+  const { beam, coffer, tray } = BUILDER.scene.trim
+  const group = new THREE.Group()
+  const ceilingLook = new THREE.MeshStandardMaterial({ color: plan.finish.ceilingColor, emissive: plan.finish.ceilingColor, emissiveIntensity: 0.4, roughness: 0.9 })
+  const block = blockAdder(group, ceilingLook)
+  const xs = plan.outline.map((p) => p.x)
+  const ys = plan.outline.map((p) => p.y)
+  const [left, right, back, front] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+  // Lines across the room every so often (in cm), along x (at a y) or along z (at an x), cut to the room's outline.
+  const lines = (alongX: boolean, every: number, width: number, height: number, look: THREE.Material) => {
+    const [from, to] = alongX ? [back, front] : [left, right]
+    const count = Math.max(1, Math.round((to - from) / every))
+    const step = (to - from) / count
+
+    for (let n = 0; n < count; n++) {
+      const at = from + step * (n + 0.5)
+
+      for (const [a, b] of crossing(plan.outline, alongX, at)) {
+        const [length, middle] = [(b - a) / 100, (a + b) / 200]
+
+        if (alongX) {
+          block(length, height, width, middle, plan.height - height / 2, at / 100, look)
+        } else {
+          block(width, height, length, at / 100, plan.height - height / 2, middle, look)
+        }
+      }
+    }
+  }
+
+  group.userData.surface = MASK_ID.ceiling
+
+  if (details.ceiling === CEILING_STYLE.Beams) {
+    // The beams span the room's shorter side, so they run along it.
+    lines(right - left <= front - back, beam.every * 100, beam.width, beam.height, material(details.beamColor))
+  } else if (details.ceiling === CEILING_STYLE.Coffered) {
+    lines(true, coffer.size * 100, coffer.rib, coffer.depth, ceilingLook)
+    lines(false, coffer.size * 100, coffer.rib, coffer.depth, ceilingLook)
+  } else if (details.ceiling === CEILING_STYLE.Tray) {
+    for (const wall of walls(plan)) {
+      const border = new THREE.Group()
+
+      blockAdder(border, ceilingLook)(wall.length / 100, tray.drop, tray.border, 0, plan.height - tray.drop / 2, tray.border / 2)
+      border.position.set((wall.start.x + wall.end.x) / 200, 0, (wall.start.y + wall.end.y) / 200)
+      border.rotation.y = wallTurn(wall)
+      group.add(border)
+    }
+  }
+
+  return group
+}
+
+/**
+ * Where a straight line across the room is inside its outline, in cm along the line: pairs of where it goes in and
+ * comes out, as the outline's edges cross it.
+ * @param outline - The room's outline.
+ * @param alongX - Whether the line runs along x (at a y), else along y (at an x).
+ * @param at - The line's y (or x).
+ */
+function crossing(outline: OutlinePoint[], alongX: boolean, at: number): [number, number][] {
+  const hits: number[] = []
+
+  for (const [n, p] of outline.entries()) {
+    const q = outline[(n + 1) % outline.length]
+    const [pa, qa, pb, qb] = alongX ? [p.y, q.y, p.x, q.x] : [p.x, q.x, p.y, q.y]
+
+    if ((pa <= at && at < qa) || (qa <= at && at < pa)) {
+      hits.push(pb + ((at - pa) * (qb - pb)) / (qa - pa))
+    }
+  }
+
+  hits.sort((a, b) => a - b)
+
+  return hits.flatMap((hit, n) => (n % 2 === 0 && n + 1 < hits.length ? [[hit, hits[n + 1]] as [number, number]] : []))
+}
+
+/**
+ * The casing around a door, window or archway, in the room's trim color and its width for the room's casing style
+ * (narrower next to a corner, so it stays on its wall):
+ * down both sides and over the top (round over an arch); an ornate one adds a head cap (a keystone over an arch). A
+ * window's also runs under its sill. None for plain reveals.
+ * @param plan - The room.
+ * @param item - The opening.
+ * @param block - Adds a box to the opening's group.
+ */
+function casing(plan: Plan, item: PlanItem, block: ReturnType<typeof blockAdder>) {
+  const width = casingFor(plan, item) / 100
+  const depth = BUILDER.scene.trim.casingDepth
+  const look = material(plan.finish.trimColor)
+  const [w, h, bottom] = [item.width / 100, item.height / 100, item.elevation / 100]
+  const arch = archRadius(item) / 100
+  const sides = h - arch
+  const ornate = plan.finish.details.casing === CASING.Ornate
+
+  if (width <= 0) {
+    return
+  }
+
+  block(width, sides, depth, -w / 2 - width / 2, bottom + sides / 2, depth / 2, look)
+  block(width, sides, depth, w / 2 + width / 2, bottom + sides / 2, depth / 2, look)
+
+  if (arch > 0) {
+    const ring = block(1, 1, 1, 0, bottom + sides, depth, look, new THREE.RingGeometry(arch, arch + width, 32, 1, 0, Math.PI))
+
+    ring.scale.set(w / 2 / arch, 1, 1)
+
+    if (ornate) {
+      block(0.09, width + 0.04, depth + 0.02, 0, bottom + h + width / 2, (depth + 0.02) / 2, look)
+    }
+  } else {
+    block(w + 2 * width, width, depth, 0, bottom + h + width / 2, depth / 2, look)
+
+    if (ornate) {
+      block(w + 2 * width + 0.06, 0.05, depth + 0.03, 0, bottom + h + width + 0.025, (depth + 0.03) / 2, look)
+    }
+  }
+
+  if (item.shape === ITEM_SHAPE.Window && bottom > 0.05) {
+    block(w + width, width * 0.8, depth, 0, bottom - 0.03 - (width * 0.8) / 2, depth / 2, look)
+  }
+}
+
+/**
+ * An outline with a round top (an arch as wide as it is, as tall as its arch), standing on its middle bottom, in metres.
+ * @param width - Its width.
+ * @param sides - How tall its sides are, under the arch.
+ * @param arch - How tall its arch is (0 for square corners).
+ */
+function archedShape(width: number, sides: number, arch: number) {
+  const outline = new THREE.Shape()
+
+  outline.moveTo(-width / 2, 0)
+  outline.lineTo(width / 2, 0)
+  outline.lineTo(width / 2, sides)
+
+  if (arch > 0) {
+    outline.absellipse(0, sides, width / 2, arch, 0, Math.PI, false)
+  } else {
+    outline.lineTo(-width / 2, sides)
+  }
+
+  outline.closePath()
+
+  return outline
 }
 
 /**
@@ -1087,7 +1317,26 @@ function opening(plan: Plan, item: PlanItem & { wall: number }) {
   const frame = 0.06
   const at = wallPoint(plan, item.wall, item.x)
 
-  if (item.shape === ITEM_SHAPE.Window) {
+  casing(plan, item, block)
+
+  if (item.shape === ITEM_SHAPE.Archway) {
+    // The dim space beyond, inside a plastered reveal in the archway's color.
+    const arch = archRadius(item) / 100
+    const sides = h - arch
+    const beyond = new THREE.Mesh(new THREE.ShapeGeometry(archedShape(w, sides, arch), 32), material(BUILDER.scene.trim.beyond))
+    const reveal = 0.04
+
+    beyond.position.set(0, 0, 0.002)
+    group.add(beyond)
+    block(reveal, sides, 0.01, -w / 2 + reveal / 2, sides / 2, 0.005)
+    block(reveal, sides, 0.01, w / 2 - reveal / 2, sides / 2, 0.005)
+
+    if (arch > 0) {
+      block(1, 1, 1, 0, sides, 0.006, paint, new THREE.RingGeometry(arch - reveal, arch, 32, 1, 0, Math.PI)).scale.set(w / 2 / arch, 1, 1)
+    } else {
+      block(w, reveal, 0.01, 0, h - reveal / 2, 0.005)
+    }
+  } else if (item.shape === ITEM_SHAPE.Window) {
     const pane = new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, emissive: BUILDER.scene.glass, emissiveIntensity: 0.55, roughness: 0.15 })
     // An arched window's round top is a half circle as wide as the window (kept within its height).
     const arch = item.form === ITEM_FORM.Arched ? Math.min(w / 2, h * 0.6) : 0
@@ -1193,7 +1442,9 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
   const name = item.label.toLowerCase()
   const at = wallPoint(plan, item.wall, item.x)
 
-  if (item.shape === ITEM_SHAPE.Picture) {
+  if (item.shape === ITEM_SHAPE.Niche) {
+    niche(item, group, block, paint)
+  } else if (item.shape === ITEM_SHAPE.Picture) {
     const frame = Math.min(0.05, w / 8, h / 8)
     const face = name.includes(BUILDER.mirrorWord)
       ? new THREE.MeshStandardMaterial({ color: BUILDER.scene.glass, emissive: BUILDER.scene.glass, emissiveIntensity: 0.35, roughness: 0.05, metalness: 0.6 })
@@ -1229,6 +1480,44 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
   group.rotation.y = wallTurn(wallOf(plan, item.wall))
 
   return group
+}
+
+/**
+ * A niche: a recess in the wall, drawn on it as its darker inside with a deeper shadow under its top and down its left
+ * side (the light from above), a thin edge in its color around it, and the front edges of its shelves if it has them.
+ * @param item - The niche.
+ * @param group - Its group, at the wall.
+ * @param block - Adds a box to the group.
+ * @param paint - Its color.
+ */
+function niche(item: PlanItem, group: THREE.Group, block: ReturnType<typeof blockAdder>, paint: THREE.Material) {
+  const [w, h, bottom] = [item.width / 100, item.height / 100, item.elevation / 100]
+  const arch = archRadius(item) / 100
+  const sides = h - arch
+  const recess = BUILDER.scene.trim.recessShade
+  const inside = new THREE.Mesh(new THREE.ShapeGeometry(archedShape(w, sides, arch), 32), material(shade(item.color, recess)))
+  const shadow = material(shade(item.color, recess * 0.8))
+  const edge = 0.025
+  const shelves = /shel/i.test(item.label) ? Math.max(1, Math.floor(h / 0.4)) : 0
+
+  inside.position.set(0, bottom, 0.002)
+  group.add(inside)
+  block(0.04, sides, 0.002, -w / 2 + 0.02, bottom + sides / 2, 0.004, shadow)
+
+  if (arch === 0) {
+    block(w, 0.06, 0.002, 0, bottom + h - 0.03, 0.004, shadow)
+    block(w + 2 * edge, edge, 0.01, 0, bottom + h + edge / 2, 0.005)
+  } else {
+    block(1, 1, 1, 0, bottom + sides, 0.005, paint, new THREE.RingGeometry(arch, arch + edge, 32, 1, 0, Math.PI)).scale.set(w / 2 / arch, 1, 1)
+  }
+
+  block(edge, sides, 0.01, -w / 2 - edge / 2, bottom + sides / 2, 0.005)
+  block(edge, sides, 0.01, w / 2 + edge / 2, bottom + sides / 2, 0.005)
+  block(w + 2 * edge, edge, 0.01, 0, bottom - edge / 2, 0.005)
+
+  for (let n = 1; n <= shelves; n++) {
+    block(w, 0.025, 0.02, 0, bottom + (sides * n) / (shelves + 1), 0.01)
+  }
 }
 
 /**

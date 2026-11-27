@@ -5,13 +5,15 @@ import { ZoomButtons } from "@/components/zoom-buttons"
 import { BUILDER, ITEM_SHAPE, WALL_FINISH, type WallFinish } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
-import { clashingItems, footprint, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
+import { clashingItems, footprint, isDoorway, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
 import { ResizeHandle } from "./resize-handle"
 import { fromWall, seenFrom, wallLength, wallName, wallOf } from "./room-outline"
 import { useViewZoom } from "./use-view-zoom"
 import { WallChoice } from "./wall-choice"
 import { Backsplash, TilePattern, WindowDressing } from "./wall-dressing"
 import { WALL_TILE_METRES, wallSurface, wallTileUrl } from "./wall-texture"
+import { ArchwayFace, NicheFace, OpeningCasing, WallTrim } from "./wall-architecture"
+import { archedPath, archRadius } from "./trim"
 import { isCeilingLight } from "./lights"
 import { behindUnit, splashHeight } from "./worktop"
 
@@ -129,7 +131,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
     const point = toWall(event.clientX, event.clientY)
 
     if (g.kind === "move") {
-      update(g.index, { x: point.x - g.offset.x, elevation: item.shape === ITEM_SHAPE.Door ? 0 : point.y - g.offset.y })
+      update(g.index, { x: point.x - g.offset.x, elevation: isDoorway(item.shape) ? 0 : point.y - g.offset.y })
 
       return
     }
@@ -143,7 +145,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
     const middle = ax + Math.sign(px - ax || 1) * (width / 2)
     const bottom = py >= ay ? ay : ay - tall
 
-    update(g.index, { x: middle, elevation: item.shape === ITEM_SHAPE.Door ? 0 : Math.max(0, bottom), width, height: tall })
+    update(g.index, { x: middle, elevation: isDoorway(item.shape) ? 0 : Math.max(0, bottom), width, height: tall })
   }
 
   const end = (event: ReactPointerEvent) => {
@@ -218,6 +220,9 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
             <WallZoneFace key={index} item={item} index={index} height={height} onStart={(event) => start(event, index, "move")} />
           ))}
 
+          {/* The room's trim: wainscoting, rails and crown, stopping at the openings. */}
+          <WallTrim plan={plan} wall={wall} height={height} />
+
           {/* The kitchen units' backsplashes on this wall, behind the units. */}
           <defs>
             <TilePattern id={`splash-tiles-${wall}`} floor={height} />
@@ -236,15 +241,18 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
               />
             ))}
 
-          {/* Windows and doors first, so the room's objects stand in front of them. */}
+          {/* Windows, doors and archways (in their casings) first, so the room's objects stand in front of them. */}
           {openings.map(({ item, index }) => {
             const [left, top] = [item.x - item.width / 2, height - item.elevation - item.height]
 
             return (
               <g key={index} data-item={index} data-opening={item.shape} data-clash={clashing.has(index) || undefined} className="cursor-move" onPointerDown={(event) => start(event, index, "move")}>
-                {item.shape === ITEM_SHAPE.Window ? (
+                <OpeningCasing plan={plan} item={item} height={height} />
+                {item.shape === ITEM_SHAPE.Archway ? (
+                  <ArchwayFace item={item} height={height} />
+                ) : item.shape === ITEM_SHAPE.Window ? (
                   <>
-                    <rect x={left} y={top} width={item.width} height={item.height} fill={BUILDER.scene.glass} stroke={item.color} strokeWidth={7} />
+                    <path d={archedPath(left, top, item.width, item.height, archRadius(item))} fill={BUILDER.scene.glass} stroke={item.color} strokeWidth={7} />
                     {item.covering && (
                       <WindowDressing
                         covering={item.covering}
@@ -332,7 +340,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
                 strokeWidth={4}
                 className="pointer-events-none stroke-primary"
               />
-              {CORNERS.filter((corner) => corner.y > 0 || chosen.shape !== ITEM_SHAPE.Door).map((corner) => (
+              {CORNERS.filter((corner) => corner.y > 0 || !isDoorway(chosen.shape)).map((corner) => (
                 <ResizeHandle
                   key={corner.name}
                   corner={corner}
@@ -469,15 +477,16 @@ function HungFront({
 
   return (
     <g data-item={index} data-hung={item.shape} data-clash={clashing || undefined} className="cursor-move" onPointerDown={onStart}>
+      {item.shape === ITEM_SHAPE.Niche && <NicheFace item={item} height={height} />}
       <rect
         x={left}
         y={top}
         width={w}
         height={h}
         rx={item.shape === ITEM_SHAPE.Picture ? 1 : 2}
-        fill={item.color}
+        fill={item.shape === ITEM_SHAPE.Niche ? "none" : item.color}
         stroke={clashing ? "var(--destructive)" : "black"}
-        strokeOpacity={clashing ? 1 : 0.35}
+        strokeOpacity={clashing ? 1 : item.shape === ITEM_SHAPE.Niche ? 0 : 0.35}
         strokeWidth={clashing ? 4 : 1.5}
       />
       {inner && <rect x={left + frame} y={top + frame} width={w - 2 * frame} height={h - 2 * frame} fill={inner} className="pointer-events-none" />}

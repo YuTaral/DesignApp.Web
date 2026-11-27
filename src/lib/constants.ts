@@ -282,6 +282,7 @@ export const ITEM_SHAPE = {
   Window: "Window", Door: "Door", Picture: "Picture", WallBox: "WallBox",
   FloorZone: "FloorZone", WallZone: "WallZone",
   PendantLight: "PendantLight", Spotlight: "Spotlight", Chandelier: "Chandelier", CeilingLamp: "CeilingLamp", TrackLight: "TrackLight",
+  Archway: "Archway", Niche: "Niche",
 } as const
 
 /** The ceiling lights the Ceiling tab adds, each its catalog object and its name there, in that order. */
@@ -507,6 +508,57 @@ export const LIGHT_TONE_NAMES: Record<LightTone, { name: string; looks: string }
   Cool: { name: "Cool", looks: "Cool, daylight white (5500 K)" },
 }
 
+/** How a built room's ceiling is shaped (Domain Constants.CeilingStyle). */
+export const CEILING_STYLE = { Flat: "Flat", Beams: "Beams", Coffered: "Coffered", Tray: "Tray" } as const
+
+export type CeilingStyle = (typeof CEILING_STYLE)[keyof typeof CEILING_STYLE]
+
+/** The ceiling styles' names and what each looks like, as the user reads them. */
+export const CEILING_STYLE_NAMES: Record<CeilingStyle, { name: string; looks: string }> = {
+  Flat: { name: "Flat", looks: "A plain, flat ceiling" },
+  Beams: { name: "Beams", looks: "Exposed wooden beams across the room" },
+  Coffered: { name: "Coffered", looks: "A grid of recessed square panels" },
+  Tray: { name: "Tray", looks: "A raised middle with a lower border around the walls" },
+}
+
+/** The mouldings run along a built room's walls, in the trim color (Domain Constants.Moulding), in their order. */
+export const MOULDING = { Crown: "Crown", PictureRail: "PictureRail", DadoRail: "DadoRail" } as const
+
+export type Moulding = (typeof MOULDING)[keyof typeof MOULDING]
+
+/** The mouldings' names and where each runs. */
+export const MOULDING_NAMES: Record<Moulding, { name: string; looks: string }> = {
+  Crown: { name: "Crown", looks: "Crown moulding where the walls meet the ceiling" },
+  PictureRail: { name: "Picture rail", looks: "A rail a little below the ceiling" },
+  DadoRail: { name: "Dado rail", looks: "A rail at hip height" },
+}
+
+/** The panelling on the lower part of a built room's walls (Domain Constants.Wainscot). */
+export const WAINSCOT = { None: "None", RaisedPanels: "RaisedPanels", Beadboard: "Beadboard", ShakerPanels: "ShakerPanels" } as const
+
+export type Wainscot = (typeof WAINSCOT)[keyof typeof WAINSCOT]
+
+/** The wainscoting's names and what each looks like. */
+export const WAINSCOT_NAMES: Record<Wainscot, { name: string; looks: string }> = {
+  None: { name: "None", looks: "No panelling" },
+  RaisedPanels: { name: "Raised panels", looks: "Classic raised panels" },
+  Beadboard: { name: "Beadboard", looks: "Narrow vertical boards" },
+  ShakerPanels: { name: "Shaker", looks: "Flat panels in plain square frames" },
+}
+
+/** The trim around a built room's doors, windows and archways (Domain Constants.Casing). */
+export const CASING = { Plain: "Plain", Simple: "Simple", Wide: "Wide", Ornate: "Ornate" } as const
+
+export type Casing = (typeof CASING)[keyof typeof CASING]
+
+/** The casings' names and what each looks like. */
+export const CASING_NAMES: Record<Casing, { name: string; looks: string }> = {
+  Plain: { name: "Plain", looks: "No casing: a plain plastered reveal" },
+  Simple: { name: "Simple", looks: "A slim, simple casing" },
+  Wide: { name: "Wide", looks: "A wide, flat casing" },
+  Ornate: { name: "Ornate", looks: "A classic stepped casing with a head cap" },
+}
+
 /** The sides of the plan, as where north is: the plan's top, right, bottom or left (the Domain's PlanWall). */
 export const NORTH_NAMES: Record<PlanSide, string> = { Back: "Top", Right: "Right", Front: "Bottom", Left: "Left" }
 
@@ -668,6 +720,24 @@ export const BUILDER = {
     /** The skirting boards along every wall's foot, in metres. */
     skirting: { height: 0.1, depth: 0.015 },
     /**
+     * The room's architecture, in metres: the crown's and the rails' height and depth, the wainscoting's panels (their
+     * frame's width, how far a panel sits in, and beadboard's board width), each casing's width (none for plain), the
+     * beams' size and spacing, the coffers' size, the tray border's width and drop, and how much darker a recess's
+     * inside and the space beyond an archway are than their color.
+     */
+    trim: {
+      crown: { height: 0.09, depth: 0.06 },
+      rail: { height: 0.045, depth: 0.02 },
+      panel: { frame: 0.09, inset: 0.012, board: 0.09, depth: 0.012 },
+      casing: { Plain: 0, Simple: 0.07, Wide: 0.12, Ornate: 0.16 } satisfies Record<Casing, number>,
+      casingDepth: 0.02,
+      beam: { width: 0.15, height: 0.2, every: 0.9 },
+      coffer: { size: 1.2, rib: 0.12, depth: 0.1 },
+      tray: { border: 0.5, drop: 0.15 },
+      recessShade: 0.55,
+      beyond: "#3B3632",
+    },
+    /**
      * The 3D view's light at each time of day, so the photo's guide already has its mood: the sun's color and strength,
      * and the sky's and the room's soft light. Midday is the view as it always was.
      */
@@ -787,6 +857,13 @@ export const BUILDER = {
       "#F4F1EA", "#D8D2C6", "#C8C8C8", "#A9A9A9", "#8A8580", "#5A5A5A", "#2F2C2A", "#9DB4C0",
     ],
   },
+  /** How high wainscoting and the dado rail reach, and how far below the ceiling a picture rail runs, in cm (Domain Constants.Plans). */
+  wainscotHeight: 90,
+  pictureRailDrop: 30,
+  /** Colors offered for exposed beams: woods, from pale to dark, then painted. */
+  beamColors: [
+    "#D8C3A5", "#C9A27E", "#B8864B", "#8B6A4A", "#6B4A2E", "#4A3424", "#2F2C2A", "#F4F1EA",
+  ],
   /** Colors offered for the ceiling. */
   ceilingColors: [
     "#FFFFFF", "#FAFAF7", "#F4F1EA", "#EFE6CF", "#E8DCC8", "#E8E2D6", "#D8C3A5", "#C8C8C8",

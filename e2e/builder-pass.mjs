@@ -118,7 +118,7 @@ try {
   // The room's objects ten at a time, then the five ceiling lights.
   step('The plan opens with the living room\u2019s objects (no windows or things to hang), ten at a time, then the ceiling lights, and a search',
     planSections === 'objects,ceiling' && firstPage.length === 15 && firstPage.includes('sofa') && !firstPage.includes('window') && firstPage.includes('pendant-light')
-      && secondPage.length === 23 && moreLeft === null && lamps.join() === 'floor-lamp,ceiling-lamp' && outline[1] === '200px' && floorType === 'Tiles',
+      && secondPage.length === 24 && moreLeft === null && lamps.join() === 'floor-lamp,ceiling-lamp' && outline[1] === '200px' && floorType === 'Tiles',
     `${planSections}: ${firstPage.length} then ${secondPage.length}, lamps ${lamps}, outline ${outline}, floor ${floorType}`)
   step('A search that empties a list says so and clears with one click (or the box’s ×)',
     cleared === '' && emptyText.startsWith('No objects match “zzz”') && afterClear.length === 15, `${emptyText} | ${afterClear.length} after clearing`)
@@ -461,7 +461,8 @@ try {
 
   for (let i = 0; i < 4; i++) {
     await page.mouse.move(farAway.x - i, farAway.y + i)
-    heldAt.push(await page.$eval('[data-wall-view] [data-opening=Window] rect', (e) => `${e.getAttribute('x')},${e.getAttribute('y')}`))
+    // The window's outline (a path, so an arched one is drawn arched).
+    heldAt.push(await page.$eval('[data-wall-view] [data-opening=Window] path:not([data-casing])', (e) => e.getAttribute('d')))
   }
 
   await page.mouse.up()
@@ -1136,6 +1137,63 @@ try {
     toggles.length > 3 && toggles.every((open) => open === 'false') && roomHintGone && wallHint.startsWith('Click a window, door or hung thing')
       && /oklch\([\d.]+ [\d.]+ 2[56]\d/.test(hintColor) && tappedHint.startsWith('The room as the photo sees it'),
     JSON.stringify({ toggles: toggles.length, closed: toggles.every((open) => open === 'false'), roomHintGone, wallHint: wallHint.slice(0, 30), hintColor, tappedHint: tappedHint.slice(0, 30) }))
+
+  // 17. Architecture: in a 2.4 m high living room a column is added as tall as the room, an archway and a niche go on
+  //     the wall shown. Crown and picture rail, raised-panel wainscoting and ornate casings are chosen with the walls,
+  //     a tray ceiling with the ceiling; they are saved, and the Wall tab draws the rails, the casings, the archway and
+  //     the niche.
+  const archId = await page.evaluate(async () => {
+    const created = await fetch('/api/plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Architecture', roomType: 'LivingRoom', width: 4, length: 5, height: 2.4, wallColor: '#E8E2D6', floorColor: '#B89B7A' }),
+    })
+
+    return (await created.json()).id
+  })
+
+  await page.goto(`${WEB}/build/${archId}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-plan-canvas]')
+  await addFromDialog('column')
+  const columnAdded = await storedOnce((plan) => plan.items.some((item) => /column/.test(item.label)))
+  const column = columnAdded.items.find((item) => /column/.test(item.label))
+
+  await page.click('[role=tab]::-p-text(Wall)')
+  await page.waitForSelector('[data-wall-view]')
+  await addFromDialog('archway')
+  await addFromDialog('niche')
+  // The niche added is chosen: letting it go shows the room's settings again.
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-moulding=Crown]')
+  await page.click('[data-moulding=Crown]')
+  await page.click('[data-moulding=PictureRail]')
+  await page.click('[data-wainscot=RaisedPanels]')
+  await page.click('[data-casing=Ornate]')
+  const trimHeading = await page.$eval('[data-panel-section=settings-trim] [data-section-toggle]', (b) => b.innerText.trim())
+  const wallMarks = await page.evaluate(() => ({
+    bands: [...new Set([...document.querySelectorAll('[data-band]')].map((b) => b.dataset.band))].sort().join(),
+    wainscot: document.querySelectorAll('[data-wainscot=RaisedPanels]').length,
+    casings: document.querySelectorAll('[data-casing=Ornate]').length,
+    archways: document.querySelectorAll('[data-archway]').length,
+    niches: document.querySelectorAll('[data-niche]').length,
+  }))
+
+  await shot('builder-architecture-wall')
+  await page.click('[role=tab]::-p-text(Ceiling)')
+  await page.waitForSelector('[data-ceiling-style=Tray]')
+  await page.click('[data-ceiling-style=Tray]')
+  const detailed = await storedOnce((plan) => plan.finish.details.ceiling === 'Tray' && plan.finish.details.casing === 'Ornate')
+
+  await page.click('[role=tab]::-p-text(3D view)')
+  await page.waitForSelector('[data-view-3d]')
+  await sleep(900)
+  await shot('builder-architecture-3d')
+  step('A column is as tall as the room; an archway and a niche go on the wall; mouldings, wainscoting, casings and a tray ceiling are saved and drawn on the wall',
+    column?.height === 240 && detailed.items.some((item) => item.shape === 'Archway') && detailed.items.some((item) => item.shape === 'Niche')
+      && JSON.stringify(detailed.finish.details.mouldings) === '["Crown","PictureRail"]' && detailed.finish.details.wainscot === 'RaisedPanels'
+      && wallMarks.bands === 'Crown,PictureRail,wainscot-cap' && wallMarks.wainscot > 0 && wallMarks.casings > 0 && wallMarks.archways === 1 && wallMarks.niches === 1
+      && trimHeading === 'Trim & mouldings: crown, picture rail, raised panels',
+    JSON.stringify({ column: column?.height, details: detailed.finish.details, wallMarks, trimHeading }))
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('builder-stopped').catch(() => {})

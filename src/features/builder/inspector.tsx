@@ -324,7 +324,7 @@ function VariationChoice({ plan, index }: { plan: Plan; index: number }) {
       label="Variation"
       chips={chips}
       value={variants[found.index].key}
-      onPick={(key) => update(index, toVariation(variants.find((v) => v.key === key)!))}
+      onPick={(key) => update(index, toVariation(variants.find((v) => v.key === key)!, plan.height * 100))}
       attribute="variation"
       group={{ "data-variations": found.object.key }}
     />

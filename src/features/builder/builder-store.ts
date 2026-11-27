@@ -227,8 +227,10 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
         return
       }
 
+      // A column reaches the ceiling, whatever the room's height.
+      const tall = object.variants.some((variant) => variant.label === object.label && variant.toCeiling)
       const base = {
-        label: object.label, shape: object.shape, width: object.width, depth: object.depth, height: object.height, color: object.color, rotation: 0,
+        label: object.label, shape: object.shape, width: object.width, depth: object.depth, height: tall ? plan.height * 100 : object.height, color: object.color, rotation: 0,
         form: object.form ?? ITEM_FORM.Standard, decorations: decorations ?? [], material: object.material ?? "",
         // A kitchen unit comes with its worktop, as in a new kitchen (an island has no backsplash).
         worktop: object.worktop ? { ...WORKTOP.start, backsplash: object.worktop === WORKTOP_SPOT.Island ? BACKSPLASH.None : WORKTOP.start.backsplash } : null,
@@ -237,7 +239,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
 
       if (isWallShape(object.shape)) {
         const placed = at && "wall" in at ? at : at ? nearestWall(plan, at.x, at.y) : { wall: plan.view, along: wallLength(plan, plan.view) / 2 }
-        const elevation = object.shape === ITEM_SHAPE.Door ? 0 : object.elevation
+        const elevation = isDoorway(object.shape) ? 0 : object.elevation
 
         item = { ...base, wall: placed.wall, x: placed.along, y: 0, elevation }
       } else {
@@ -371,9 +373,11 @@ export function variationOf(catalog: CatalogObject[], item: PlanItem) {
 /**
  * The change that turns an object into another variation of its catalog object, where it is, in its color and turn.
  * @param variant - The variation.
+ * @param roomHeight - The room's height in cm, which a variation that reaches the ceiling (a column) takes.
  */
-export function toVariation(variant: CatalogVariant): Partial<PlanItem> {
-  const { label, shape, width, depth, height, form } = variant
+export function toVariation(variant: CatalogVariant, roomHeight: number): Partial<PlanItem> {
+  const { label, shape, width, depth, form } = variant
+  const height = variant.toCeiling ? roomHeight : variant.height
   // A new outline starts with its usual parts.
   const raised = shape === ITEM_SHAPE.Window || isMountedShape(shape)
 
@@ -464,7 +468,7 @@ export function cornerOutline(item: PlanItem): [number, number][] {
 }
 
 /**
- * Whether a shape goes on a wall: a window or door in it, or a picture or wall box hung on it.
+ * Whether a shape goes on a wall: a window, door or archway in it, or a picture, wall box or niche on it.
  * @param shape - The shape.
  */
 export function isWallShape(shape: string) {
@@ -472,19 +476,27 @@ export function isWallShape(shape: string) {
 }
 
 /**
- * Whether a shape is an opening in a wall (a window or door).
+ * Whether a shape is an opening in a wall (a window, door or archway).
  * @param shape - The shape.
  */
 export function isOpeningShape(shape: string) {
-  return shape === ITEM_SHAPE.Window || shape === ITEM_SHAPE.Door
+  return shape === ITEM_SHAPE.Window || isDoorway(shape)
 }
 
 /**
- * Whether a shape hangs on a wall (a picture or a wall box).
+ * Whether a shape is an opening that stands on the floor (a door or archway): it stays at the floor when moved or resized.
+ * @param shape - The shape.
+ */
+export function isDoorway(shape: string) {
+  return shape === ITEM_SHAPE.Door || shape === ITEM_SHAPE.Archway
+}
+
+/**
+ * Whether a shape is on a wall above the floor (a picture, a wall box or a niche in it).
  * @param shape - The shape.
  */
 export function isMountedShape(shape: string) {
-  return shape === ITEM_SHAPE.Picture || shape === ITEM_SHAPE.WallBox
+  return shape === ITEM_SHAPE.Picture || shape === ITEM_SHAPE.WallBox || shape === ITEM_SHAPE.Niche
 }
 
 /**
@@ -576,7 +588,7 @@ function inside(item: PlanItem, plan: Pick<Plan, "outline" | "height">): PlanIte
     const [along, ceiling] = [wallLength(plan, item.wall), plan.height * 100]
     const width = Math.min(item.width, along)
     const height = Math.min(item.height, ceiling)
-    const elevation = item.shape === ITEM_SHAPE.Door ? 0 : Math.min(Math.max(0, item.elevation), ceiling - height)
+    const elevation = isDoorway(item.shape) ? 0 : Math.min(Math.max(0, item.elevation), ceiling - height)
     const depth = isMountedShape(item.shape) ? Math.min(item.depth, BUILDER.maxMountedDepth) : item.depth
 
     return { ...item, width, height, depth, elevation, x: clamp(item.x, width, along) }

@@ -6,17 +6,21 @@ import {
   API,
   QUERY_KEYS,
   type Backsplash,
+  type Casing,
+  type CeilingStyle,
   type CoveringKind,
   type CurtainLength,
   type FloorType,
   type ItemForm,
   type ItemShape,
   type LightTone,
+  type Moulding,
   type PhotoStyle,
   type PlanSide,
   type RoomType,
   type TimeOfDay,
   type ViewCorner,
+  type Wainscot,
   type WallFinish,
   type WorktopSpot,
 } from "@/lib/constants"
@@ -93,22 +97,37 @@ export type WallLook = {
 }
 
 /**
+ * A built room's architecture, for the whole room (mirrors RoomDetailsRequest): its ceiling's shape and beams' color,
+ * the mouldings along its walls (each once, in order), the panelling on their lower part and the casings around its
+ * doors, windows and archways, all in the trim color.
+ */
+export type RoomDetails = {
+  ceiling: CeilingStyle
+  beamColor: string
+  mouldings: Moulding[]
+  wainscot: Wainscot
+  casing: Casing
+}
+
+/**
  * How a built room's walls and ceiling are finished and lit, and when its photo is taken (mirrors RoomFinishRequest):
- * the walls' finish (in the room's wall color), the walls in their own finish and color, the ceiling's and the
- * skirting boards' colors.
+ * the walls' finish (in the room's wall color), the walls in their own finish and color, the ceiling's and the trim's
+ * colors, and its architecture.
  */
 export type RoomFinish = {
   walls: WallFinish
   /** The walls in their own finish and color, each at most once. */
   ownWalls: WallLook[]
   ceilingColor: string
-  /** The skirting boards' color (windows and doors keep their own colors). */
+  /** The trim's color: skirting, mouldings, wainscoting and casings (windows and doors keep their own colors). */
   trimColor: string
   timeOfDay: TimeOfDay
   /** The color of the lamps' and ceiling lights' light. */
   tone: LightTone
   /** The side of the plan that faces north, which decides where the sun comes in from. */
   north: PlanSide
+  /** Its ceiling's shape, mouldings, wainscoting and casings. */
+  details: RoomDetails
 }
 
 /**
@@ -238,6 +257,8 @@ export type CatalogVariant = {
   /** How high its bottom is above the floor (a window's sill; else 0). */
   elevation: number
   form: ItemForm
+  /** Whether it reaches the ceiling (a column): added as tall as the room, whatever its height says. */
+  toCeiling: boolean
 }
 
 /** What a new plan needs: its type, walls, colors and floor, and whether it starts with a suggested layout. */

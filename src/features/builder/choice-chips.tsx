@@ -11,10 +11,11 @@ export type Chip<T extends string> = {
 }
 
 /**
- * A labelled row of chips to pick one of, wrapping onto more lines; the one picked is highlighted.
+ * A labelled row of chips to pick one of, wrapping onto more lines; the one picked is highlighted. Given a list of
+ * values instead, it is a row of checkboxes, each chip on or off (`onPick` gets the chip clicked, to switch it).
  * @param props.label - What the choice is (also its name for screen readers).
  * @param props.chips - The choices.
- * @param props.value - The one picked; null for none.
+ * @param props.value - The one picked (null for none), or those that are on.
  * @param props.onPick - Picks one.
  * @param props.attribute - The data attribute each chip carries its value in (`data-<attribute>`), for tests.
  * @param props.group - Data attributes for the row itself.
@@ -31,28 +32,31 @@ export function ChoiceChips<T extends string>({
 }: {
   label: string
   chips: Chip<T>[]
-  value: T | null
+  value: T | readonly T[] | null
   onPick: (value: T) => void
   attribute: string
   group?: Record<`data-${string}`, string>
   after?: ReactNode
 }) {
+  const several = Array.isArray(value)
+  const isOn = (chip: T) => (several ? value.includes(chip) : chip === value)
+
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium">{label}</p>
       <div className="flex flex-wrap gap-1.5">
-        <div role="radiogroup" aria-label={label} className="contents" {...group}>
+        <div role={several ? "group" : "radiogroup"} aria-label={label} className="contents" {...group}>
           {chips.map((chip) => (
             <button
               key={chip.value}
               type="button"
-              role="radio"
-              aria-checked={chip.value === value}
+              role={several ? "checkbox" : "radio"}
+              aria-checked={isOn(chip.value)}
               title={chip.title}
               onClick={() => onPick(chip.value)}
               className={cn(
                 "rounded-lg border px-2.5 py-1 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
-                chip.value === value && "border-primary bg-accent text-accent-foreground hover:bg-accent"
+                isOn(chip.value) && "border-primary bg-accent text-accent-foreground hover:bg-accent"
               )}
               {...{ [`data-${attribute}`]: chip.value }}
             >

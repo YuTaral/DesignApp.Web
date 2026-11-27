@@ -2,7 +2,19 @@ import { useState } from "react"
 import { PlusIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { BUILDER, LIGHT_TONE, LIGHT_TONE_NAMES, NORTH_NAMES, PLAN_SIDE, TIME_OF_DAY, TIME_OF_DAY_NAMES, WALL_FINISH_NAMES, type WallFinish } from "@/lib/constants"
+import {
+  BUILDER,
+  CEILING_STYLE,
+  CEILING_STYLE_NAMES,
+  LIGHT_TONE,
+  LIGHT_TONE_NAMES,
+  NORTH_NAMES,
+  PLAN_SIDE,
+  TIME_OF_DAY,
+  TIME_OF_DAY_NAMES,
+  WALL_FINISH_NAMES,
+  type WallFinish,
+} from "@/lib/constants"
 import type { Plan, RoomFinish } from "./api"
 import { useBuilderStore } from "./builder-store"
 import { CeilingLightList } from "./ceiling-lights"
@@ -11,8 +23,12 @@ import { ChoiceChips } from "./choice-chips"
 import { ColorChoice } from "./fields"
 import { FINISH_CHIPS } from "./finish-chips"
 import { PanelSection } from "./panel-section"
+import { TrimFields } from "./trim-fields"
 import { wallName, walls } from "./room-outline"
 import { wallSurface } from "./wall-texture"
+
+/** The ceiling's shapes as chips, with what each looks like on hover. */
+const CEILING_CHIPS = Object.values(CEILING_STYLE).map((style) => ({ value: style, name: CEILING_STYLE_NAMES[style].name, title: CEILING_STYLE_NAMES[style].looks }))
 
 /** The light colors as chips, with what each looks like on hover. */
 const TONE_CHIPS = Object.values(LIGHT_TONE).map((tone) => ({ value: tone, name: LIGHT_TONE_NAMES[tone].name, title: LIGHT_TONE_NAMES[tone].looks }))
@@ -24,12 +40,13 @@ const NORTH_CHIPS = Object.values(PLAN_SIDE).map((side) => ({ value: side, name:
 const TIME_CHIPS = Object.values(TIME_OF_DAY).map((time) => ({ value: time, name: TIME_OF_DAY_NAMES[time].name, title: TIME_OF_DAY_NAMES[time].looks }))
 
 /**
- * The room's finish, in up to three sections that open and close (`PanelSection`, closed at first), each heading saying
+ * The room's finish, in up to four sections that open and close (`PanelSection`, closed at first), each heading saying
  * what is chosen:
- * - "Walls": which wall to change (All, or one wall: at first the one shown, in the Wall tab), its finish and color,
- *   and the skirting's color. A wall changed on its own keeps its own look; a change for All goes to every wall. In the
- *   Wall tab, "Add a wall area" ends the list.
- * - "Ceiling": its color, and its lights (see `CeilingLightList`).
+ * - "Walls": which wall to change (All, or one wall: at first the one shown, in the Wall tab), and its finish and
+ *   color. A wall changed on its own keeps its own look; a change for All goes to every wall. In the Wall tab, "Add a
+ *   wall area" ends the list.
+ * - "Trim & mouldings", with the walls: see `TrimFields`.
+ * - "Ceiling": its shape (and the beams' color), its color, and its lights (see `CeilingLightList`).
  * - "Light & mood": the time of day the photo is taken at, the
  *   lights' color, and where north is on the plan (which decides where the sun comes in from).
  * @param props.plan - The room.
@@ -138,11 +155,26 @@ export function FinishFields({
               Same as the other walls
             </Button>
           )}
-          <ColorChoice label="Skirting" value={finish.trimColor} colors={BUILDER.frameColors} onPick={(trimColor) => set({ trimColor })} />
         </PanelSection>
       )}
+      {showWalls && <TrimFields finish={finish} onChange={set} />}
       {showCeiling && (
-        <PanelSection name="settings-ceiling" title="Ceiling" summary={lightCount} attributes={{ "data-finish-section": "ceiling" }}>
+        <PanelSection
+          name="settings-ceiling"
+          title="Ceiling"
+          summary={`${CEILING_STYLE_NAMES[finish.details.ceiling].name.toLowerCase()}, ${lightCount}`}
+          attributes={{ "data-finish-section": "ceiling" }}
+        >
+          <ChoiceChips
+            label="Style"
+            chips={CEILING_CHIPS}
+            value={finish.details.ceiling}
+            onPick={(ceiling) => set({ details: { ...finish.details, ceiling } })}
+            attribute="ceiling-style"
+          />
+          {finish.details.ceiling === CEILING_STYLE.Beams && (
+            <ColorChoice label="Beams" value={finish.details.beamColor} colors={BUILDER.beamColors} onPick={(beamColor) => set({ details: { ...finish.details, beamColor } })} />
+          )}
           <ColorChoice label="Ceiling" value={finish.ceilingColor} colors={BUILDER.ceilingColors} onPick={(ceilingColor) => set({ ceilingColor })} />
           <CeilingLightList plan={plan} />
         </PanelSection>
