@@ -1,5 +1,5 @@
-import { BUILDER, WAINSCOT } from "@/lib/constants"
-import type { Plan, PlanItem } from "./api"
+import { BUILDER, CABINET_FRONTS, HANDLE_STYLE, HARDWARE_NAMES, WAINSCOT } from "@/lib/constants"
+import type { Plan, PlanItem, RoomFittings } from "./api"
 import { shade } from "./floor-texture"
 import { archedPath, archRadius, casingFor, trimBands, trimRuns } from "./trim"
 
@@ -125,6 +125,79 @@ export function NicheFace({ item, height }: { item: PlanItem; height: number }) 
       {Array.from({ length: shelves }, (_, n) => (
         <rect key={n} x={left} y={top + arch + ((h - arch) * (n + 1)) / (shelves + 1)} width={w} height={2.5} fill={item.color} className="pointer-events-none" />
       ))}
+    </g>
+  )
+}
+
+/**
+ * A cabinet's front on the Wall tab, over its box: a seam between doors every 60 cm or so, each door's front style (a
+ * shaker frame, or fluting as fine lines), glass in a frame for glass upper cabinets, and each handle in the room's
+ * metal (as the 3D view places it: the top of a base unit, the bottom of an upper one).
+ * @param props.left - The cabinet's left side, in cm along the wall.
+ * @param props.top - Its top, in cm down from the ceiling line.
+ * @param props.width - Its width.
+ * @param props.height - The height of its doors.
+ * @param props.color - Its color.
+ * @param props.fittings - How the room is fitted.
+ * @param props.upper - Whether it hangs on the wall (handles at the bottom).
+ */
+export function UnitFront({
+  left,
+  top,
+  width,
+  height,
+  color,
+  fittings,
+  upper,
+}: {
+  left: number
+  top: number
+  width: number
+  height: number
+  color: string
+  fittings: RoomFittings
+  upper: boolean
+}) {
+  const doors = Math.max(1, Math.round(width / (BUILDER.scene.fittings.door * 100)))
+  const each = width / doors
+  const frame = Math.min(BUILDER.scene.fittings.frame * 100, each / 5, height / 5)
+  const line = shade(color, 0.6)
+  const metal = HARDWARE_NAMES[fittings.hardware].color
+  const glass = upper && fittings.glassUppers
+
+  return (
+    <g className="pointer-events-none" data-unit-front={fittings.fronts} data-handles={fittings.handles}>
+      {Array.from({ length: doors }, (_, n) => {
+        const x = left + each * n
+        const side = doors === 1 || n % 2 === 0 ? 1 : -1
+        const edge = x + each / 2 + side * (each / 2 - 5)
+        const reach = upper ? top + height - 8 : top + 6
+
+        return (
+          <g key={n}>
+            {n > 0 && <line x1={x} y1={top} x2={x} y2={top + height} stroke={line} strokeWidth={1} />}
+            {glass && <rect x={x + frame} y={top + frame} width={each - 2 * frame} height={height - 2 * frame} fill={BUILDER.scene.fittings.glass} />}
+            {(glass || fittings.fronts === CABINET_FRONTS.Shaker) && (
+              <rect x={x + frame} y={top + frame} width={each - 2 * frame} height={height - 2 * frame} fill="none" stroke={line} strokeWidth={1} />
+            )}
+            {!glass &&
+              fittings.fronts === CABINET_FRONTS.Fluted &&
+              Array.from({ length: Math.max(0, Math.floor(each / 2.5) - 1) }, (_, r) => (
+                <line key={r} x1={x + (r + 1) * 2.5} y1={top + 2} x2={x + (r + 1) * 2.5} y2={top + height - 2} stroke={line} strokeOpacity={0.5} strokeWidth={0.6} />
+              ))}
+            {fittings.handles === HANDLE_STYLE.Knob && <circle cx={edge} cy={reach} r={2} fill={metal} />}
+            {fittings.handles === HANDLE_STYLE.Bar &&
+              (upper ? (
+                <rect x={edge - 0.6} y={reach - 16} width={1.2} height={16} fill={metal} />
+              ) : (
+                <rect x={x + each / 2 - Math.min(8, each * 0.3)} y={reach - 0.6} width={Math.min(16, each * 0.6)} height={1.2} fill={metal} />
+              ))}
+            {fittings.handles === HANDLE_STYLE.CupPull && <rect x={x + each / 2 - 4.5} y={reach - 1.2} width={9} height={2.5} rx={1.2} fill={metal} />}
+            {fittings.handles === HANDLE_STYLE.EdgePull && <rect x={x + each * 0.2} y={upper ? top + height - 1.2 : top} width={each * 0.6} height={1.2} fill={metal} />}
+            {fittings.handles === HANDLE_STYLE.Handleless && <rect x={x} y={upper ? top + height - 2 : top} width={each} height={2} fill="#1E1E1E" opacity={0.6} />}
+          </g>
+        )
+      })}
     </g>
   )
 }

@@ -13,15 +13,19 @@ import {
   MOULDING,
   PANORAMA,
   PLAN_SIDE,
+  TILE_PATTERN,
   TIME_OF_DAY,
   WAINSCOT,
   WALL_FINISH,
   ZONE,
   type FloorType,
+  type TilePattern,
   type WallFinish,
 } from "@/lib/constants"
-import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot, WindowCovering, Worktop } from "./api"
+import type { ItemBox, OutlinePoint, Plan, PlanItem, PlanShot, RoomFittings, WindowCovering, Worktop } from "./api"
+import { basinModel, cabinetFront, sinkModel } from "./cabinet-3d"
 import { isCurtains } from "./covering"
+import { isCabinet } from "./fittings"
 import { isCeilingLight, isLightOn, spotGrid, trackHeads } from "./lights"
 import { CUBE_FACES, type Vec3 } from "./panorama"
 import type { PanoramaJob } from "./panorama.worker"
@@ -30,7 +34,7 @@ import { cameraStand, wallLength, wallOf, wallPoint, walls, type OutlineWall } f
 import { FLOOR_TILE_METRES, paintFloor, shade } from "./floor-texture"
 import type { Frame } from "./use-view-zoom"
 import { archRadius, casingFor, trimBands, trimRuns } from "./trim"
-import { behindUnit, OPEN_BEHIND, ownSplashColor, splashHeight, type Behind } from "./worktop"
+import { behindUnit, OPEN_BEHIND, ownSplashColor, splashHeight, SPLASH_TILE_METRES, type Behind } from "./worktop"
 import { paintWall, WALL_TILE_METRES, wallSurface } from "./wall-texture"
 
 /**
@@ -473,7 +477,7 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
   for (const [index, item] of plan.items.entries()) {
     // An area of the floor or a wall is part of that surface (in the masks too), not an object.
     if (item.shape === ITEM_SHAPE.FloorZone) {
-      scene.add(floorZone(item, anisotropy))
+      scene.add(floorZone(item, anisotropy, finish.fittings.tiles))
       continue
     }
 
@@ -489,7 +493,7 @@ function buildScene(plan: Plan, anisotropy: number, allWalls = false) {
     const drawn = isCeilingLight(item.shape)
       ? ceilingFixture(plan, item, on)
       : !isWallItem(item)
-        ? model(item, item.worktop ? behindUnit(plan, item) : OPEN_BEHIND)
+        ? model(item, item.worktop ? behindUnit(plan, item) : OPEN_BEHIND, finish.fittings)
         : item.wall !== behind
           ? isMountedShape(item.shape)
             ? hung(plan, item)
@@ -856,10 +860,11 @@ function wallMesh(plan: Plan, wall: OutlineWall, paint: THREE.Material) {
  * floor (under rugs) and turned as on the plan. It counts as the floor in the masks.
  * @param item - The area.
  * @param anisotropy - The sharpest texture filtering the GPU offers.
+ * @param tiles - How the room's tiles are laid (for a tiled area).
  */
-function floorZone(item: PlanItem, anisotropy: number) {
+function floorZone(item: PlanItem, anisotropy: number, tiles: TilePattern) {
   const [w, d] = [item.width / 100, item.depth / 100]
-  const paint = tileMaterial((context, size) => paintFloor(context, item.material as FloorType, item.color, size), w / FLOOR_TILE_METRES, d / FLOOR_TILE_METRES, anisotropy, 0.7)
+  const paint = tileMaterial((context, size) => paintFloor(context, item.material as FloorType, item.color, size, tiles), w / FLOOR_TILE_METRES, d / FLOOR_TILE_METRES, anisotropy, 0.7)
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), paint)
 
   mesh.rotation.set(-Math.PI / 2, 0, -THREE.MathUtils.degToRad(item.rotation))
@@ -883,7 +888,7 @@ function wallZone(plan: Plan, item: PlanItem & { wall: number }, anisotropy: num
   const paint =
     finish === WALL_FINISH.Paint
       ? material(item.color)
-      : tileMaterial((context, size) => paintWall(context, finish, item.color, size), w / WALL_TILE_METRES, h / WALL_TILE_METRES, anisotropy)
+      : tileMaterial((context, size) => paintWall(context, finish, item.color, size, plan.finish.fittings.tiles), w / WALL_TILE_METRES, h / WALL_TILE_METRES, anisotropy)
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), paint)
   const group = new THREE.Group()
   const at = wallPoint(plan, item.wall, item.x)
@@ -912,7 +917,7 @@ function wallPaint(plan: Plan, wall: OutlineWall, anisotropy: number) {
     return material(color)
   }
 
-  return tileMaterial((context, size) => paintWall(context, kind, color, size), wall.length / 100 / WALL_TILE_METRES, plan.height / WALL_TILE_METRES, anisotropy)
+  return tileMaterial((context, size) => paintWall(context, kind, color, size, plan.finish.fittings.tiles), wall.length / 100 / WALL_TILE_METRES, plan.height / WALL_TILE_METRES, anisotropy)
 }
 
 /**
@@ -1192,7 +1197,7 @@ function placer(group: THREE.Group) {
  * @param behind - Whether a wall is behind it (none behind a unit standing out, or the leg of an L), and how high a
  *   window there starts: the backsplash stops below it.
  */
-function worktopModel(worktop: Worktop, w: number, d: number, h: number, behind: Behind) {
+function worktopModel(worktop: Worktop, w: number, d: number, h: number, behind: Behind, tiles: TilePattern) {
   const T = BUILDER.scene.worktop
   const group = new THREE.Group()
   const top = new THREE.MeshStandardMaterial({ color: worktop.color, roughness: 0.35 })
@@ -1209,7 +1214,11 @@ function worktopModel(worktop: Worktop, w: number, d: number, h: number, behind:
   group.add(slab)
 
   if (height > 0) {
-    const splash = new THREE.Mesh(new THREE.BoxGeometry(w, height, 0.012), ownSplashColor(worktop) ? own : top)
+    // Tiles are painted in the room's pattern at their real size.
+    const tiled = worktop.backsplash === BACKSPLASH.Tiles
+      ? tileMaterial((context, size) => paintWall(context, WALL_FINISH.Tiles, worktop.backsplashColor, size, tiles), w / SPLASH_TILE_METRES, height / SPLASH_TILE_METRES, 4, 0.4)
+      : null
+    const splash = new THREE.Mesh(new THREE.BoxGeometry(w, height, 0.012), tiled ?? (ownSplashColor(worktop) ? own : top))
 
     splash.position.set(0, h + height / 2, -d / 2 + 0.006)
     group.add(splash)
@@ -1464,6 +1473,10 @@ function hung(plan: Plan, item: PlanItem & { wall: number }) {
 
     block(w, canopy, d, 0, bottom + canopy / 2, d / 2)
     block(w * 0.35, top - bottom - canopy, d * 0.5, 0, (top + bottom + canopy) / 2, d * 0.25)
+  } else if (isCabinet(item) && h > 0.2) {
+    // Fitted cabinets: their doors in the room's fronts, handles near their bottom.
+    block(w, h, d, 0, bottom + h / 2, d / 2)
+    cabinetFront(block, { width: w, bottom, top: bottom + h, front: d }, item.color, plan.finish.fittings, "upper")
   } else {
     // Cabinet doors: a dark seam every 60 cm or so.
     const doors = h > 0.2 ? Math.max(1, Math.round(w / 0.6)) : 1
@@ -1526,14 +1539,14 @@ function niche(item: PlanItem, group: THREE.Group, block: ReturnType<typeof bloc
  * adds a wider chaise at the leg's front end.
  * @param item - The object.
  */
-function model(item: PlanItem, behind: Behind) {
+function model(item: PlanItem, behind: Behind, fittings: RoomFittings) {
   let group: THREE.Group
 
   if (hasParts(item)) {
     // Each part as its own piece, sized from the object's parts: the back run, the leg below it and a P's chaise.
     const { runDepth, legWidth, chaiseWidth, chaiseDepth } = partsOf(item)!
     const front = item.form === ITEM_FORM.PShaped ? chaiseDepth : 0
-    const run = piece({ ...item, depth: runDepth }, { openRight: true, behind })
+    const run = piece({ ...item, depth: runDepth }, { openRight: true, behind, fittings })
     const legLength = item.depth - runDepth - front
 
     group = new THREE.Group()
@@ -1541,7 +1554,7 @@ function model(item: PlanItem, behind: Behind) {
     group.add(run)
 
     if (legLength > 0) {
-      const side = piece({ ...item, width: legWidth, depth: legLength }, { chaise: true })
+      const side = piece({ ...item, width: legWidth, depth: legLength }, { chaise: true, fittings })
 
       side.position.set((item.width - legWidth) / 200, 0, (runDepth - front) / 200)
       group.add(side)
@@ -1557,7 +1570,7 @@ function model(item: PlanItem, behind: Behind) {
     // A leg on the left: the whole model mirrored across its middle (three.js turns the faces round for it).
     group.scale.x = legSide(item)
   } else {
-    group = piece(item, { behind })
+    group = piece(item, { behind, fittings })
   }
 
   group.position.set(item.x / 100, 0, item.y / 100)
@@ -1570,11 +1583,12 @@ function model(item: PlanItem, behind: Behind) {
  * An object's model of its shape around its middle, with real proportions: seats at sitting height, a mattress on a
  * bed frame, table tops on legs (a round top on a pedestal for a round table).
  * @param item - The object, or one piece of an L-shaped one.
- * @param options - For pieces of an L: `openRight` leaves out a sofa's right arm, `chaise` makes it a seat with one arm and no back.
+ * @param options - For pieces of an L: `openRight` leaves out a sofa's right arm, `chaise` makes it a seat with one arm and no back;
+ * `behind` is what a worktop's backsplash meets; `fittings`, how the room is fitted (a cabinet's fronts and handles, a sink, a basin).
  */
 function piece(
   item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "height" | "color" | "form" | "worktop">,
-  options: { openRight?: boolean; chaise?: boolean; behind?: Behind }
+  options: { openRight?: boolean; chaise?: boolean; behind?: Behind; fittings?: RoomFittings }
 ) {
   const [w, d, h] = [item.width / 100, item.depth / 100, Math.max(item.height, 1) / 100]
   const paint = material(item.color)
@@ -1583,7 +1597,7 @@ function piece(
 
   // A kitchen unit's worktop lies on it; a leg of an L has no wall behind it, so only the run has a backsplash.
   if (item.worktop) {
-    group.add(worktopModel(item.worktop, w, d, h, options.behind ?? OPEN_BEHIND))
+    group.add(worktopModel(item.worktop, w, d, h, options.behind ?? OPEN_BEHIND, options.fittings?.tiles ?? TILE_PATTERN.Grid))
   }
 
   /** Adds a block of the object, by its size and the position of its middle. */
@@ -1820,6 +1834,21 @@ function piece(
       const body = item.worktop ? h - BUILDER.scene.worktop.thickness : h
 
       block(w, body, d, 0, body / 2, 0)
+
+      // Fitted cabinetry gets its fronts and handles, a sink unit its sink and tap, a vanity its basin.
+      if (options.fittings && isCabinet(item)) {
+        const tall = !item.worktop && h > 1.2
+
+        cabinetFront(block, { width: w, bottom: Math.min(0.1, body * 0.15), top: body - 0.01, front: d / 2 }, item.color, options.fittings, tall ? "tall" : "base")
+      }
+
+      if (options.fittings && item.worktop && BUILDER.sinkWords.test(item.label)) {
+        sinkModel(block, { width: w, depth: d, top: h }, options.fittings)
+      }
+
+      if (options.fittings && BUILDER.vanityWords.test(item.label)) {
+        basinModel(block, { width: w, depth: d, top: h }, options.fittings)
+      }
     }
   }
 
@@ -1847,7 +1876,7 @@ const PLANT_CLUSTERS = [
  * @param anisotropy - The sharpest texture filtering the GPU offers.
  */
 function floorMaterial(plan: Plan, anisotropy: number) {
-  return tileMaterial((context, size) => paintFloor(context, plan.floorType, plan.floorColor, size), 1 / FLOOR_TILE_METRES, 1 / FLOOR_TILE_METRES, anisotropy, 0.7)
+  return tileMaterial((context, size) => paintFloor(context, plan.floorType, plan.floorColor, size, plan.finish.fittings.tiles), 1 / FLOOR_TILE_METRES, 1 / FLOOR_TILE_METRES, anisotropy, 0.7)
 }
 
 /**

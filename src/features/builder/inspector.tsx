@@ -16,6 +16,8 @@ import { DecorationChoice } from "./decoration-choice"
 import { ColorChoice, NumberField } from "./fields"
 import { FINISH_CHIPS } from "./finish-chips"
 import { FinishFields } from "./finish-fields"
+import { FittingsFields } from "./fittings-fields"
+import { isFitted } from "./fittings"
 import { MaterialChips } from "./material-chips"
 import { PanelSection } from "./panel-section"
 import { hasParts, isMountedShape, isWallItem, isZoneShape, partsOf, toVariation, useBuilderStore, variationOf } from "./builder-store"
@@ -446,6 +448,7 @@ function RoomInspector({
           </div>
         </PanelSection>
       )}
+      {shows.floor && isFitted(plan) && <FittingsFields plan={plan} />}
       {(shows.walls || shows.ceiling || shows.light) && (
         <FinishFields plan={plan} walls={shows.walls} ceiling={shows.ceiling} light={shows.light} shownWall={shownWall} onShowWall={onShowWall} />
       )}

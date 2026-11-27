@@ -18,7 +18,7 @@ export const ROOMS = process.env.DESIGNAPP_ROOMS ?? 'C:\\Users\\yutar\\Desktop\\
 /** The editor's panel sections the passes find open: the app starts them closed. "Light & mood" stays closed. */
 export const OPEN_SECTIONS = ['objects', 'ceiling', 'openings', 'mounted', 'settings-room', 'settings-floor', 'settings-walls',
   'settings-ceiling', 'settings-ceiling-lights', 'settings-type', 'settings-look', 'settings-decorations', 'settings-size',
-  'settings-place', 'settings-covering', 'settings-light-switch', 'settings-worktop', 'settings-trim']
+  'settings-place', 'settings-covering', 'settings-light-switch', 'settings-worktop', 'settings-trim', 'settings-fittings']
 
 /**
  * Starts Firefox with one page.

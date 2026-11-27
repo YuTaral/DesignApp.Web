@@ -1,4 +1,5 @@
-import { FLOOR_TYPE, type FloorType } from "@/lib/constants"
+import { FLOOR_TYPE, TILE_PATTERN, type FloorType, type TilePattern } from "@/lib/constants"
+import { paintTilePattern } from "./tile-pattern"
 
 /** How many metres of floor one painted tile of the pattern covers (it repeats across the room). */
 export const FLOOR_TILE_METRES = 2
@@ -12,9 +13,10 @@ const tileUrls = new Map<string, string>()
  * @param type - The floor material.
  * @param color - Its color.
  * @param size - The tile's size, in pixels.
+ * @param pattern - How tiles are laid (for tiles).
  */
-export function floorTileUrl(type: FloorType, color: string, size = 128) {
-  const key = `${type}:${color}:${size}`
+export function floorTileUrl(type: FloorType, color: string, size = 128, pattern: TilePattern = TILE_PATTERN.Grid) {
+  const key = `${type}:${color}:${size}:${pattern}`
   const kept = tileUrls.get(key)
 
   if (kept) {
@@ -24,7 +26,7 @@ export function floorTileUrl(type: FloorType, color: string, size = 128) {
   const canvas = document.createElement("canvas")
 
   canvas.width = canvas.height = size
-  paintFloor(canvas.getContext("2d")!, type, color, size)
+  paintFloor(canvas.getContext("2d")!, type, color, size, pattern)
   const url = canvas.toDataURL("image/png")
 
   tileUrls.set(key, url)
@@ -40,8 +42,9 @@ export function floorTileUrl(type: FloorType, color: string, size = 128) {
  * @param type - The floor type.
  * @param color - The floor's color, "#RRGGBB".
  * @param size - The tile's size, in pixels.
+ * @param pattern - How tiles are laid (a grid when missing; see `paintTilePattern` for the others).
  */
-export function paintFloor(context: CanvasRenderingContext2D, type: FloorType, color: string, size: number) {
+export function paintFloor(context: CanvasRenderingContext2D, type: FloorType, color: string, size: number, pattern: TilePattern = TILE_PATTERN.Grid) {
   const random = seeded(7)
   const metre = size / FLOOR_TILE_METRES
   const seam = shade(color, 0.72)
@@ -101,6 +104,11 @@ export function paintFloor(context: CanvasRenderingContext2D, type: FloorType, c
     }
     case FLOOR_TYPE.Tiles:
     case FLOOR_TYPE.Stone: {
+      if (type === FLOOR_TYPE.Tiles && pattern !== TILE_PATTERN.Grid) {
+        paintTilePattern(context, color, size, FLOOR_TILE_METRES, pattern, random, shade)
+        break
+      }
+
       const [w, h] = type === FLOOR_TYPE.Tiles ? [0.5, 0.5] : [1.0, 0.5]
       const grout = Math.max(1, size / 256)
 

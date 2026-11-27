@@ -2,17 +2,18 @@ import { useMemo, useRef, type DragEvent, type PointerEvent as ReactPointerEvent
 
 
 import { ZoomButtons } from "@/components/zoom-buttons"
-import { BUILDER, ITEM_SHAPE, WALL_FINISH, type WallFinish } from "@/lib/constants"
-import type { Plan, PlanItem } from "./api"
+import { BUILDER, ITEM_SHAPE, WALL_FINISH, type TilePattern, type WallFinish } from "@/lib/constants"
+import type { Plan, PlanItem, RoomFittings } from "./api"
 import { allowCatalogDrop, droppedObject } from "./catalog-drag"
 import { clashingItems, footprint, isDoorway, isMountedShape, isWallItem, isWallShape, useBuilderStore } from "./builder-store"
 import { ResizeHandle } from "./resize-handle"
 import { fromWall, seenFrom, wallLength, wallName, wallOf } from "./room-outline"
 import { useViewZoom } from "./use-view-zoom"
 import { WallChoice } from "./wall-choice"
-import { Backsplash, TilePattern, WindowDressing } from "./wall-dressing"
+import { Backsplash, WindowDressing } from "./wall-dressing"
 import { WALL_TILE_METRES, wallSurface, wallTileUrl } from "./wall-texture"
-import { ArchwayFace, NicheFace, OpeningCasing, WallTrim } from "./wall-architecture"
+import { ArchwayFace, NicheFace, OpeningCasing, UnitFront, WallTrim } from "./wall-architecture"
+import { isCabinet } from "./fittings"
 import { archedPath, archRadius } from "./trim"
 import { isCeilingLight } from "./lights"
 import { behindUnit, splashHeight } from "./worktop"
@@ -60,7 +61,8 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
   const gesture = useRef<Gesture | null>(null)
   const [surface, color] = wallSurface(plan, wall)
   // The wall's finish as a repeating pattern (painted once per finish and color); plain paint is its color alone.
-  const tile = useMemo(() => (surface === WALL_FINISH.Paint ? null : wallTileUrl(surface, color)), [surface, color])
+  const tiles = plan.finish.fittings.tiles
+  const tile = useMemo(() => (surface === WALL_FINISH.Paint ? null : wallTileUrl(surface, color, undefined, tiles)), [surface, color, tiles])
   // Zoomed into this wall; another wall starts whole.
   const zoom = useViewZoom(
     { x: -MARGIN, y: -MARGIN, width: wallLength(plan, wall) + 2 * MARGIN, height: plan.height * 100 + 2 * MARGIN },
@@ -87,7 +89,10 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
       const behind = item.worktop ? behindUnit(plan, item) : null
       const splash = item.worktop && behind?.wall === wall ? splashHeight(item.worktop, item.height / 100, behind) * 100 : 0
 
-      return { item, along: seen.along, across, gap: Math.max(0, seen.away - deep / 2), splash }
+      // A unit backed against this wall shows its front (doors and handles) to it.
+      const fronted = isCabinet(item) && !!item.worktop && behind?.wall === wall
+
+      return { item, along: seen.along, across, gap: Math.max(0, seen.away - deep / 2), splash, fronted }
     })
     .sort((a, b) => b.gap - a.gap)
   const onThisWall = plan.items.map((item, index) => ({ item, index })).filter(({ item }) => item.wall === wall)
@@ -217,16 +222,13 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
 
           {/* The wall's areas in their own finish, under everything else on it. */}
           {zones.map(({ item, index }) => (
-            <WallZoneFace key={index} item={item} index={index} height={height} onStart={(event) => start(event, index, "move")} />
+            <WallZoneFace key={index} item={item} index={index} height={height} tiles={tiles} onStart={(event) => start(event, index, "move")} />
           ))}
 
           {/* The room's trim: wainscoting, rails and crown, stopping at the openings. */}
           <WallTrim plan={plan} wall={wall} height={height} />
 
           {/* The kitchen units' backsplashes on this wall, behind the units. */}
-          <defs>
-            <TilePattern id={`splash-tiles-${wall}`} floor={height} />
-          </defs>
           {standing
             .filter(({ splash }) => splash > 0)
             .map(({ item, along, across, splash }) => (
@@ -237,7 +239,8 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
                 width={across}
                 top={height - item.height - splash}
                 bottom={height - item.height}
-                tiles={`splash-tiles-${wall}`}
+                id={`splash-tiles-${wall}-${Math.round(along)}`}
+                pattern={tiles}
               />
             ))}
 
@@ -277,7 +280,7 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
           })}
 
           {/* The objects in front of the wall (clicks pass through them to the windows and doors behind); a ceiling light hangs from the ceiling. */}
-          {standing.map(({ item, along, across, gap }, n) => {
+          {standing.map(({ item, along, across, gap, fronted }, n) => {
             const hangs = isCeilingLight(item.shape)
             const label = !hangs && item.height > text * 1.4 ? fitLabel(item.label, across, text * 0.8) : null
             // A label a nearer object (drawn later, on top) would cover is left out rather than shown cut.
@@ -302,6 +305,17 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
                   stroke="black"
                   strokeOpacity="0.3"
                 />
+                {fronted && (
+                  <UnitFront
+                    left={along - across / 2}
+                    top={height - item.height + BUILDER.scene.worktop.thickness * 100}
+                    width={across}
+                    height={item.height - BUILDER.scene.worktop.thickness * 100 - 10}
+                    color={item.color}
+                    fittings={plan.finish.fittings}
+                    upper={false}
+                  />
+                )}
                 {item.worktop && (
                   <rect
                     x={along - across / 2 - 1}
@@ -325,7 +339,16 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
 
           {/* What hangs on the wall, in front of the objects standing below it. */}
           {hung.map(({ item, index }) => (
-            <HungFront key={index} item={item} index={index} height={height} text={text} clashing={clashing.has(index)} onStart={(event) => start(event, index, "move")} />
+            <HungFront
+              key={index}
+              item={item}
+              index={index}
+              height={height}
+              text={text}
+              clashing={clashing.has(index)}
+              fittings={plan.finish.fittings}
+              onStart={(event) => start(event, index, "move")}
+            />
           ))}
 
           {/* The chosen window's, door's or hung object's outline and resize handle, above everything so they stay usable. */}
@@ -369,9 +392,22 @@ export function WallView({ plan, wall, onWall }: { plan: Plan; wall: number; onW
  * @param props.item - The area.
  * @param props.index - Its position in the plan's objects.
  * @param props.height - The wall's height, in centimetres.
+ * @param props.tiles - How the room's tiles are laid (for a tiled area).
  * @param props.onStart - Starts moving it.
  */
-function WallZoneFace({ item, index, height, onStart }: { item: PlanItem; index: number; height: number; onStart: (event: ReactPointerEvent) => void }) {
+function WallZoneFace({
+  item,
+  index,
+  height,
+  tiles,
+  onStart,
+}: {
+  item: PlanItem
+  index: number
+  height: number
+  tiles: TilePattern
+  onStart: (event: ReactPointerEvent) => void
+}) {
   const finish = item.material as WallFinish
   const tileCm = WALL_TILE_METRES * 100
   const pattern = `wall-zone-${index}`
@@ -382,7 +418,7 @@ function WallZoneFace({ item, index, height, onStart }: { item: PlanItem; index:
       {finish !== WALL_FINISH.Paint && (
         <defs>
           <pattern id={pattern} patternUnits="userSpaceOnUse" width={tileCm} height={tileCm} y={height}>
-            <image href={wallTileUrl(finish, item.color)} width={tileCm} height={tileCm} preserveAspectRatio="none" />
+            <image href={wallTileUrl(finish, item.color, undefined, tiles)} width={tileCm} height={tileCm} preserveAspectRatio="none" />
           </pattern>
         </defs>
       )}
@@ -443,6 +479,7 @@ function Measurements({ item, height, text }: { item: { x: number; width: number
  * @param props.height - The wall's height, in centimetres.
  * @param props.text - The text size.
  * @param props.clashing - Whether it covers another window, door or hung thing on the wall (then it is outlined in red).
+ * @param props.fittings - How the room is fitted (a cabinet's fronts and handles).
  * @param props.onStart - Starts dragging it.
  */
 function HungFront({
@@ -451,6 +488,7 @@ function HungFront({
   height,
   text,
   clashing,
+  fittings,
   onStart,
 }: {
   item: PlanItem
@@ -458,6 +496,7 @@ function HungFront({
   height: number
   text: number
   clashing: boolean
+  fittings: RoomFittings
   onStart: (event: ReactPointerEvent) => void
 }) {
   const [left, top, w, h] = [item.x - item.width / 2, height - item.elevation - item.height, item.width, item.height]
@@ -471,8 +510,9 @@ function HungFront({
         : name.split(/\W+/).includes(BUILDER.screenWord)
           ? "#1E1E1E"
           : BUILDER.scene.linen
-  // A cabinet wider than a door gets one seam per 60 cm.
-  const doors = item.shape === ITEM_SHAPE.WallBox && h > 20 ? Math.max(1, Math.round(w / 60)) : 1
+  // A fitted cabinet shows its fronts; another wall box wider than a door gets one seam per 60 cm.
+  const fitted = isCabinet(item) && h > 20
+  const doors = item.shape === ITEM_SHAPE.WallBox && h > 20 && !fitted ? Math.max(1, Math.round(w / 60)) : 1
   const label = h > text * 1.4 ? fitLabel(item.label, w, text * 0.8) : null
 
   return (
@@ -490,6 +530,7 @@ function HungFront({
         strokeWidth={clashing ? 4 : 1.5}
       />
       {inner && <rect x={left + frame} y={top + frame} width={w - 2 * frame} height={h - 2 * frame} fill={inner} className="pointer-events-none" />}
+      {fitted && <UnitFront left={left} top={top} width={w} height={h} color={item.color} fittings={fittings} upper />}
       {Array.from({ length: doors - 1 }, (_, n) => (
         <line key={n} x1={left + (w * (n + 1)) / doors} y1={top} x2={left + (w * (n + 1)) / doors} y2={top + h} stroke="black" strokeOpacity="0.3" className="pointer-events-none" />
       ))}

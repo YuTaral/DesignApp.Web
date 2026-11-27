@@ -1194,6 +1194,57 @@ try {
       && wallMarks.bands === 'Crown,PictureRail,wainscot-cap' && wallMarks.wainscot > 0 && wallMarks.casings > 0 && wallMarks.archways === 1 && wallMarks.niches === 1
       && trimHeading === 'Trim & mouldings: crown, picture rail, raised panels',
     JSON.stringify({ column: column?.height, details: detailed.finish.details, wallMarks, trimHeading }))
+
+  // 18. Kitchen and bathroom fittings: a new kitchen with tiled backsplashes is fitted with shaker fronts, knobs, brass,
+  //     a farmhouse sink with a bridge tap and herringbone tiles; they are saved, and the Wall tab draws the fronts
+  //     and the tiles' pattern. A bathroom offers its vanity's basin; a living room with neither has no such section.
+  const newPlan = (body) => page.evaluate(async (body) => (await (await fetch('/api/plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()), body)
+  const fitted = await newPlan({ name: 'Fitted kitchen', roomType: 'Kitchen', width: 4, length: 4.5, height: 2.6, wallColor: '#E8E2D6', floorColor: '#B89B7A' })
+
+  await page.evaluate(async (plan) => {
+    const items = plan.items.map((item) => (item.worktop ? { ...item, worktop: { ...item.worktop, backsplash: 'Tiles', backsplashColor: '#F4F1EA' } } : item))
+
+    await fetch(`/api/plans/${plan.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...plan, items }) })
+  }, fitted)
+  await page.goto(`${WEB}/build/${fitted.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-fronts=Shaker]')
+  for (const chip of ['[data-fronts=Shaker]', '[data-handles=Knob]', '[data-hardware=BrushedBrass]', '[data-sink=Farmhouse]', '[data-tap=Bridge]', '[data-tile-pattern=Herringbone]']) {
+    await page.click(chip)
+  }
+
+  const fittedHeading = await page.$eval('[data-panel-section=settings-fittings] [data-section-toggle]', (b) => b.innerText.trim())
+  const fittedPlan = await storedOnce((plan) => plan.finish.fittings.tiles === 'Herringbone')
+
+  await page.click('[role=tab]::-p-text(Wall)')
+  await page.waitForSelector('[data-unit-front]')
+  const fittedWall = await page.evaluate(() => ({
+    fronts: [...new Set([...document.querySelectorAll('[data-unit-front]')].map((e) => `${e.dataset.unitFront} ${e.dataset.handles}`))].join(),
+    splashes: [...new Set([...document.querySelectorAll('[data-tile-pattern]')].map((e) => e.dataset.tilePattern))].join(),
+  }))
+
+  await shot('builder-fitted-kitchen-wall')
+  await page.click('[role=tab]::-p-text(3D view)')
+  await page.waitForSelector('[data-view-3d]')
+  await sleep(900)
+  await shot('builder-fitted-kitchen-3d')
+  const fittedBath = await newPlan({ name: 'Fitted bathroom', roomType: 'Bathroom', width: 2.6, length: 3, height: 2.5, wallColor: '#E8E2D6', floorColor: '#D8D2C6', floorType: 'Tiles' })
+
+  await page.goto(`${WEB}/build/${fittedBath.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-basin=Vessel]')
+  await page.click('[data-basin=Vessel]')
+  const vessel = await page.waitForFunction(async (id) => (await (await fetch(`/api/plans/${id}`)).json()).finish.fittings.basin === 'Vessel', { timeout: 10000 }, fittedBath.id).then(() => true, () => false)
+  const noMirrorGlass = await page.evaluate(() => !document.querySelector('[data-glass-uppers]'))
+  const lounge = await newPlan({ name: 'Plain lounge', roomType: 'LivingRoom', width: 4, length: 5, height: 2.6, wallColor: '#E8E2D6', floorColor: '#B89B7A' })
+
+  await page.goto(`${WEB}/build/${lounge.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('[data-plan-canvas]')
+  const loungeFittings = await page.evaluate(() => !!document.querySelector('[data-panel-section=settings-fittings]'))
+
+  step('A kitchen is fitted with shaker fronts, knobs, brass, a farmhouse sink, a bridge tap and herringbone tiles, saved and drawn; a bathroom picks its basin; a plain living room has no fittings',
+    JSON.stringify(fittedPlan.finish.fittings) === JSON.stringify({ fronts: 'Shaker', glassUppers: false, handles: 'Knob', hardware: 'BrushedBrass', sink: 'Farmhouse', tap: 'Bridge', basin: 'Integrated', tiles: 'Herringbone' })
+      && fittedHeading === 'Cabinets & fittings: Shaker, brass · herringbone tiles' && fittedWall.fronts === 'Shaker Knob' && fittedWall.splashes === 'Herringbone'
+      && vessel && noMirrorGlass && !loungeFittings,
+    JSON.stringify({ fittings: fittedPlan.finish.fittings, fittedHeading, fittedWall, vessel, noMirrorGlass, loungeFittings }))
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('builder-stopped').catch(() => {})

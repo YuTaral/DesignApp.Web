@@ -1,4 +1,4 @@
-import { FLOOR_TYPE, WALL_FINISH, type WallFinish } from "@/lib/constants"
+import { FLOOR_TYPE, TILE_PATTERN, WALL_FINISH, type TilePattern, type WallFinish } from "@/lib/constants"
 import type { Plan } from "./api"
 import { FLOOR_TILE_METRES, paintFloor, seeded, shade } from "./floor-texture"
 
@@ -25,9 +25,10 @@ const tileUrls = new Map<string, string>()
  * @param finish - The finish (not Paint).
  * @param color - The wall's color.
  * @param size - The tile's size, in pixels.
+ * @param pattern - How tiles are laid (for tiles).
  */
-export function wallTileUrl(finish: WallFinish, color: string, size = 256) {
-  const key = `${finish}:${color}:${size}`
+export function wallTileUrl(finish: WallFinish, color: string, size = 256, pattern: TilePattern = TILE_PATTERN.Grid) {
+  const key = `${finish}:${color}:${size}:${pattern}`
   const kept = tileUrls.get(key)
 
   if (kept) {
@@ -37,7 +38,7 @@ export function wallTileUrl(finish: WallFinish, color: string, size = 256) {
   const canvas = document.createElement("canvas")
 
   canvas.width = canvas.height = size
-  paintWall(canvas.getContext("2d")!, finish, color, size)
+  paintWall(canvas.getContext("2d")!, finish, color, size, pattern)
   const url = canvas.toDataURL("image/png")
 
   tileUrls.set(key, url)
@@ -53,8 +54,9 @@ export function wallTileUrl(finish: WallFinish, color: string, size = 256) {
  * @param finish - The finish (not Paint).
  * @param color - The wall's color, "#RRGGBB".
  * @param size - The tile's size, in pixels.
+ * @param pattern - How tiles are laid (for tiles; a grid when missing).
  */
-export function paintWall(context: CanvasRenderingContext2D, finish: WallFinish, color: string, size: number) {
+export function paintWall(context: CanvasRenderingContext2D, finish: WallFinish, color: string, size: number, pattern: TilePattern = TILE_PATTERN.Grid) {
   const random = seeded(11)
   const metre = size / WALL_TILE_METRES
   const line = Math.max(1, size / 256)
@@ -64,7 +66,7 @@ export function paintWall(context: CanvasRenderingContext2D, finish: WallFinish,
 
   switch (finish) {
     case WALL_FINISH.Tiles:
-      paintFloor(context, FLOOR_TYPE.Tiles, color, size)
+      paintFloor(context, FLOOR_TYPE.Tiles, color, size, pattern)
       break
     case WALL_FINISH.Concrete:
       paintFloor(context, FLOOR_TYPE.Concrete, color, size)

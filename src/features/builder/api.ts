@@ -6,18 +6,25 @@ import {
   API,
   QUERY_KEYS,
   type Backsplash,
+  type Basin,
+  type CabinetFronts,
   type Casing,
   type CeilingStyle,
   type CoveringKind,
   type CurtainLength,
   type FloorType,
+  type HandleStyle,
+  type Hardware,
   type ItemForm,
   type ItemShape,
+  type KitchenSink,
+  type KitchenTap,
   type LightTone,
   type Moulding,
   type PhotoStyle,
   type PlanSide,
   type RoomType,
+  type TilePattern,
   type TimeOfDay,
   type ViewCorner,
   type Wainscot,
@@ -110,6 +117,22 @@ export type RoomDetails = {
 }
 
 /**
+ * How a built room is fitted, for the whole room (mirrors the Domain's RoomFittings): its cabinets' door style (and
+ * glass upper cabinets), their handles, the metal of the handles, taps and fittings, the kitchen sink and tap, the
+ * vanity's basin, and how its tiles are laid.
+ */
+export type RoomFittings = {
+  fronts: CabinetFronts
+  glassUppers: boolean
+  handles: HandleStyle
+  hardware: Hardware
+  sink: KitchenSink
+  tap: KitchenTap
+  basin: Basin
+  tiles: TilePattern
+}
+
+/**
  * How a built room's walls and ceiling are finished and lit, and when its photo is taken (mirrors RoomFinishRequest):
  * the walls' finish (in the room's wall color), the walls in their own finish and color, the ceiling's and the trim's
  * colors, and its architecture.
@@ -128,6 +151,8 @@ export type RoomFinish = {
   north: PlanSide
   /** Its ceiling's shape, mouldings, wainscoting and casings. */
   details: RoomDetails
+  /** Its cabinets' fronts and handles, the hardware, the sink, tap and basin, and the tile pattern. */
+  fittings: RoomFittings
 }
 
 /**

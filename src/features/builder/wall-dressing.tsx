@@ -1,10 +1,8 @@
-import { BACKSPLASH, BUILDER, COVERING_KIND, CURTAIN_LENGTH } from "@/lib/constants"
+import { BACKSPLASH, BUILDER, COVERING_KIND, CURTAIN_LENGTH, WALL_FINISH, type TilePattern } from "@/lib/constants"
 import type { Worktop, WindowCovering } from "./api"
 import { isCurtains } from "./covering"
-import { ownSplashColor } from "./worktop"
-
-/** Tiles drawn on a backsplash in the Wall tab, this many centimetres a side. */
-const TILE_CM = 10
+import { wallTileUrl } from "./wall-texture"
+import { ownSplashColor, SPLASH_TILE_METRES } from "./worktop"
 
 /**
  * A window's curtains or blinds in the Wall tab, as the 3D view draws them, in the wall's centimetres (y down from the
@@ -94,35 +92,49 @@ export function WindowDressing({
 
 /**
  * A kitchen unit's backsplash on the wall behind it, in the Wall tab: the worktop's material or tiles or glass in their
- * own color, from the worktop up.
+ * own color, from the worktop up; tiles laid in the room's pattern, as the 3D view paints them.
  * @param props.worktop - The unit's worktop.
  * @param props.left - The unit's left side along the wall.
  * @param props.width - Its width.
  * @param props.top - Where the backsplash ends, above.
  * @param props.bottom - Where it starts: the worktop's top.
- * @param props.tiles - The id of the tile joints' pattern.
+ * @param props.id - An id for its tiles' pattern, unique in the drawing.
+ * @param props.pattern - How the room's tiles are laid.
  */
-export function Backsplash({ worktop, left, width, top, bottom, tiles }: { worktop: Worktop; left: number; width: number; top: number; bottom: number; tiles: string }) {
+export function Backsplash({
+  worktop,
+  left,
+  width,
+  top,
+  bottom,
+  id,
+  pattern,
+}: {
+  worktop: Worktop
+  left: number
+  width: number
+  top: number
+  bottom: number
+  id: string
+  pattern: TilePattern
+}) {
   const color = ownSplashColor(worktop) ? worktop.backsplashColor : worktop.color
+  const tileCm = SPLASH_TILE_METRES * 100
 
   return (
-    <g className="pointer-events-none" data-wall-backsplash={worktop.backsplash}>
+    <g className="pointer-events-none" data-wall-backsplash={worktop.backsplash} data-tile-pattern={worktop.backsplash === BACKSPLASH.Tiles ? pattern : undefined}>
       <rect x={left} y={top} width={width} height={bottom - top} fill={color} stroke="black" strokeOpacity="0.2" />
-      {worktop.backsplash === BACKSPLASH.Tiles && <rect x={left} y={top} width={width} height={bottom - top} fill={`url(#${tiles})`} />}
+      {worktop.backsplash === BACKSPLASH.Tiles && (
+        <>
+          <defs>
+            <pattern id={id} patternUnits="userSpaceOnUse" width={tileCm} height={tileCm} y={bottom}>
+              <image href={wallTileUrl(WALL_FINISH.Tiles, color, undefined, pattern)} width={tileCm} height={tileCm} preserveAspectRatio="none" />
+            </pattern>
+          </defs>
+          <rect x={left} y={top} width={width} height={bottom - top} fill={`url(#${id})`} />
+        </>
+      )}
       {worktop.backsplash === BACKSPLASH.Glass && <rect x={left} y={top} width={width} height={(bottom - top) / 3} fill="white" opacity={0.25} />}
     </g>
-  )
-}
-
-/**
- * The joints between a backsplash's tiles, as a pattern a backsplash fills with.
- * @param props.id - The pattern's id.
- * @param props.floor - Where the floor is, so the joints line up from it.
- */
-export function TilePattern({ id, floor }: { id: string; floor: number }) {
-  return (
-    <pattern id={id} patternUnits="userSpaceOnUse" width={TILE_CM} height={TILE_CM} y={floor}>
-      <path d={`M ${TILE_CM} 0 L 0 0 0 ${TILE_CM}`} fill="none" stroke="black" strokeOpacity="0.18" strokeWidth={0.8} />
-    </pattern>
   )
 }

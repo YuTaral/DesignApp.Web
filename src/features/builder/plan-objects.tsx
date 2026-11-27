@@ -1,6 +1,6 @@
 import type { PointerEvent as ReactPointerEvent, SVGProps } from "react"
 
-import { BUILDER, FLOOR_TILE_CM, ITEM_FORM, ITEM_SHAPE, type FloorType } from "@/lib/constants"
+import { BUILDER, FLOOR_TILE_CM, ITEM_FORM, ITEM_SHAPE, TILE_PATTERN, type FloorType, type TilePattern } from "@/lib/constants"
 import type { Plan, PlanItem } from "./api"
 import { cornerOutline, footprint, hasParts, legSide, partsOf } from "./builder-store"
 import { isCeilingLight, spotGrid, trackHeads } from "./lights"
@@ -44,6 +44,7 @@ const CORNERS = [
  * @param props.chosen - Whether it is selected.
  * @param props.clashing - Whether it overlaps another object.
  * @param props.text - The plan's label size, in centimetres.
+ * @param props.tiles - How the room's tiles are laid (for a tiled floor area).
  * @param props.onStart - Starts moving it, resizing it from a corner, or resizing one of its parts.
  */
 export function PlanObject({
@@ -52,6 +53,7 @@ export function PlanObject({
   chosen,
   clashing,
   text,
+  tiles = TILE_PATTERN.Grid,
   onStart,
 }: {
   item: PlanItem
@@ -59,6 +61,7 @@ export function PlanObject({
   chosen: boolean
   clashing: boolean
   text: number
+  tiles?: TilePattern
   onStart: (event: ReactPointerEvent, kind: "move" | "resize" | Part, corner?: { x: number; y: number }) => void
 }) {
   const { width, depth } = footprint(item)
@@ -73,7 +76,7 @@ export function PlanObject({
       {zone && (
         <defs>
           <pattern id={pattern} patternUnits="userSpaceOnUse" width={FLOOR_TILE_CM} height={FLOOR_TILE_CM}>
-            <image href={floorTileUrl(item.material as FloorType, item.color)} width={FLOOR_TILE_CM} height={FLOOR_TILE_CM} preserveAspectRatio="none" />
+            <image href={floorTileUrl(item.material as FloorType, item.color, undefined, tiles)} width={FLOOR_TILE_CM} height={FLOOR_TILE_CM} preserveAspectRatio="none" />
           </pattern>
         </defs>
       )}

@@ -546,6 +546,95 @@ export const WAINSCOT_NAMES: Record<Wainscot, { name: string; looks: string }> =
   ShakerPanels: { name: "Shaker", looks: "Flat panels in plain square frames" },
 }
 
+/** A built room's cabinet door style (Domain Constants.CabinetFronts). */
+export const CABINET_FRONTS = { Slab: "Slab", Shaker: "Shaker", Fluted: "Fluted" } as const
+
+export type CabinetFronts = (typeof CABINET_FRONTS)[keyof typeof CABINET_FRONTS]
+
+/** The cabinet fronts' names and what each looks like. */
+export const CABINET_FRONTS_NAMES: Record<CabinetFronts, { name: string; looks: string }> = {
+  Slab: { name: "Slab", looks: "Flat, plain doors" },
+  Shaker: { name: "Shaker", looks: "A recessed middle in a square frame" },
+  Fluted: { name: "Fluted", looks: "Fine vertical reeds" },
+}
+
+/** The handles on a built room's cabinets (Domain Constants.HandleStyle). */
+export const HANDLE_STYLE = { Bar: "Bar", Knob: "Knob", CupPull: "CupPull", EdgePull: "EdgePull", Handleless: "Handleless" } as const
+
+export type HandleStyle = (typeof HANDLE_STYLE)[keyof typeof HANDLE_STYLE]
+
+/** The handles' names and what each looks like. */
+export const HANDLE_STYLE_NAMES: Record<HandleStyle, { name: string; looks: string }> = {
+  Bar: { name: "Bar", looks: "Slim bar handles" },
+  Knob: { name: "Knob", looks: "Round knobs" },
+  CupPull: { name: "Cup pull", looks: "Cup pulls" },
+  EdgePull: { name: "Edge pull", looks: "A thin pull along the top edge" },
+  Handleless: { name: "Handleless", looks: "Push-to-open doors with a groove" },
+}
+
+/** The metal finish of a built room's handles, taps and fittings (Domain Constants.Hardware). */
+export const HARDWARE = { BrushedBrass: "BrushedBrass", MatteBlack: "MatteBlack", Chrome: "Chrome", BrushedSteel: "BrushedSteel" } as const
+
+export type Hardware = (typeof HARDWARE)[keyof typeof HARDWARE]
+
+/** The hardware finishes' names and their color in the 3D view and the Wall tab. */
+export const HARDWARE_NAMES: Record<Hardware, { name: string; color: string }> = {
+  BrushedBrass: { name: "Brass", color: "#B08D57" },
+  MatteBlack: { name: "Black", color: "#2A2A2A" },
+  Chrome: { name: "Chrome", color: "#C9CCD1" },
+  BrushedSteel: { name: "Steel", color: "#A3A6A8" },
+}
+
+/** A built kitchen's sink (Domain Constants.KitchenSink). */
+export const KITCHEN_SINK = { Undermount: "Undermount", Farmhouse: "Farmhouse", Inset: "Inset" } as const
+
+export type KitchenSink = (typeof KITCHEN_SINK)[keyof typeof KITCHEN_SINK]
+
+/** The sinks' names and what each looks like. */
+export const KITCHEN_SINK_NAMES: Record<KitchenSink, { name: string; looks: string }> = {
+  Undermount: { name: "Undermount", looks: "Mounted under the worktop" },
+  Farmhouse: { name: "Farmhouse", looks: "A deep sink with an apron front" },
+  Inset: { name: "Inset", looks: "Dropped in, its rim on the worktop" },
+}
+
+/** A built kitchen's tap (Domain Constants.KitchenTap). */
+export const KITCHEN_TAP = { Gooseneck: "Gooseneck", Bridge: "Bridge", PullDown: "PullDown" } as const
+
+export type KitchenTap = (typeof KITCHEN_TAP)[keyof typeof KITCHEN_TAP]
+
+/** The taps' names and what each looks like. */
+export const KITCHEN_TAP_NAMES: Record<KitchenTap, { name: string; looks: string }> = {
+  Gooseneck: { name: "Gooseneck", looks: "A tall arched spout" },
+  Bridge: { name: "Bridge", looks: "A traditional tap with two handles" },
+  PullDown: { name: "Pull-down", looks: "A pull-down spray head" },
+}
+
+/** A built bathroom vanity's basin (Domain Constants.Basin). */
+export const BASIN = { Integrated: "Integrated", Undermount: "Undermount", Vessel: "Vessel" } as const
+
+export type Basin = (typeof BASIN)[keyof typeof BASIN]
+
+/** The basins' names and what each looks like. */
+export const BASIN_NAMES: Record<Basin, { name: string; looks: string }> = {
+  Integrated: { name: "Integrated", looks: "Moulded into the vanity top" },
+  Undermount: { name: "Undermount", looks: "Mounted under the vanity top" },
+  Vessel: { name: "Vessel", looks: "A bowl sitting on the vanity top" },
+}
+
+/** How a built room's tiles are laid (Domain Constants.TilePattern). */
+export const TILE_PATTERN = { Grid: "Grid", Subway: "Subway", Herringbone: "Herringbone", VerticalStack: "VerticalStack", LargeFormat: "LargeFormat" } as const
+
+export type TilePattern = (typeof TILE_PATTERN)[keyof typeof TILE_PATTERN]
+
+/** The tile patterns' names and what each looks like. */
+export const TILE_PATTERN_NAMES: Record<TilePattern, { name: string; looks: string }> = {
+  Grid: { name: "Grid", looks: "Square tiles in a straight grid" },
+  Subway: { name: "Subway", looks: "Subway tiles in a brick bond" },
+  Herringbone: { name: "Herringbone", looks: "Herringbone" },
+  VerticalStack: { name: "Vertical", looks: "Long tiles stacked vertically" },
+  LargeFormat: { name: "Large", looks: "Large-format tiles, about 60 × 120 cm" },
+}
+
 /** The trim around a built room's doors, windows and archways (Domain Constants.Casing). */
 export const CASING = { Plain: "Plain", Simple: "Simple", Wide: "Wide", Ornate: "Ornate" } as const
 
@@ -738,6 +827,23 @@ export const BUILDER = {
       beyond: "#3B3632",
     },
     /**
+     * Cabinets' fittings, in metres: about how wide a door is; a shaker frame's width and a fluted door's reed spacing;
+     * a bar handle's length and a knob's radius (all handles stand out by `handleOut`); a sink's and a vessel basin's
+     * size and how deep a farmhouse sink's apron is; and the glass of glass doors.
+     */
+    fittings: {
+      door: 0.6,
+      frame: 0.06,
+      reed: 0.025,
+      bar: 0.16,
+      knob: 0.018,
+      handleOut: 0.025,
+      sink: { width: 0.6, depth: 0.42, apron: 0.22 },
+      basin: { width: 0.45, depth: 0.35, vessel: 0.14 },
+      glass: "#BFD3DC",
+      bowl: "#F7F7F5",
+    },
+    /**
      * The 3D view's light at each time of day, so the photo's guide already has its mood: the sun's color and strength,
      * and the sky's and the room's soft light. Midday is the view as it always was.
      */
@@ -874,6 +980,10 @@ export const BUILDER = {
    * lights), and how far apart spotlights in a row or grid and a track's spot heads are, in cm.
    */
   lightWords: /\b(lamps?|lights?|sconces?|chandeliers?|lanterns?)\b/i,
+  /** What names fitted cabinetry (not a mirror cabinet), a kitchen sink unit and a vanity in an object's name (Domain Constants.Plans). */
+  cabinetWords: /^(?!.*\bmirror).*\b(cabinets?|units?|vanity|vanities|island|dishwasher|oven tower|drawers)\b/i,
+  sinkWords: /\bsink\b/i,
+  vanityWords: /\b(vanity|vanities)\b/i,
   spotSpacing: 120,
   trackHeadSpacing: 50,
   /** A ceiling light's mark on the plan, in cm: its bulbs' and spots' size, and its colors (a warm yellow). */

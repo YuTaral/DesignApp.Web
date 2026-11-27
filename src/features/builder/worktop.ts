@@ -3,6 +3,9 @@ import type { Plan, PlanItem, Worktop } from "./api"
 import { isWallItem } from "./builder-store"
 import { fromWall, wallPoint, walls } from "./room-outline"
 
+/** How many metres one painted tile of a tiled backsplash covers: finer than a wall's, as backsplash tiles are small. */
+export const SPLASH_TILE_METRES = 1
+
 /**
  * What is behind a kitchen unit, for its backsplash: the wall its back is against (null for a unit standing out in the
  * room), and how high the lowest window behind it starts, in metres (Infinity for none).

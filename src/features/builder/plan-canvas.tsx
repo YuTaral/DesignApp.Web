@@ -85,6 +85,7 @@ export function PlanCanvas({ plan, shaping = false, onWall }: { plan: Plan; shap
       chosen={index === selected}
       clashing={clashing.has(index)}
       text={text}
+      tiles={plan.finish.fittings.tiles}
       onStart={(event, kind, corner) => start(event, index, kind, corner)}
     />
   )
