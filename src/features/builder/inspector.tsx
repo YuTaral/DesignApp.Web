@@ -156,7 +156,8 @@ function WallItemInspector({ plan, index }: { plan: Plan; index: number }) {
 }
 
 /**
- * What every object's settings start with, in the "Type" section: its name and its variation (an area has none).
+ * What every object's settings start with, in the "Object" section (open until the user closes it, unlike the others): its
+ * name and its variation (an area has none).
  * @param props.plan - The room.
  * @param props.index - The object's position in the plan's objects.
  */
@@ -165,7 +166,7 @@ function ItemType({ plan, index }: { plan: Plan; index: number }) {
   const item = plan.items[index]
 
   return (
-    <PanelSection name="settings-type" title="Type">
+    <PanelSection name="settings-object" title="Object" defaultOpen>
       <div className="space-y-1.5">
         <Label htmlFor="item-label">Name</Label>
         <Input id="item-label" value={item.label} maxLength={BUILDER.labelLength} onChange={(event) => update(index, { label: event.target.value })} />
