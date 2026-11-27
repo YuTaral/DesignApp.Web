@@ -21,9 +21,11 @@ import {
   type KitchenTap,
   type LightTone,
   type Moulding,
+  type PaintSheen,
   type PhotoStyle,
   type PlanSide,
   type RoomType,
+  type Sheen,
   type TilePattern,
   type TimeOfDay,
   type ViewCorner,
@@ -74,6 +76,8 @@ export type PlanItem = {
   worktop?: Worktop | null
   /** Whether a lamp or light is switched on; missing or null to follow the time of day (on in the evening). */
   lit?: boolean | null
+  /** How shiny it is; missing or null when not said. */
+  sheen?: Sheen | null
 }
 
 /** A kitchen unit's worktop and the backsplash behind it (mirrors WorktopRequest). */
@@ -153,6 +157,10 @@ export type RoomFinish = {
   details: RoomDetails
   /** Its cabinets' fronts and handles, the hardware, the sink, tap and basin, and the tile pattern. */
   fittings: RoomFittings
+  /** What the floor is made of within its type (one of FLOOR_MATERIALS), empty for any. */
+  floorMaterial: string
+  /** How shiny the painted walls are. */
+  wallSheen: PaintSheen
 }
 
 /**

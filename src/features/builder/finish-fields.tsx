@@ -9,9 +9,12 @@ import {
   LIGHT_TONE,
   LIGHT_TONE_NAMES,
   NORTH_NAMES,
+  PAINT_SHEEN,
+  PAINT_SHEEN_NAMES,
   PLAN_SIDE,
   TIME_OF_DAY,
   TIME_OF_DAY_NAMES,
+  WALL_FINISH,
   WALL_FINISH_NAMES,
   type WallFinish,
 } from "@/lib/constants"
@@ -26,6 +29,9 @@ import { PanelSection } from "./panel-section"
 import { TrimFields } from "./trim-fields"
 import { wallName, walls } from "./room-outline"
 import { wallSurface } from "./wall-texture"
+
+/** The paint sheens as chips, for the painted walls (the whole room). */
+const PAINT_SHEEN_CHIPS = Object.values(PAINT_SHEEN).map((sheen) => ({ value: sheen, name: PAINT_SHEEN_NAMES[sheen] }))
 
 /** The ceiling's shapes as chips, with what each looks like on hover. */
 const CEILING_CHIPS = Object.values(CEILING_STYLE).map((style) => ({ value: style, name: CEILING_STYLE_NAMES[style].name, title: CEILING_STYLE_NAMES[style].looks }))
@@ -82,6 +88,8 @@ export function FinishFields({
   const own = wall === null ? undefined : finish.ownWalls.find((w) => w.wall === wall)
   const [look, color] = wall === null ? [finish.walls, plan.wallColor] : wallSurface(plan, wall)
   const lights = plan.items.filter((item) => isCeilingLight(item.shape)).length
+  // The paint's sheen matters only where a wall is painted.
+  const painted = finish.walls === WALL_FINISH.Paint || finish.ownWalls.some((w) => w.finish === WALL_FINISH.Paint)
   const lightCount = lights === 0 ? "no lights" : `${lights} light${lights === 1 ? "" : "s"}`
   const wallChips = [
     { value: BUILDER.allWalls, name: "All" },
@@ -150,6 +158,9 @@ export function FinishFields({
           )}
           <ChoiceChips label="Finish" chips={FINISH_CHIPS} value={look} onPick={(next) => pick({ finish: next })} attribute="wall-finish" />
           <ColorChoice label={wall === null ? "Walls" : wallName(plan, wall)} value={color} colors={BUILDER.wallColors} onPick={(next) => pick({ color: next })} />
+          {painted && (
+            <ChoiceChips label="Paint sheen" chips={PAINT_SHEEN_CHIPS} value={finish.wallSheen} onPick={(wallSheen) => set({ wallSheen })} attribute="paint-sheen" />
+          )}
           {own && (
             <Button variant="ghost" size="sm" onClick={() => set({ ownWalls: finish.ownWalls.filter((w) => w.wall !== wall) })} data-match-walls>
               Same as the other walls

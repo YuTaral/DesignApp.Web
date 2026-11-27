@@ -3,6 +3,7 @@ import { useCatalog, type Plan } from "./api"
 import { useBuilderStore, variationOf } from "./builder-store"
 import { ChoiceChips } from "./choice-chips"
 import { ColorChoice } from "./fields"
+import { naturalColor } from "./materials"
 import { PanelSection } from "./panel-section"
 
 /** The backsplashes as chips. */
@@ -43,7 +44,11 @@ export function WorktopFields({ plan, index }: { plan: Plan; index: number }) {
       return
     }
 
-    update(index, { worktop: worktop ? { ...worktop, material } : { ...WORKTOP.start, material, backsplash: spot === WORKTOP_SPOT.Island ? BACKSPLASH.None : WORKTOP.start.backsplash } })
+    // A material with a natural color (walnut, marble) gives the worktop that color.
+    const color = naturalColor(material)
+    const start = { ...WORKTOP.start, backsplash: spot === WORKTOP_SPOT.Island ? BACKSPLASH.None : WORKTOP.start.backsplash }
+
+    update(index, { worktop: { ...(worktop ?? start), material, ...(color ? { color } : {}) } })
   }
 
   if (!spot) {

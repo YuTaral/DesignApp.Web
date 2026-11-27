@@ -1,9 +1,30 @@
 import { useEffect, useRef } from "react"
 import { cn } from "cn"
 
-import { BUILDER, FLOOR_TYPE, FLOOR_TYPE_NAMES, type FloorType } from "@/lib/constants"
+import { BUILDER, FLOOR_MATERIALS, FLOOR_TYPE, FLOOR_TYPE_NAMES, type FloorType } from "@/lib/constants"
+import { ChoiceChips } from "./choice-chips"
 import { ColorChoice } from "./fields"
 import { paintFloor } from "./floor-texture"
+
+/**
+ * What the floor is made of within its type, as chips: Any (not said), then the type's species, stones or kinds.
+ * @param props.type - The floor's type.
+ * @param props.value - Its material; empty for any.
+ * @param props.onPick - Picks one; empty for any.
+ */
+export function FloorMaterialChoice({ type, value, onPick }: { type: FloorType; value: string; onPick: (material: string) => void }) {
+  const chips = [{ value: BUILDER.none, name: "Any" }, ...FLOOR_MATERIALS[type].map((name) => ({ value: name, name }))]
+
+  return (
+    <ChoiceChips
+      label="Material"
+      chips={chips}
+      value={value || BUILDER.none}
+      onPick={(picked) => onPick(picked === BUILDER.none ? "" : picked)}
+      attribute="floor-material"
+    />
+  )
+}
 
 /**
  * The floor types as tiles, each showing its pattern in the floor's color.

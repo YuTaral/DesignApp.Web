@@ -11,6 +11,7 @@ import type { CatalogObject, CatalogVariant, Plan } from "./api"
 import { cornerOutline, hasParts, inVariation, isMountedShape, isWallShape, useBuilderStore } from "./builder-store"
 import { DecorationChoice } from "./decoration-choice"
 import { MaterialChips } from "./material-chips"
+import { pickedMaterial } from "./materials"
 import { wallLength, wallName } from "./room-outline"
 import { ColorChoice, NumberField } from "./fields"
 
@@ -122,7 +123,16 @@ export function AddObjectChoices({
       </div>
 
       <ColorChoice label="Color" value={color} colors={onWall && !hung ? BUILDER.frameColors : SWATCHES} onPick={setColor} />
-      <MaterialChips materials={object.materials ?? []} value={material} onPick={setMaterial} />
+      <MaterialChips
+        materials={object.materials ?? []}
+        value={material}
+        onPick={(picked) => {
+          const change = pickedMaterial(picked)
+
+          setMaterial(change.material)
+          setColor(change.color ?? color)
+        }}
+      />
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Size (cm)</legend>

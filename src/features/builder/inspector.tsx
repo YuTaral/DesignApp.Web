@@ -22,7 +22,9 @@ import { MaterialChips } from "./material-chips"
 import { PanelSection } from "./panel-section"
 import { hasParts, isMountedShape, isWallItem, isZoneShape, partsOf, toVariation, useBuilderStore, variationOf } from "./builder-store"
 import { wallLength, wallName } from "./room-outline"
-import { FloorChoice, FloorColorChoice } from "./floor-choice"
+import { FloorChoice, FloorColorChoice, FloorMaterialChoice } from "./floor-choice"
+import { naturalColor, pickedMaterial } from "./materials"
+import { SheenChips } from "./sheen-chips"
 import { WallChoice } from "./wall-choice"
 
 /** What is in view beside the right column: the plan, the plan while its shape is edited, a wall, the ceiling, or the 3D view. */
@@ -336,7 +338,8 @@ function VariationChoice({ plan, index }: { plan: Plan; index: number }) {
 
 /**
  * What the selected object is made of: its catalog object's materials (found by its name), "None" to leave it to its
- * color, and a material it has that isn't one of them. Hidden for an object with no materials to choose from.
+ * color, and a material it has that isn't one of them (hidden for an object with none to choose from); picking one with a
+ * natural color (walnut, marble) gives it that color. Then how shiny it is.
  * @param props.plan - The room.
  * @param props.index - The object's position in the plan's objects.
  */
@@ -348,7 +351,12 @@ function MaterialChoice({ plan, index }: { plan: Plan; index: number }) {
   const current = item.material ?? ""
   const names = current && !offered.includes(current) ? [...offered, current] : offered
 
-  return <MaterialChips materials={names} value={current} onPick={(material) => update(index, { material })} />
+  return (
+    <>
+      <MaterialChips materials={names} value={current} onPick={(material) => update(index, pickedMaterial(material))} />
+      <SheenChips value={item.sheen} onPick={(sheen) => update(index, { sheen })} />
+    </>
+  )
 }
 
 /**
@@ -426,7 +434,16 @@ function RoomInspector({
       </PanelSection>
       {shows.floor && (
         <PanelSection name="settings-floor" title="Floor" summary={FLOOR_TYPE_NAMES[plan.floorType]}>
-          <FloorChoice value={plan.floorType} color={plan.floorColor} onPick={(floorType) => setRoom({ floorType })} />
+          <FloorChoice
+            value={plan.floorType}
+            color={plan.floorColor}
+            onPick={(floorType) => setRoom({ floorType, finish: { ...plan.finish, floorMaterial: floorType === plan.floorType ? plan.finish.floorMaterial : "" } })}
+          />
+          <FloorMaterialChoice
+            type={plan.floorType}
+            value={plan.finish.floorMaterial}
+            onPick={(floorMaterial) => setRoom({ finish: { ...plan.finish, floorMaterial }, ...(naturalColor(floorMaterial) ? { floorColor: naturalColor(floorMaterial) } : {}) })}
+          />
           <FloorColorChoice type={plan.floorType} value={plan.floorColor} onPick={(floorColor) => setRoom({ floorColor })} />
           <div className="space-y-1">
             <Button

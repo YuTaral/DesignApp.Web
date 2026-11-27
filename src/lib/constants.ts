@@ -434,7 +434,7 @@ export type WorktopSpot = (typeof WORKTOP_SPOT)[keyof typeof WORKTOP_SPOT]
  * new one starts as (the API's StarterLayout: white quartz with an upstand).
  */
 export const WORKTOP = {
-  materials: ["quartz", "marble", "granite", "oak", "walnut", "laminate", "concrete", "stainless steel"],
+  materials: ["quartz", "Carrara marble", "Calacatta marble", "granite", "soapstone", "terrazzo", "oak", "walnut", "laminate", "concrete", "stainless steel"],
   colors: [
     "#FFFFFF", "#F2F0EB", "#E8DCC8", "#D8C3A5", "#C8C8C8", "#8A8580", "#3A3A3A", "#1E1E1E",
     "#B8864B", "#8B5A2B", "#5C3A21", "#A8A29A", "#9C9A96", "#B0B4B8", "#4A6274", "#2E4057",
@@ -635,6 +635,47 @@ export const TILE_PATTERN_NAMES: Record<TilePattern, { name: string; looks: stri
   LargeFormat: { name: "Large", looks: "Large-format tiles, about 60 × 120 cm" },
 }
 
+/** How shiny an object is (Domain Constants.Sheen). */
+export const SHEEN = { Matte: "Matte", Satin: "Satin", Gloss: "Gloss" } as const
+
+export type Sheen = (typeof SHEEN)[keyof typeof SHEEN]
+
+/** The sheens' names. */
+export const SHEEN_NAMES: Record<Sheen, string> = { Matte: "Matte", Satin: "Satin", Gloss: "Gloss" }
+
+/** How shiny a built room's painted walls are (Domain Constants.PaintSheen). */
+export const PAINT_SHEEN = { Matte: "Matte", Eggshell: "Eggshell", Satin: "Satin", Gloss: "Gloss" } as const
+
+export type PaintSheen = (typeof PAINT_SHEEN)[keyof typeof PAINT_SHEEN]
+
+/** The paint sheens' names. */
+export const PAINT_SHEEN_NAMES: Record<PaintSheen, string> = { Matte: "Matte", Eggshell: "Eggshell", Satin: "Satin", Gloss: "Gloss" }
+
+/** What a floor of each type can be made of, as the API's Domain Constants.Plans.FloorMaterials (empty for any). */
+export const FLOOR_MATERIALS: Record<FloorType, string[]> = {
+  Wood: ["oak", "white oak", "walnut", "ash", "maple", "teak", "reclaimed pine"],
+  Parquet: ["oak", "smoked oak", "walnut"],
+  Tiles: ["porcelain", "ceramic", "zellige", "terracotta", "encaustic cement"],
+  Stone: ["Carrara marble", "Calacatta marble", "travertine", "limestone", "slate", "terrazzo", "granite"],
+  Concrete: ["polished concrete", "microcement", "raw concrete"],
+  Carpet: ["wool", "sisal", "jute", "nylon"],
+  Vinyl: ["wood-look", "stone-look"],
+}
+
+/**
+ * The natural colors of materials whose names imply one (wood species, stones, metals, leathers, natural fibres), which
+ * picking the material suggests; fabrics, lacquers and paints come in any color and aren't here.
+ */
+export const MATERIAL_COLORS: Record<string, string> = {
+  oak: "#B8864B", "white oak": "#D8C3A5", "smoked oak": "#6B4A2E", walnut: "#5C4033", ash: "#D9C7A7", maple: "#E3C79A", teak: "#A0703C",
+  cherry: "#8E4A32", pine: "#D6B77F", "reclaimed pine": "#B08A5B", "oak veneer": "#B8864B", "walnut veneer": "#5C4033", "fluted oak": "#B8864B",
+  "Carrara marble": "#EEEDEA", "Calacatta marble": "#F2EFE8", "Nero Marquina marble": "#1F1F1F", "white marble": "#EEEDEA", marble: "#EEEDEA",
+  travertine: "#D9C9AE", limestone: "#DCD3C2", slate: "#4A4F54", terrazzo: "#E4DED4", granite: "#6B6B6B", soapstone: "#5D6366",
+  "brushed brass": "#B08D57", "polished brass": "#C9A44C", brass: "#B08D57", copper: "#B87333", chrome: "#C9CCD1", "blackened steel": "#2E2E2E",
+  "brushed steel": "#A3A6A8", "stainless steel": "#B9BCBE", "cognac leather": "#9A5B2C", terracotta: "#C66B3D", rattan: "#C9A66B", cane: "#D2B48C",
+  jute: "#C8AD7F", sisal: "#C9B48A", "polished concrete": "#A9A7A2", microcement: "#BDB8B0", "raw concrete": "#9A9893", concrete: "#A9A7A2",
+}
+
 /** The trim around a built room's doors, windows and archways (Domain Constants.Casing). */
 export const CASING = { Plain: "Plain", Simple: "Simple", Wide: "Wide", Ornate: "Ornate" } as const
 
@@ -808,6 +849,12 @@ export const BUILDER = {
     linen: "#F2EFE8",
     /** The skirting boards along every wall's foot, in metres. */
     skirting: { height: 0.1, depth: 0.015 },
+    /**
+     * How rough (unshiny) an object's surface is for its sheen, and painted walls' for the paint's; an object without a
+     * sheen keeps `plain`.
+     */
+    sheen: { plain: 0.85, Matte: 0.92, Satin: 0.55, Gloss: 0.2 },
+    paintSheen: { Matte: 0.95, Eggshell: 0.8, Satin: 0.55, Gloss: 0.25 },
     /**
      * The room's architecture, in metres: the crown's and the rails' height and depth, the wainscoting's panels (their
      * frame's width, how far a panel sits in, and beadboard's board width), each casing's width (none for plain), the

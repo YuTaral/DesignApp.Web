@@ -1245,6 +1245,48 @@ try {
       && fittedHeading === 'Cabinets & fittings: Shaker, brass · herringbone tiles' && fittedWall.fronts === 'Shaker Knob' && fittedWall.splashes === 'Herringbone'
       && vessel && noMirrorGlass && !loungeFittings,
     JSON.stringify({ fittings: fittedPlan.finish.fittings, fittedHeading, fittedWall, vessel, noMirrorGlass, loungeFittings }))
+
+  // 19. Materials: in a furnished living room the coffee table is made walnut (taking walnut's color) and glossy; the
+  //     floor becomes Calacatta marble stone (taking its color), the painted walls eggshell; all are saved. A wooden
+  //     floor again has no material.
+  const materialRoom = await newPlan({ name: 'Materials', roomType: 'LivingRoom', width: 4, length: 5, height: 2.6, wallColor: '#E8E2D6', floorColor: '#B89B7A' })
+  const table = materialRoom.items.findIndex((item) => item.label === 'coffee table')
+
+  await page.goto(`${WEB}/build/${materialRoom.id}`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector(`[data-plan-canvas] [data-item="${table}"]`)
+  const tableAt = await page.$eval(`[data-plan-canvas] [data-item="${table}"]`, (el) => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
+
+  await page.mouse.click(tableAt.x, tableAt.y)
+  await page.waitForSelector('[data-material=walnut]')
+  await page.click('[data-material=walnut]')
+  await page.click('[data-sheen=Gloss]')
+  const glossy = await storedOnce((plan) => plan.items[table].sheen === 'Gloss' && plan.items[table].material === 'walnut')
+
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-floor-type=Stone]')
+  await page.click('[data-floor-type=Stone]')
+  await page.waitForSelector('[data-floor-material="Calacatta marble"]')
+  await page.click('[data-floor-material="Calacatta marble"]')
+  const marble = await storedOnce((plan) => plan.finish.floorMaterial === 'Calacatta marble')
+
+  await page.click('[role=tab]::-p-text(Wall)')
+  await page.waitForSelector('[data-paint-sheen=Eggshell]')
+  await page.click('[data-paint-sheen=Eggshell]')
+  const eggshell = await storedOnce((plan) => plan.finish.wallSheen === 'Eggshell')
+
+  await page.click('[role=tab]::-p-text(3D view)')
+  await page.waitForSelector('[data-view-3d]')
+  await sleep(900)
+  await shot('builder-materials-3d')
+  await page.click('[role=tab]::-p-text(Plan)')
+  await page.waitForSelector('[data-floor-type=Wood]')
+  await page.click('[data-floor-type=Wood]')
+  const wooden = await storedOnce((plan) => plan.floorType === 'Wood')
+
+  step('A walnut coffee table takes walnut\u2019s color and a gloss; a Calacatta marble floor takes its color; eggshell walls are saved; a new floor type drops the material',
+    glossy.items[table].color === '#5C4033' && marble.floorType === 'Stone' && marble.floorColor === '#F2EFE8' && eggshell.finish.wallSheen === 'Eggshell'
+      && wooden.finish.floorMaterial === '',
+    JSON.stringify({ table: glossy.items[table], floor: [marble.floorType, marble.finish.floorMaterial, marble.floorColor], sheen: eggshell.finish.wallSheen, wooden: wooden.finish.floorMaterial }))
 } catch (error) {
   step('Unexpected stop', false, String(error.message ?? error).split('\n')[0])
   await shot('builder-stopped').catch(() => {})

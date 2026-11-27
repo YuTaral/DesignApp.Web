@@ -14,6 +14,7 @@ import {
   PANORAMA,
   PLAN_SIDE,
   TILE_PATTERN,
+  type Sheen,
   TIME_OF_DAY,
   WAINSCOT,
   WALL_FINISH,
@@ -914,7 +915,7 @@ function wallPaint(plan: Plan, wall: OutlineWall, anisotropy: number) {
   const [kind, color] = wallSurface(plan, wall.index)
 
   if (kind === WALL_FINISH.Paint) {
-    return material(color)
+    return material(color, BUILDER.scene.paintSheen[plan.finish.wallSheen])
   }
 
   return tileMaterial((context, size) => paintWall(context, kind, color, size, plan.finish.fittings.tiles), wall.length / 100 / WALL_TILE_METRES, plan.height / WALL_TILE_METRES, anisotropy)
@@ -1445,7 +1446,7 @@ function blockAdder(group: THREE.Group, paint: THREE.Material) {
  */
 function hung(plan: Plan, item: PlanItem & { wall: number }) {
   const [w, h, d, bottom] = [item.width / 100, item.height / 100, Math.max(item.depth, 1) / 100, item.elevation / 100]
-  const paint = material(item.color)
+  const paint = material(item.color, sheenRoughness(item.sheen))
   const group = new THREE.Group()
   const block = blockAdder(group, paint)
   const name = item.label.toLowerCase()
@@ -1587,11 +1588,11 @@ function model(item: PlanItem, behind: Behind, fittings: RoomFittings) {
  * `behind` is what a worktop's backsplash meets; `fittings`, how the room is fitted (a cabinet's fronts and handles, a sink, a basin).
  */
 function piece(
-  item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "height" | "color" | "form" | "worktop">,
+  item: Pick<PlanItem, "label" | "shape" | "width" | "depth" | "height" | "color" | "form" | "worktop" | "sheen">,
   options: { openRight?: boolean; chaise?: boolean; behind?: Behind; fittings?: RoomFittings }
 ) {
   const [w, d, h] = [item.width / 100, item.depth / 100, Math.max(item.height, 1) / 100]
-  const paint = material(item.color)
+  const paint = material(item.color, sheenRoughness(item.sheen))
   const darker = material(shade(item.color, 0.78))
   const group = new THREE.Group()
 
@@ -1903,11 +1904,20 @@ function tileMaterial(paint: (context: CanvasRenderingContext2D, size: number) =
 }
 
 /**
- * A matte material of a color.
+ * A plain material of a color, matte unless a roughness is given (see `sheenRoughness`).
  * @param color - The color, "#RRGGBB" or rgb().
+ * @param roughness - How rough (unshiny) it is.
  */
-function material(color: string) {
-  return new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.85, metalness: 0 })
+function material(color: string, roughness: number = BUILDER.scene.sheen.plain) {
+  return new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness, metalness: 0 })
+}
+
+/**
+ * How rough (unshiny) an object's surface is for its sheen: matte rough, gloss smooth; an object without one is plain.
+ * @param sheen - Its sheen, if any.
+ */
+function sheenRoughness(sheen: Sheen | null | undefined) {
+  return sheen ? BUILDER.scene.sheen[sheen] : BUILDER.scene.sheen.plain
 }
 
 /**
